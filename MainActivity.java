@@ -1,0 +1,141 @@
+package se.caanel.field;
+
+import android.app.Activity;
+import android.content.ContentValues;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Environment;
+import android.provider.MediaStore;
+import android.util.Base64;
+import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.Toast;
+
+import androidx.webkit.WebViewAssetLoader;
+
+import java.io.OutputStream;
+
+public class MainActivity extends Activity {
+    private static final int FILE_CHOOSER_REQUEST = 501;
+    private WebView webView;
+    private ValueCallback<Uri[]> filePathCallback;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        webView = new WebView(this);
+        setContentView(webView);
+
+        WebSettings s = webView.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setDatabaseEnabled(true);
+        s.setAllowFileAccess(true);
+        s.setAllowContentAccess(true);
+        s.setBuiltInZoomControls(false);
+        s.setDisplayZoomControls(false);
+
+        WebViewAssetLoader assetLoader = new WebViewAssetLoader.Builder()
+                .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                .build();
+
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public android.webkit.WebResourceResponse shouldInterceptRequest(
+                    WebView view, android.webkit.WebResourceRequest request) {
+                return assetLoader.shouldInterceptRequest(request.getUrl());
+            }
+        });
+
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView webView,
+                                             ValueCallback<Uri[]> callback,
+                                             FileChooserParams params) {
+                if (filePathCallback != null) filePathCallback.onReceiveValue(null);
+                filePathCallback = callback;
+
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("*/*");
+                intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                        "application/pdf",
+                        "application/zip",
+                        "application/x-zip-compressed"
+                });
+                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,
+                        params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
+                startActivityForResult(intent, FILE_CHOOSER_REQUEST);
+                return true;
+            }
+        });
+
+        webView.addJavascriptInterface(new AndroidBridge(), "Android");
+        webView.loadUrl("https://appassets.androidplatform.net/assets/www/index.html");
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != FILE_CHOOSER_REQUEST || filePathCallback == null) return;
+
+        Uri[] result = null;
+        if (resultCode == Activity.RESULT_OK && data != null) {
+            if (data.getClipData() != null) {
+                int count = data.getClipData().getItemCount();
+                result = new Uri[count];
+                for (int i = 0; i < count; i++) {
+                    result[i] = data.getClipData().getItemAt(i).getUri();
+                }
+            } else if (data.getData() != null) {
+                result = new Uri[]{data.getData()};
+            }
+        }
+        filePathCallback.onReceiveValue(result);
+        filePathCallback = null;
+    }
+
+    public class AndroidBridge {
+        @JavascriptInterface
+        public void saveBase64(String filename, String base64Data) {
+            new Thread(() -> {
+                try {
+                    String pure = base64Data;
+                    int comma = pure.indexOf(',');
+                    if (comma >= 0) pure = pure.substring(comma + 1);
+                    byte[] bytes = Base64.decode(pure, Base64.DEFAULT);
+
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.Downloads.DISPLAY_NAME, filename);
+                    values.put(MediaStore.Downloads.MIME_TYPE,
+                            filename.toLowerCase().endsWith(".zip") ? "application/zip" : "application/octet-stream");
+                    values.put(MediaStore.Downloads.RELATIVE_PATH,
+                            Environment.DIRECTORY_DOWNLOADS + "/CAANEL Field");
+
+                    Uri uri = getContentResolver().insert(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                    if (uri == null) throw new Exception("Kunde inte skapa fil");
+                    try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+                        if (out == null) throw new Exception("Kunde inte öppna fil");
+                        out.write(bytes);
+                    }
+                    runOnUiThread(() -> Toast.makeText(
+                            MainActivity.this,
+                            "Sparad i Hämtade filer / CAANEL Field",
+                            Toast.LENGTH_LONG).show());
+                } catch (Exception e) {
+                    runOnUiThread(() -> Toast.makeText(
+                            MainActivity.this,
+                            "Kunde inte spara filen",
+                            Toast.LENGTH_LONG).show());
+                }
+            }).start();
+        }
+    }
+}
