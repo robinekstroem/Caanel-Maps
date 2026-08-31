@@ -157,3 +157,27 @@ h1,h2,h3,p{margin:0}h1{font-size:clamp(28px,6vw,44px);line-height:1.02;letter-sp
 @media(max-width:650px){
   #syncFloorBtn { flex:1; }
 }
+
+
+/* CAANEL Field v2.0 – smart PDF classification + armature links */
+.category-tabs{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
+.category-tabs::-webkit-scrollbar{display:none}
+.category-tab{flex:none;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:999px;min-height:38px;padding:0 13px;font-weight:800;cursor:pointer;white-space:nowrap}
+.category-tab.active{background:var(--orange);border-color:var(--orange);color:#fff}
+.category-count{opacity:.78;margin-left:5px;font-size:11px}
+.file-tags{display:flex;gap:6px;align-items:center;margin-top:5px;min-width:0;flex-wrap:wrap}
+.file-tag{border:1px solid #35353a;background:#1d1d20;color:var(--muted);border-radius:999px;padding:3px 7px;font-size:10px;font-weight:850;line-height:1.2}
+button.file-tag{cursor:pointer}
+.file-tag.smart{border-color:rgba(255,106,0,.45);color:var(--orange)}
+.smart-back{height:40px;border:1px solid rgba(255,106,0,.5);background:rgba(255,106,0,.12);color:var(--orange);border-radius:10px;padding:0 10px;font-weight:850;cursor:pointer;white-space:nowrap}
+.smart-sheet{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:130;padding:12px}
+.smart-sheet-card{width:min(560px,100%);background:#171719;border:1px solid var(--line);border-radius:22px;padding:18px;box-shadow:0 -14px 50px rgba(0,0,0,.5)}
+.smart-sheet-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.armature-details{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;margin:17px 0;padding:14px;background:#101012;border:1px solid var(--line);border-radius:14px;font-size:13px}
+.armature-details .k{color:var(--muted);font-weight:700}.armature-details .v{font-weight:800;min-width:0}
+.smart-sheet-actions{display:flex;gap:8px}.smart-sheet-actions .btn{flex:1}
+@media(max-width:650px){
+  .category-tabs{margin-right:-12px;padding-right:12px}
+  .smart-back{font-size:11px;padding:0 8px}
+  .viewer-head #prevDrawingBtn,.viewer-head #nextDrawingBtn{display:none}
+}

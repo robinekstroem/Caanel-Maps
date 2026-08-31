@@ -34,11 +34,18 @@
     lockViewAcrossDrawings: true,
     pendingViewState: null,
     syncCapture: null,
-    touchState: null
+    touchState: null,
+    currentProjectCategory: "Alla",
+    smartHotspots: [],
+    pendingArmatureTarget: null,
+    armatureReturn: null,
+    armatureHighlight: null,
+    selectedArmatureEntry: null,
+    analysisBusy: false
   };
 
   function defaultMeta() {
-    return { projects: [], todos: [], fileMeta: {}, measurements: {}, version: 1 };
+    return { projects: [], todos: [], fileMeta: {}, measurements: {}, version: 2 };
   }
   function loadMeta() {
     try { return {...defaultMeta(), ...JSON.parse(localStorage.getItem(META_KEY) || "{}")}; }
@@ -55,6 +62,144 @@
   const projectById = id => state.meta.projects.find(p => p.id === id);
   const currentProject = () => projectById(state.currentProjectId);
   const fileMeta = id => state.meta.fileMeta[id];
+
+
+  const CATEGORY_ORDER = ["Belysning","Kraft","Tele","Kanalisation","Brand","Passage","Övrigt"];
+  const stripPdf = name => String(name||"").replace(/\.pdf$/i,"");
+  const displayLabel = f => stripPdf(f?.name || f?.originalName || "Ritning");
+  const cleanTag = s => String(s||"").toUpperCase().replace(/\s+/g," ").trim().replace(/^ARM\s*(\d+)$/, "ARM $1");
+
+  function splitArmatureTag(text){
+    const t=String(text||"").trim().replace(/\s+/g," ");
+    const m=t.match(/^(ARM\s*\d+|L\d+[A-Z]?|N\d+[A-Z]?|P\d+[A-Z]?|K\d+[A-Z]?|BL)(?:\s+(.+))?$/i);
+    return m ? {tag:cleanTag(m[1]), rest:(m[2]||"").trim()} : null;
+  }
+  function normalizeCategory(text){
+    const u=String(text||"").toUpperCase();
+    if(/BELYSNING|LJUSPLAN|ARMATURPLAN/.test(u)) return "Belysning";
+    if(/KANALISATION|KANALISERING/.test(u)) return "Kanalisation";
+    if(/\bKRAFT\b|KRAFTPLAN/.test(u)) return "Kraft";
+    if(/\bTELE\b|DATA\/TELE|TELEPLAN/.test(u)) return "Tele";
+    if(/\bBRAND\b|BRANDLARM/.test(u)) return "Brand";
+    if(/PASSAGE|PASSERSYSTEM|PASSER/.test(u)) return "Passage";
+    return "Övrigt";
+  }
+  function extractPlan(text){
+    const m=String(text||"").match(/\bPLAN\s*0*(\d{1,3})\b/i);
+    return m ? String(Number(m[1])) : "";
+  }
+  function smartSortFiles(a,b){
+    const ca=CATEGORY_ORDER.indexOf(a.category||"Övrigt"), cb=CATEGORY_ORDER.indexOf(b.category||"Övrigt");
+    if(ca!==cb) return (ca<0?99:ca)-(cb<0?99:cb);
+    const pa=Number(a.plan||9999), pb=Number(b.plan||9999);
+    if(pa!==pb) return pa-pb;
+    return displayLabel(a).localeCompare(displayLabel(b),"sv");
+  }
+
+  function valueAfterLabel(lines,label){
+    const labels=new Set(["BEST NR","TYP","BESTYCKNING","MONTAGE","MÅTT","TILLBEHÖR","STYRNING"]);
+    const i=lines.findIndex(x=>String(x).trim().toUpperCase()===label);
+    if(i<0)return "";
+    for(let j=i+1;j<Math.min(lines.length,i+6);j++){
+      const v=String(lines[j]||"").trim();
+      if(!v || labels.has(v.toUpperCase())) continue;
+      return v;
+    }
+    return "";
+  }
+
+  async function analyzePdfBlob(blob, originalName){
+    if(!window.pdfjsLib) return null;
+    try{
+      const buf=await blob.arrayBuffer();
+      const doc=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
+      const pages=[];
+      const maxPages=Math.min(doc.numPages,30);
+      for(let n=1;n<=maxPages;n++){
+        const page=await doc.getPage(n);
+        const tc=await page.getTextContent();
+        const viewport=page.getViewport({scale:1});
+        const items=tc.items.map(item=>{
+          const str=String(item.str||"").trim();
+          if(!str)return null;
+          const tx=pdfjsLib.Util.transform(viewport.transform,item.transform);
+          const h=Math.max(5,Math.hypot(tx[2],tx[3])||Math.abs(item.height||8));
+          const w=Math.max(5,(item.width||str.length*4));
+          return {str,x:tx[4],y:tx[5]-h,w,h};
+        }).filter(Boolean);
+        pages.push({page:n,items,viewport});
+      }
+      const first=pages[0]?.items.map(x=>x.str)||[];
+      const all=pages.flatMap(p=>p.items.map(x=>x.str));
+      const allText=all.join(" ");
+      const tagCount=all.filter(x=>splitArmatureTag(x)).length;
+      const isSchedule=/armatur/i.test(originalName||"") || (/BESTYCKNING/i.test(allText)&&/MONTAGE/i.test(allText)&&/STYRNING/i.test(allText)&&tagCount>=4);
+      const tail=first.slice(-Math.max(80,Math.ceil(first.length*.28)));
+      const tailText=tail.join(" ");
+      let category=isSchedule ? "Belysning" : "Övrigt";
+      if(!isSchedule){
+        const exact=tail.map(x=>String(x).trim().toUpperCase());
+        const exactMap=[["BELYSNING","Belysning"],["KRAFT","Kraft"],["TELE","Tele"],["KANALISATION","Kanalisation"],["BRAND","Brand"],["PASSAGE","Passage"]];
+        const hit=exactMap.find(([k])=>exact.includes(k));
+        category=hit?hit[1]:normalizeCategory(tailText);
+      }
+      const plan=extractPlan(tailText)||extractPlan(first.join(" "));
+      const armatureIndex=[];
+      if(isSchedule){
+        for(const pg of pages){
+          const its=pg.items;
+          const starts=[];
+          for(let i=0;i<its.length;i++) if(splitArmatureTag(its[i].str)) starts.push(i);
+          for(let si=0;si<starts.length;si++){
+            const i=starts[si], end=starts[si+1]??its.length;
+            const hit=splitArmatureTag(its[i].str); if(!hit)continue;
+            const group=its.slice(i,Math.min(end,i+45)).map(x=>x.str);
+            const brand=hit.rest || group.slice(1).find(v=>!["BEST NR","TYP","BESTYCKNING","MONTAGE","MÅTT","TILLBEHÖR","STYRNING"].includes(String(v).toUpperCase())) || "";
+            armatureIndex.push({
+              tag:hit.tag,page:pg.page,x:its[i].x,y:its[i].y,w:its[i].w,h:its[i].h,
+              brand, type:valueAfterLabel(group,"TYP"), lamp:valueAfterLabel(group,"BESTYCKNING"),
+              montage:valueAfterLabel(group,"MONTAGE"), control:valueAfterLabel(group,"STYRNING"),
+              raw:group.slice(0,22)
+            });
+          }
+        }
+      }
+      let displayName;
+      if(isSchedule) displayName="Armaturförteckning";
+      else if(category!=="Övrigt") displayName=category+(plan?` – Plan ${plan}`:"");
+      else displayName=stripPdf(originalName);
+      return {analysisVersion:2,documentType:isSchedule?"armatureSchedule":"drawing",category,plan,displayName,armatureIndex,pages:doc.numPages};
+    }catch(err){console.warn("PDF analysis failed",originalName,err);return null}
+  }
+
+  function applyAnalysis(f,a){
+    if(!f||!a)return;
+    f.analysisVersion=2; f.documentType=a.documentType; f.category=a.category; f.plan=a.plan; f.armatureIndex=a.armatureIndex||[]; f.pageCount=a.pages||1;
+    if(f.name===f.originalName || f.autoNamed){ f.name=a.displayName+".pdf"; f.autoNamed=true; }
+  }
+
+  async function analyzeProjectFilesMissing(projectId){
+    if(state.analysisBusy)return;
+    const p=projectById(projectId); if(!p)return;
+    const ids=(p.files||[]).filter(id=>fileMeta(id)?.analysisVersion!==2);
+    if(!ids.length)return;
+    state.analysisBusy=true;
+    try{
+      for(let i=0;i<ids.length;i++){
+        const f=fileMeta(ids[i]), blob=await getBlob(ids[i]); if(!f||!blob)continue;
+        if(state.currentProjectId===projectId) $("#projectStatus").textContent=`Analyserar ritningar… ${i+1}/${ids.length}`;
+        applyAnalysis(f,await analyzePdfBlob(blob,f.originalName));
+      }
+      state.meta.version=2; saveMeta();
+      if(state.currentProjectId===projectId){$("#projectStatus").textContent="PDF-analys klar.";renderProject()}
+      renderProjects(); renderAllDrawings();
+    }finally{state.analysisBusy=false}
+  }
+
+  function findArmatureSchedule(projectId){
+    const p=projectById(projectId);
+    return (p?.files||[]).map(id=>fileMeta(id)).find(f=>f?.documentType==="armatureSchedule" && (f.armatureIndex||[]).length);
+  }
 
   let dbPromise;
   function db() {
@@ -141,8 +286,10 @@
 
   function openProject(id){
     state.currentProjectId=id;
+    state.currentProjectCategory="Alla";
     renderProject();
     showView("projectView", false);
+    setTimeout(()=>analyzeProjectFilesMissing(id),80);
   }
 
   function renderProject(){
@@ -151,25 +298,39 @@
     $("#projectMeta").textContent=`${(p.files||[]).length} PDF-filer`;
     const q=$("#projectSearch").value.trim().toLowerCase();
     let files=(p.files||[]).map(id=>fileMeta(id)).filter(Boolean);
-    if(q) files=files.filter(f => `${f.name} ${f.originalName||""} ${f.path||""}`.toLowerCase().includes(q));
-    if($("#sortSelect").value==="recent") files.sort((a,b)=>(b.addedAt||0)-(a.addedAt||0));
-    else files.sort((a,b)=>a.name.localeCompare(b.name,"sv"));
+    renderCategoryTabs(files);
+    if(state.currentProjectCategory!=="Alla") files=files.filter(f=>(f.category||"Övrigt")===state.currentProjectCategory);
+    if(q) files=files.filter(f => `${f.name} ${f.originalName||""} ${f.path||""} ${f.category||""} ${f.plan||""}`.toLowerCase().includes(q));
+    const sort=$("#sortSelect").value;
+    if(sort==="recent") files.sort((a,b)=>(b.addedAt||0)-(a.addedAt||0));
+    else if(sort==="name") files.sort((a,b)=>displayLabel(a).localeCompare(displayLabel(b),"sv"));
+    else files.sort(smartSortFiles);
     const list=$("#projectFiles");
     if(!files.length){
-      list.innerHTML='<div class="empty">Inga PDF-filer här ännu.<br>Importera PDF eller packa upp en ZIP.</div>';
+      list.innerHTML='<div class="empty">Inga PDF-filer i den här kategorin.</div>';
       return;
     }
     list.innerHTML=files.map(f=>fileRowHtml(f,true)).join("");
     wireFileRows(list);
   }
 
+  function renderCategoryTabs(files){
+    const root=$("#categoryTabs"); if(!root)return;
+    const counts={}; files.forEach(f=>counts[f.category||"Övrigt"]=(counts[f.category||"Övrigt"]||0)+1);
+    const cats=["Alla",...CATEGORY_ORDER];
+    root.innerHTML=cats.map(c=>`<button class="category-tab ${state.currentProjectCategory===c?"active":""}" data-category="${esc(c)}">${esc(c)} <span class="category-count">${c==="Alla"?files.length:(counts[c]||0)}</span></button>`).join("");
+    root.querySelectorAll("[data-category]").forEach(b=>b.onclick=()=>{state.currentProjectCategory=b.dataset.category;renderProject()});
+  }
+
   function fileRowHtml(f, showProject=false){
     const project=projectById(f.projectId);
+    const tags=[f.category||"Övrigt",f.plan?`Plan ${f.plan}`:"",f.documentType==="armatureSchedule"?"Smart dokument":""].filter(Boolean);
     return `<div class="file-row" data-file-row="${f.id}">
-      <div class="file-icon">PDF</div>
+      <div class="file-icon">${f.documentType==="armatureSchedule"?"LIST":"PDF"}</div>
       <div class="file-main">
-        <div class="file-name">${esc(f.name)}</div>
-        <div class="file-meta">${showProject&&project?esc(project.name)+" • ":""}${f.path?esc(f.path)+" • ":""}${fmtBytes(f.size||0)}</div>
+        <div class="file-name">${esc(displayLabel(f))}</div>
+        <div class="file-tags">${tags.map((t,i)=>`<button class="file-tag ${i===2?"smart":""} ${i===0?"category-edit":""}" ${i===0?`data-category-edit="${f.id}"`:""}>${esc(t)}</button>`).join("")}</div>
+        <div class="file-meta">${showProject&&project?esc(project.name)+" • ":""}${esc(f.originalName||"")}${f.path?" • "+esc(f.path):""} • ${fmtBytes(f.size||0)}</div>
       </div>
       <div class="row-actions">
         <button class="row-btn open-file" title="Öppna">›</button>
@@ -186,7 +347,17 @@
       row.querySelector(".rename-file").onclick=()=>renameFile(id);
       row.querySelector(".delete-file").onclick=()=>deleteFile(id);
       row.querySelector(".file-main").onclick=()=>openPdf(id);
+      const cat=row.querySelector(".category-edit");
+      if(cat) cat.onclick=async e=>{e.stopPropagation();await editFileCategory(id)};
     });
+  }
+
+  async function editFileCategory(id){
+    const f=fileMeta(id);if(!f)return;
+    const v=await promptModal("Ändra kategori","Skriv: Belysning, Kraft, Tele, Kanalisation, Brand, Passage eller Övrigt.",f.category||"Övrigt");
+    if(!v)return;
+    const match=CATEGORY_ORDER.find(c=>c.toLowerCase()===v.toLowerCase())||"Övrigt";
+    f.category=match; saveMeta(); renderProject(); renderAllDrawings(); toast(`Kategori: ${match}`);
   }
 
   async function renameFile(id){
@@ -194,7 +365,7 @@
     const base=f.name.replace(/\.pdf$/i,"");
     const name=await promptModal("Byt namn","Originalfilen behålls i bakgrunden.",base);
     if(!name) return;
-    f.name=name.replace(/\.pdf$/i,"")+".pdf"; saveMeta(); renderProject(); renderAllDrawings(); toast("Namnet sparades");
+    f.name=name.replace(/\.pdf$/i,"")+".pdf"; f.autoNamed=false; saveMeta(); renderProject(); renderAllDrawings(); toast("Namnet sparades");
   }
 
   async function deleteFile(id){
@@ -212,11 +383,13 @@
     const p=currentProject(); if(!p) return;
     const id=uid();
     await putBlob(id, blob);
-    state.meta.fileMeta[id]={
-      id, projectId:p.id, name:originalName.split("/").pop(), originalName:originalName.split("/").pop(),
-      path, size:blob.size, addedAt:Date.now(), scales:{}
-    };
+    const base=originalName.split("/").pop();
+    const f={id,projectId:p.id,name:base,originalName:base,path,size:blob.size,addedAt:Date.now(),scales:{},category:"Övrigt"};
+    state.meta.fileMeta[id]=f;
     p.files=p.files||[]; p.files.push(id); saveMeta();
+    $("#projectStatus").textContent=`Läser ${base}…`;
+    applyAnalysis(f,await analyzePdfBlob(blob,base));
+    saveMeta();
   }
 
   async function importPdfs(fileList){
@@ -248,8 +421,8 @@
   function renderAllDrawings(){
     const q=$("#drawingSearch").value.trim().toLowerCase();
     let files=Object.values(state.meta.fileMeta);
-    if(q) files=files.filter(f=>`${f.name} ${f.originalName||""} ${projectById(f.projectId)?.name||""}`.toLowerCase().includes(q));
-    files.sort((a,b)=>(b.addedAt||0)-(a.addedAt||0));
+    if(q) files=files.filter(f=>`${f.name} ${f.originalName||""} ${f.category||""} ${f.plan||""} ${projectById(f.projectId)?.name||""}`.toLowerCase().includes(q));
+    files.sort(smartSortFiles);
     const list=$("#allDrawings");
     if(!files.length){list.innerHTML='<div class="empty">Inga ritningar ännu.</div>';return}
     list.innerHTML=files.map(f=>fileRowHtml(f,true)).join("");
@@ -269,26 +442,25 @@
     });
   }
 
-  async function openPdf(id){
+  async function openPdf(id, opts={}){
     const f=fileMeta(id); if(!f) return;
     const blob=await getBlob(id); if(!blob){toast("PDF-filen saknas lokalt");return}
-    const pending=state.pendingViewState;
-    state.currentFileId=id; state.pageNum=1; state.tempPoints=[]; state.tool="pan";
-    $("#viewerTitle").textContent=f.name; $("#viewerSubtitle").textContent=projectById(f.projectId)?.name||"";
+    const pending=opts.viewState || state.pendingViewState;
+    state.currentFileId=id; state.pageNum=opts.page||1; state.tempPoints=[]; state.tool="pan"; state.smartHotspots=[];
+    $("#viewerTitle").textContent=displayLabel(f); $("#viewerSubtitle").textContent=projectById(f.projectId)?.name||"";
     setTool("pan"); showView("viewerView",false);
     try{
       const buf=await blob.arrayBuffer();
       state.pdfDoc=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
       state.pageCount=state.pdfDoc.numPages;
+      state.pageNum=clamp(state.pageNum,1,state.pageCount);
       await renderPdfPage();
-      updateDrawingNav();
-      populateFloorSwitcher();
-      syncFloorButtonState();
-      if(pending){
-        state.pendingViewState=null;
-        restoreViewState(pending);
-      }else{
-        fitDrawing();
+      updateDrawingNav(); populateFloorSwitcher(); syncFloorButtonState(); syncSmartNavUI();
+      if(pending){ state.pendingViewState=null; restoreViewState(pending); }
+      else fitDrawing();
+      if(state.pendingArmatureTarget && f.documentType==="armatureSchedule"){
+        const target=state.pendingArmatureTarget; state.pendingArmatureTarget=null;
+        focusArmatureTarget(target);
       }
     }catch(e){console.error(e);toast("Kunde inte öppna PDF-filen")}
   }
@@ -323,6 +495,7 @@
     applyZoom(false);
     const ctx=canvas.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0);
     await page.render({canvasContext:ctx,viewport}).promise;
+    await loadSmartHotspots(page,viewport);
     $("#pageLabel").textContent=`${state.pageNum} / ${state.pageCount}`;
     $("#prevPageBtn").disabled=state.pageNum<=1; $("#nextPageBtn").disabled=state.pageNum>=state.pageCount;
     syncScaleUI(); state.tempPoints=[]; drawOverlay(); updateHint();
@@ -354,7 +527,7 @@
   }
   function updateHint(){
     const text={
-      pan:"Nyp med två fingrar för zoom • helt utzoomad: swipa mellan ritningar • dubbeltryck för helskärm.",
+      pan:"Nyp för zoom • dubbeltryck på t.ex. L13 för armaturinfo • dubbeltryck annars för helskärm.",
       distance:"Tryck på två punkter för att mäta ett avstånd.",
       route:"Tryck ut en kabelväg/sträcka. Tryck Slutför när du är klar.",
       area:"Markera hörnen runt en yta. Tryck Slutför när du är klar."
@@ -383,6 +556,12 @@
       ctx.fillStyle="rgba(11,11,12,.9)"; ctx.fillRect(q.x+9,q.y-13,24,22);
       ctx.fillStyle="#ff6a00"; ctx.fillText(i%2===0?"A":"B",q.x+15,q.y+3);
     });
+    const hi=state.armatureHighlight;
+    if(hi && hi.fileId===state.currentFileId && hi.page===state.pageNum){
+      const e=hi.entry,q=toPx({x:e.x,y:e.y});
+      const w=Math.max(42,(e.w||25)*state.renderScale),h=Math.max(26,(e.h||12)*state.renderScale);
+      ctx.save();ctx.strokeStyle="#ff6a00";ctx.lineWidth=4;ctx.strokeRect(q.x-10,q.y-10,w+20,h+20);ctx.restore();
+    }
     if(state.tempPoints.length) drawPath(state.tempPoints,false,"");
   }
 
@@ -412,6 +591,91 @@
     }else state.tempPoints.push(p);
     drawOverlay();
   });
+
+
+  async function loadSmartHotspots(page,viewport){
+    state.smartHotspots=[];
+    const f=fileMeta(state.currentFileId); if(!f || f.documentType!=="drawing" || f.category!=="Belysning")return;
+    const schedule=findArmatureSchedule(f.projectId); if(!schedule)return;
+    const index=new Map((schedule.armatureIndex||[]).map(e=>[cleanTag(e.tag),e]));
+    if(!index.size)return;
+    try{
+      const tc=await page.getTextContent();
+      for(const item of tc.items){
+        const hit=splitArmatureTag(item.str); if(!hit || !index.has(hit.tag))continue;
+        const tx=pdfjsLib.Util.transform(viewport.transform,item.transform);
+        const h=Math.max(6,Math.hypot(tx[2],tx[3]));
+        const w=Math.max(8,(item.width||hit.tag.length*5)*state.renderScale);
+        state.smartHotspots.push({tag:hit.tag,entry:index.get(hit.tag),x:tx[4]/state.renderScale,y:(tx[5]-h)/state.renderScale,w:w/state.renderScale,h:h/state.renderScale});
+      }
+    }catch(err){console.warn("Hotspot scan failed",err)}
+  }
+
+  function nearestSmartHotspot(clientX,clientY){
+    if(!state.smartHotspots.length)return null;
+    const p=pdfPointFromClient(clientX,clientY);
+    let best=null,bestD=Infinity;
+    for(const h of state.smartHotspots){
+      const pad=Math.max(14,28/state.viewZoom);
+      const inside=p.x>=h.x-pad&&p.x<=h.x+h.w+pad&&p.y>=h.y-pad&&p.y<=h.y+h.h+pad;
+      const cx=h.x+h.w/2,cy=h.y+h.h/2,d=Math.hypot(p.x-cx,p.y-cy);
+      if((inside||d<pad*1.6)&&d<bestD){best=h;bestD=d}
+    }
+    return best;
+  }
+
+  function showArmatureCard(entry){
+    state.selectedArmatureEntry=entry;
+    $("#armatureTitle").textContent=entry.tag;
+    const rows=[["Fabrikat",entry.brand],["Typ",entry.type],["Bestyckning",entry.lamp],["Montage",entry.montage],["Styrning",entry.control],["Förteckning",`Sida ${entry.page}`]].filter(x=>x[1]);
+    $("#armatureDetails").innerHTML=rows.map(([k,v])=>`<div class="k">${esc(k)}</div><div class="v">${esc(v)}</div>`).join("");
+    $("#armatureSheet").classList.remove("hidden");
+  }
+
+  function closeArmatureCard(){ $("#armatureSheet").classList.add("hidden"); }
+
+  async function handleSmartDoubleTap(clientX,clientY){
+    if(state.tool!=="pan" || state.syncCapture)return false;
+    const hit=nearestSmartHotspot(clientX,clientY);
+    if(!hit)return false;
+    showArmatureCard(hit.entry); return true;
+  }
+
+  async function openSelectedArmatureInPdf(){
+    const entry=state.selectedArmatureEntry; if(!entry)return;
+    const source=fileMeta(state.currentFileId); if(!source)return;
+    const schedule=findArmatureSchedule(source.projectId); if(!schedule){toast("Ingen armaturförteckning hittades i projektet");return}
+    closeArmatureCard();
+    state.armatureReturn={fileId:state.currentFileId,page:state.pageNum,viewState:captureViewState()};
+    state.pendingArmatureTarget=entry;
+    await openPdf(schedule.id,{page:entry.page});
+  }
+
+  function focusArmatureTarget(entry){
+    const viewport=$("#pdfViewport");
+    state.armatureHighlight={fileId:state.currentFileId,page:state.pageNum,entry};
+    state.viewZoom=clamp(Math.max(state.fitZoom*2.6,1.25),state.fitZoom,Math.max(6,state.fitZoom*10));
+    applyZoom(false);
+    requestAnimationFrame(()=>{
+      const cx=(entry.x+(entry.w||20)/2)*state.renderScale*state.viewZoom;
+      const cy=(entry.y+(entry.h||12)/2)*state.renderScale*state.viewZoom;
+      viewport.scrollLeft=Math.max(0,cx-viewport.clientWidth/2);
+      viewport.scrollTop=Math.max(0,cy-viewport.clientHeight/2);
+      drawOverlay();
+    });
+  }
+
+  function syncSmartNavUI(){
+    const f=fileMeta(state.currentFileId);
+    const show=!!state.armatureReturn && f?.documentType==="armatureSchedule";
+    $("#backToDrawingBtn").classList.toggle("hidden",!show);
+  }
+
+  async function returnToArmatureSource(){
+    const r=state.armatureReturn;if(!r)return;
+    state.armatureReturn=null; state.armatureHighlight=null;
+    await openPdf(r.fileId,{page:r.page,viewState:r.viewState});
+  }
 
   async function calibrate(){
     setTool("distance"); state.tempPoints=[];
@@ -815,16 +1079,20 @@
         if(state.tool==="pan" && dt<350){
           const now=Date.now();
           if(now-state.lastTapAt<360){
-            state.lastTapAt=0; state.suppressClickUntil=now+450; await toggleFullscreen();
+            state.lastTapAt=0; state.suppressClickUntil=now+450;
+            const smart=await handleSmartDoubleTap(cx,cy);
+            if(!smart) await toggleFullscreen();
           }else state.lastTapAt=now;
         }
       }
     },{passive:false});
 
     viewport.addEventListener("touchcancel",()=>{state.touchState=null},{passive:true});
-    viewport.addEventListener("dblclick",e=>{
+    viewport.addEventListener("dblclick",async e=>{
       if(state.tool!=="pan" || state.syncCapture)return;
-      e.preventDefault(); toggleFullscreen();
+      e.preventDefault();
+      const smart=await handleSmartDoubleTap(e.clientX,e.clientY);
+      if(!smart) toggleFullscreen();
     });
   }
 
@@ -885,7 +1153,11 @@
   $("#projectSearch").oninput=renderProject; $("#sortSelect").onchange=renderProject; $("#drawingSearch").oninput=renderAllDrawings;
   $("#exportProjectBtn").onclick=exportProject; $("#exportBackupBtn").onclick=exportBackup; $("#backupInput").onchange=e=>{if(e.target.files[0])importBackup(e.target.files[0]);e.target.value=""};
   $("#newTodoBtn").onclick=async()=>{const t=await promptModal("Ny punkt","Vad ska göras?","");if(t){state.meta.todos.unshift({id:uid(),text:t,done:false});saveMeta();renderTodos()}};
-  $("#backFilesBtn").onclick=()=>{const f=fileMeta(state.currentFileId); if(f){state.currentProjectId=f.projectId;renderProject();showView("projectView",false)}else showView("projectsView")};
+  $("#backFilesBtn").onclick=()=>{const f=fileMeta(state.currentFileId); state.armatureReturn=null; state.armatureHighlight=null; if(f){state.currentProjectId=f.projectId;renderProject();showView("projectView",false)}else showView("projectsView")};
+  $("#backToDrawingBtn").onclick=returnToArmatureSource;
+  $("#closeArmatureSheet").onclick=closeArmatureCard;
+  $("#armatureSheet").onclick=e=>{if(e.target===$("#armatureSheet"))closeArmatureCard()};
+  $("#showArmaturePdfBtn").onclick=openSelectedArmatureInPdf;
   $("#renameDrawingBtn").onclick=()=>renameFile(state.currentFileId);
   $("#prevDrawingBtn").onclick=()=>openAdjacentDrawing(-1);
   $("#nextDrawingBtn").onclick=()=>openAdjacentDrawing(1);
@@ -901,8 +1173,8 @@
   $("#syncFloorBtn").onclick=startFloorSync;
   document.addEventListener("fullscreenchange",syncFullscreenUI);
   document.addEventListener("webkitfullscreenchange",syncFullscreenUI);
-  $("#prevPageBtn").onclick=async()=>{if(state.pageNum>1){state.pageNum--;await renderPdfPage()}};
-  $("#nextPageBtn").onclick=async()=>{if(state.pageNum<state.pageCount){state.pageNum++;await renderPdfPage()}};
+  $("#prevPageBtn").onclick=async()=>{if(state.pageNum>1){state.pageNum--;state.armatureHighlight=null;await renderPdfPage()}};
+  $("#nextPageBtn").onclick=async()=>{if(state.pageNum<state.pageCount){state.pageNum++;state.armatureHighlight=null;await renderPdfPage()}};
   $("#scalePreset").onchange=async e=>{
     if(e.target.value==="custom"){
       const v=await promptModal("Egen skala","Ange nämnaren. För 1:75 skriver du 75.",String(currentScale()),"number");

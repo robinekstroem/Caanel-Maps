@@ -109,10 +109,12 @@
         <div class="subbar">
           <input id="projectSearch" class="search grow" type="search" placeholder="Sök i projektet…">
           <select id="sortSelect" class="select">
+            <option value="plan" selected>Plan / kategori</option>
             <option value="name">Namn A–Ö</option>
             <option value="recent">Senast tillagd</option>
           </select>
         </div>
+        <div id="categoryTabs" class="category-tabs" aria-label="Ritningskategorier"></div>
         <div id="projectStatus" class="statusline"></div>
         <div id="projectFiles" class="file-list"></div>
       </section>
@@ -120,6 +122,7 @@
       <section id="viewerView" class="view viewer-view">
         <div class="viewer-head">
           <button id="backFilesBtn" class="icon-btn">←</button>
+          <button id="backToDrawingBtn" class="smart-back hidden" title="Tillbaka till ritningen">↩ Ritning</button>
           <button id="prevDrawingBtn" class="icon-btn" title="Föregående ritning">‹</button>
           <div class="grow minw0">
             <h2 id="viewerTitle" class="truncate">Ritning</h2>
@@ -164,7 +167,7 @@
           <button id="clearMeasuresBtn" class="tool">⌫ <span>Rensa</span></button>
         </div>
 
-        <div id="measureHint" class="measure-hint">Nyp med två fingrar för zoom • swipa för nästa ritning • dubbeltryck för helskärm.</div>
+        <div id="measureHint" class="measure-hint">Nyp med två fingrar för zoom • dubbeltryck en armaturbeteckning för info.</div>
 
         <div id="pdfViewport" class="pdf-viewport">
           <div id="canvasWrap" class="canvas-wrap">
@@ -186,6 +189,22 @@
       <button class="nav-btn" data-view="todoView"><span>✓</span>Att göra</button>
       <button class="nav-btn" data-view="settingsView"><span>⚙</span>Mer</button>
     </nav>
+
+    <div id="armatureSheet" class="smart-sheet hidden" role="dialog" aria-modal="true">
+      <div class="smart-sheet-card">
+        <div class="smart-sheet-head">
+          <div>
+            <p class="eyebrow">ARMATUR</p>
+            <h2 id="armatureTitle">L13</h2>
+          </div>
+          <button id="closeArmatureSheet" class="icon-btn">×</button>
+        </div>
+        <div id="armatureDetails" class="armature-details"></div>
+        <div class="smart-sheet-actions">
+          <button id="showArmaturePdfBtn" class="btn primary">Visa i armaturförteckning</button>
+        </div>
+      </div>
+    </div>
 
     <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
       <div class="modal-card">

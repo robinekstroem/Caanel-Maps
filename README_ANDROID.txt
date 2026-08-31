@@ -23,3 +23,20 @@ BYGG VIA GITHUB:
 OBS:
 Debug-APK:n är installerbar direkt och bra för test.
 När appen är färdig för skarp användning/Play Store bör en signerad release-nyckel läggas till.
+
+
+CAANEL FIELD v2.0 - SMART PDF
+=============================
+Nytt i denna version:
+- Automatisk analys av PDF vid import.
+- Ritningshuvud används för namn, kategori och plan när texten finns i PDF:en.
+- Exempel: E-640-1-118.pdf -> Tele - Plan 18.
+- Fasta kategoriflikar: Alla, Belysning, Kraft, Tele, Kanalisation, Brand, Passage, Övrigt.
+- Automatisk sortering på kategori och plan.
+- Armaturförteckningar identifieras och indexeras (L1, L13, L4A, N1, ARM 1 osv.).
+- På belysningsritning: dubbeltryck på en matchande armaturbeteckning för snabbinfo.
+- Knappen "Visa i armaturförteckning" öppnar rätt sida och markerar posten.
+- "Tillbaka till ritningen" återställer tidigare ritning, sida, zoom och position.
+- Befintliga PDF:er från äldre version analyseras automatiskt när projektet öppnas.
+- Manuell namnändring skrivs inte över av automatiken.
+- Kategori kan korrigeras manuellt genom att trycka på kategorichippen på en filrad.
