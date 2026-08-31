@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b0b0c">
+  <meta name="description" content="CAANEL Field – personlig ritnings- och projektapp">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+  <title>CAANEL Field</title>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <button class="brand" id="brandBtn" aria-label="Gå till projekt">
+        <img src="logo.png" alt="CAANEL">
+      </button>
+      <div class="top-actions">
+        <span id="storageBadge" class="badge">Lokalt</span>
+        <button id="installBtn" class="icon-btn hidden" aria-label="Installera appen">＋</button>
+      </div>
+    </header>
+
+    <main id="main">
+      <section id="projectsView" class="view active">
+        <div class="hero">
+          <div>
+            <p class="eyebrow">CAANEL FIELD</p>
+            <h1>Mina projekt</h1>
+            <p class="muted">Ritningar, ZIP-filer och mätningar samlade på ett ställe.</p>
+          </div>
+          <button id="newProjectBtn" class="btn primary">+ Nytt projekt</button>
+        </div>
+        <div id="projectGrid" class="project-grid"></div>
+      </section>
+
+      <section id="drawingsView" class="view">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">ALLA PROJEKT</p>
+            <h1>Ritningar</h1>
+          </div>
+          <input id="drawingSearch" class="search" type="search" placeholder="Sök ritning…">
+        </div>
+        <div id="allDrawings" class="file-list"></div>
+      </section>
+
+      <section id="todoView" class="view">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">PERSONLIGT</p>
+            <h1>Att göra</h1>
+          </div>
+          <button id="newTodoBtn" class="btn primary">+ Punkt</button>
+        </div>
+        <div id="todoList" class="todo-list"></div>
+      </section>
+
+      <section id="settingsView" class="view">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">APP</p>
+            <h1>Inställningar</h1>
+          </div>
+        </div>
+        <div class="settings-card">
+          <h3>Lokal lagring</h3>
+          <p class="muted">Projekt och PDF-filer sparas lokalt i den här webbläsaren på enheten.</p>
+          <button id="exportBackupBtn" class="btn">Exportera full backup</button>
+          <label class="btn file-label">Importera backup
+            <input id="backupInput" type="file" accept=".zip,application/zip" hidden>
+          </label>
+        </div>
+      </section>
+
+      <section id="projectView" class="view">
+        <div class="project-toolbar">
+          <button id="backProjectsBtn" class="icon-btn">←</button>
+          <div class="grow minw0">
+            <p class="eyebrow">PROJEKT</p>
+            <h1 id="projectName" class="truncate">Projekt</h1>
+            <p id="projectMeta" class="muted"></p>
+          </div>
+          <button id="renameProjectBtn" class="icon-btn" title="Byt namn">✎</button>
+        </div>
+
+        <div class="quick-actions">
+          <label class="action-card">
+            <span class="action-icon">PDF</span>
+            <strong>Lägg till PDF</strong>
+            <small>En eller flera filer</small>
+            <input id="pdfInput" type="file" accept=".pdf,application/pdf" multiple hidden>
+          </label>
+          <label class="action-card">
+            <span class="action-icon">ZIP</span>
+            <strong>Packa upp ZIP</strong>
+            <small>PDF-filer plockas ut</small>
+            <input id="zipInput" type="file" accept=".zip,application/zip" hidden>
+          </label>
+          <button id="exportProjectBtn" class="action-card">
+            <span class="action-icon">↥</span>
+            <strong>Exportera</strong>
+            <small>Projekt som ZIP</small>
+          </button>
+        </div>
+
+        <div class="subbar">
+          <input id="projectSearch" class="search grow" type="search" placeholder="Sök i projektet…">
+          <select id="sortSelect" class="select">
+            <option value="name">Namn A–Ö</option>
+            <option value="recent">Senast tillagd</option>
+          </select>
+        </div>
+        <div id="projectStatus" class="statusline"></div>
+        <div id="projectFiles" class="file-list"></div>
+      </section>
+
+      <section id="viewerView" class="view viewer-view">
+        <div class="viewer-head">
+          <button id="backFilesBtn" class="icon-btn">←</button>
+          <button id="prevDrawingBtn" class="icon-btn" title="Föregående ritning">‹</button>
+          <div class="grow minw0">
+            <h2 id="viewerTitle" class="truncate">Ritning</h2>
+            <p id="viewerSubtitle" class="muted truncate"></p>
+          </div>
+          <button id="nextDrawingBtn" class="icon-btn" title="Nästa ritning">›</button>
+          <button id="fullscreenBtn" class="icon-btn" title="Helskärm">⛶</button>
+          <button id="renameDrawingBtn" class="icon-btn" title="Byt namn">✎</button>
+        </div>
+
+        <div class="viewer-controls">
+          <div class="page-controls">
+            <button id="prevPageBtn" class="mini-btn">‹</button>
+            <span id="pageLabel">1 / 1</span>
+            <button id="nextPageBtn" class="mini-btn">›</button>
+          </div>
+          <label class="scale-control">Skala
+            <select id="scalePreset" class="select compact">
+              <option value="20">1:20</option>
+              <option value="50">1:50</option>
+              <option value="100" selected>1:100</option>
+              <option value="200">1:200</option>
+              <option value="500">1:500</option>
+              <option value="custom">Egen</option>
+            </select>
+          </label>
+          <button id="calibrateBtn" class="mini-btn">Kalibrera</button>
+          <button id="zoomResetBtn" class="mini-btn" title="Passa hela ritningen">Passa</button>
+          <label class="floor-switch-label">Våning
+            <select id="floorDrawingSelect" class="floor-select" title="Byt ritning och behåll samma vy"></select>
+          </label>
+          <button id="lockViewBtn" class="mini-btn active" title="Behåll samma område när du byter våning">🔒 Vy</button>
+          <button id="syncFloorBtn" class="mini-btn" title="Synka våningsritningar med två gemensamma referenspunkter">⌖ Synka plan</button>
+        </div>
+
+        <div class="toolstrip" role="toolbar" aria-label="Ritningsverktyg">
+          <button class="tool active" data-tool="pan">✋ <span>Flytta</span></button>
+          <button class="tool" data-tool="distance">📏 <span>Avstånd</span></button>
+          <button class="tool" data-tool="route">⌁ <span>Sträcka</span></button>
+          <button class="tool" data-tool="area">▱ <span>Area</span></button>
+          <button id="finishMeasureBtn" class="tool hidden">✓ <span>Slutför</span></button>
+          <button id="clearMeasuresBtn" class="tool">⌫ <span>Rensa</span></button>
+        </div>
+
+        <div id="measureHint" class="measure-hint">Nyp med två fingrar för zoom • swipa för nästa ritning • dubbeltryck för helskärm.</div>
+
+        <div id="pdfViewport" class="pdf-viewport">
+          <div id="canvasWrap" class="canvas-wrap">
+            <canvas id="pdfCanvas"></canvas>
+            <canvas id="overlayCanvas"></canvas>
+          </div>
+        </div>
+
+        <div class="measure-summary">
+          <span id="scaleLabel">Skala 1:100</span>
+          <strong id="measureResult"></strong>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" id="bottomNav">
+      <button class="nav-btn active" data-view="projectsView"><span>▦</span>Projekt</button>
+      <button class="nav-btn" data-view="drawingsView"><span>▤</span>Ritningar</button>
+      <button class="nav-btn" data-view="todoView"><span>✓</span>Att göra</button>
+      <button class="nav-btn" data-view="settingsView"><span>⚙</span>Mer</button>
+    </nav>
+
+    <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <h3 id="modalTitle">Rubrik</h3>
+        <p id="modalText" class="muted"></p>
+        <input id="modalInput" class="text-input" autocomplete="off">
+        <div class="modal-actions">
+          <button id="modalCancel" class="btn">Avbryt</button>
+          <button id="modalOk" class="btn primary">Spara</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
