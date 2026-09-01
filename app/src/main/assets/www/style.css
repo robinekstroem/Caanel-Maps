@@ -185,3 +185,14 @@ button.file-tag{cursor:pointer}
 /* EKIS FIELD test build */
 .brand img{max-height:54px;width:auto;object-fit:contain}
 .smart-docs{display:flex;flex-direction:column;gap:7px;margin:4px 0 12px}.smart-doc-title{font-size:11px;font-weight:900;letter-spacing:.14em;color:var(--muted);text-transform:uppercase}.smart-doc{display:grid;grid-template-columns:28px 1fr 24px;align-items:center;gap:9px;text-align:left;background:rgba(255,106,0,.07);border:1px solid rgba(255,106,0,.35);border-radius:13px;padding:10px 12px;color:var(--text)}.smart-doc>span,.smart-doc>b{color:var(--orange)}.smart-doc small{display:block;color:var(--muted);margin-top:2px}.todo-filters{display:flex;gap:7px;margin-top:14px}.todo-filter{border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:999px;padding:8px 12px;font-weight:800}.todo-filter.active{background:var(--orange);color:#fff;border-color:var(--orange)}.todo-text strong{display:block}.todo-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px;font-size:11px;color:var(--muted)}.prio{border-radius:999px;padding:2px 7px;background:#222}.prio.viktig{color:#ffc566}.prio.akut{color:#ff7b72}
+
+/* Native-safe EKIS FIELD launch animation. Kept in the WebView so Android startup code stays minimal. */
+.ekis-splash{position:fixed;inset:0;z-index:99999;background:#050506;display:flex;align-items:center;justify-content:center;overflow:hidden;opacity:1;transition:opacity .5s ease;pointer-events:auto}
+.ekis-splash-out{opacity:0;pointer-events:none}
+.ekis-splash-logo-wrap{position:relative;width:min(78vw,430px);padding:26px;overflow:hidden}
+.ekis-splash-logo{display:block;width:100%;height:auto;opacity:0;transform:scale(.90);animation:ekisLogoIn 1.15s cubic-bezier(.2,.8,.2,1) .12s forwards,ekisLogoSettle 1.0s ease 1.25s forwards}
+.ekis-splash-scan{position:absolute;left:-45%;top:26%;width:38%;height:48%;background:linear-gradient(90deg,transparent,rgba(255,106,0,.28),rgba(255,255,255,.12),transparent);transform:skewX(-18deg);filter:blur(2px);animation:ekisScan 1.25s ease-in-out .75s forwards;opacity:0}
+@keyframes ekisLogoIn{0%{opacity:0;transform:scale(.90)}65%{opacity:1;transform:scale(1.025)}100%{opacity:1;transform:scale(1)}}
+@keyframes ekisLogoSettle{from{filter:brightness(1.12)}to{filter:brightness(1)}}
+@keyframes ekisScan{0%{left:-45%;opacity:0}12%{opacity:1}80%{opacity:.75}100%{left:112%;opacity:0}}
+@media (prefers-reduced-motion:reduce){.ekis-splash-logo{animation:none;opacity:1;transform:none}.ekis-splash-scan{display:none}.ekis-splash{transition:none}}

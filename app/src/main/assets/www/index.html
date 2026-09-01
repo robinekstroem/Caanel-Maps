@@ -12,6 +12,12 @@
   <title>EKIS FIELD</title>
 </head>
 <body>
+  <div id="ekisSplash" class="ekis-splash" aria-hidden="true">
+    <div class="ekis-splash-logo-wrap">
+      <img class="ekis-splash-logo" src="logo.png" alt="">
+      <div class="ekis-splash-scan"></div>
+    </div>
+  </div>
   <div id="app">
     <header class="topbar">
       <button class="brand" id="brandBtn" aria-label="Gå till projekt">
@@ -225,5 +231,15 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="app.js"></script>
+  <script>
+    (function(){
+      var splash=document.getElementById('ekisSplash');
+      if(!splash)return;
+      window.setTimeout(function(){
+        splash.classList.add('ekis-splash-out');
+        window.setTimeout(function(){ if(splash && splash.parentNode) splash.parentNode.removeChild(splash); }, 520);
+      }, 2500);
+    })();
+  </script>
 </body>
 </html>
