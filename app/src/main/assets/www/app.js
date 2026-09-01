@@ -43,11 +43,14 @@
     selectedArmatureEntry: null,
     analysisBusy: false,
     todoFilter: "open",
-    editMeasure: null
+    editMeasure: null,
+    distanceDraft: null,
+    pageTextItems: [],
+    calibrationMode: null
   };
 
   function defaultMeta() {
-    return { projects: [], todos: [], fileMeta: {}, measurements: {}, version: 3 };
+    return { projects: [], todos: [], fileMeta: {}, measurements: {}, version: 4 };
   }
   function loadMeta() {
     try { return {...defaultMeta(), ...JSON.parse(localStorage.getItem(META_KEY) || "{}")}; }
@@ -101,6 +104,40 @@
     if(m && plan && String(Number(m[1]))===String(Number(plan))) return String(Number(m[2]));
     return "";
   }
+  function extractDrawingScale(text){
+    const t=String(text||"").replace(/\s+/g," ");
+    const patterns=[/SKALA[^\d]{0,18}1\s*[:/]\s*(20|25|50|75|100|150|200|250|500)\b/i,/\b1\s*[:/]\s*(20|25|50|75|100|150|200|250|500)\b/];
+    for(const re of patterns){const m=t.match(re);if(m)return Number(m[1]);}
+    return null;
+  }
+  function normalizeProductText(s){
+    return String(s||"").toLowerCase().replace(/[®™]/g,"").replace(/[^a-z0-9åäö]+/g," ").replace(/\b(?:led|dali|occhio|w|k|cri|matt|white|black|svart|vit|bronze|brons)\b/g," ").replace(/\s+/g," ").trim();
+  }
+  function productTokens(s){return new Set(normalizeProductText(s).split(" ").filter(x=>x.length>=3));}
+  function occhioMatchScore(scheduleEntry,occhioEntry){
+    const a=productTokens([scheduleEntry.brand,scheduleEntry.type,scheduleEntry.lamp,(scheduleEntry.raw||[]).join(" ")].join(" "));
+    const b=productTokens([occhioEntry.type,occhioEntry.lamp,(occhioEntry.raw||[]).join(" ")].join(" "));
+    if(!a.size||!b.size)return 0;
+    let common=0; for(const x of a)if(b.has(x))common++;
+    const denom=Math.max(2,Math.min(a.size,b.size));
+    return common/denom;
+  }
+  function enrichEntryWithOcchio(projectId,entry){
+    if(!entry || entry.occhio)return entry;
+    const occ=findArmatureSchedules(projectId).filter(s=>s.documentType==="occhioSchedule").flatMap(s=>s.armatureIndex||[]);
+    let best=null,score=0;
+    for(const o of occ){const q=occhioMatchScore(entry,o);if(q>score){score=q;best=o;}}
+    if(best && score>=.42){return {...entry,occhioMatch:best,occhioConfidence:score};}
+    return entry;
+  }
+  function findTagOccurrences(text){
+    const out=[]; const t=String(text||"").toUpperCase();
+    const re=/(?:^|[^A-Z0-9])(ARM\s*\d+|L\d+[A-Z]?|N\d+[A-Z]?|P\d+[A-Z]?|K\d+[A-Z]?|BL)(?=$|[^A-Z0-9])/g;
+    let m; while((m=re.exec(t)))out.push(cleanTag(m[1]));
+    const pos=/\b(?:POSITION|POS)\s*0*(\d{1,2})\b/g; while((m=pos.exec(t)))out.push(`POS ${String(Number(m[1])).padStart(2,"0")}`);
+    return [...new Set(out)];
+  }
+
   function smartSortFiles(a,b){
     const ca=CATEGORY_ORDER.indexOf(a.category||"Övrigt"), cb=CATEGORY_ORDER.indexOf(b.category||"Övrigt");
     if(ca!==cb) return (ca<0?99:ca)-(cb<0?99:cb);
@@ -171,7 +208,7 @@
             const product=group.slice(1).find(v=>/^1\s*x\s+/i.test(v))||group[1]||"Occhio";
             const power=(product.match(/\b\d+(?:[.,]\d+)?W\b/i)||[])[0]||"";
             const kelvin=(product.match(/\b\d{4}(?:-\d{4})?K\b/i)||[])[0]||"";
-            armatureIndex.push({tag:`POS ${num}`,aliases:[`POSITION ${num}`,`POS${num}`,num],page:pg.page,x:its[i].x,y:its[i].y,w:its[i].w,h:its[i].h,brand:"Occhio",type:product.replace(/^1\s*x\s+/i,"").trim(),lamp:[power,kelvin].filter(Boolean).join(" · "),montage:"",control:"Occhio air",raw:group.slice(0,12),occhio:true});
+            armatureIndex.push({tag:`POS ${num}`,aliases:[`POSITION ${num}`,`POS ${num}`,`POS${num}`],page:pg.page,x:its[i].x,y:its[i].y,w:its[i].w,h:its[i].h,brand:"Occhio",type:product.replace(/^1\s*x\s+/i,"").trim(),lamp:[power,kelvin].filter(Boolean).join(" · "),montage:"",control:"Occhio air",raw:group.slice(0,12),occhio:true});
           }
         }
       } else if(isSchedule){
@@ -198,20 +235,23 @@
       else if(isSchedule) displayName="Armaturförteckning";
       else if(category!=="Övrigt") displayName=category+(plan?` – P${plan}`:"")+(part?` – Del ${part}`:"");
       else displayName=stripPdf(originalName);
-      return {analysisVersion:3,documentType:isOcchio?"occhioSchedule":(isSchedule?"armatureSchedule":"drawing"),category,plan,part,displayName,armatureIndex,pages:doc.numPages};
+      const detectedScales={};
+      for(const pg of pages){const ds=extractDrawingScale(pg.items.map(x=>x.str).join(" "));if(ds)detectedScales[pg.page]=ds;}
+      return {analysisVersion:4,documentType:isOcchio?"occhioSchedule":(isSchedule?"armatureSchedule":"drawing"),category,plan,part,displayName,armatureIndex,pages:doc.numPages,detectedScales};
     }catch(err){console.warn("PDF analysis failed",originalName,err);return null}
   }
 
   function applyAnalysis(f,a){
     if(!f||!a)return;
-    f.analysisVersion=3; f.documentType=a.documentType; f.category=a.category; f.plan=a.plan; f.part=a.part||""; f.armatureIndex=a.armatureIndex||[]; f.pageCount=a.pages||1;
+    f.analysisVersion=4; f.documentType=a.documentType; f.category=a.category; f.plan=a.plan; f.part=a.part||""; f.armatureIndex=a.armatureIndex||[]; f.pageCount=a.pages||1;
+    f.scales=f.scales||{}; for(const [pg,sc] of Object.entries(a.detectedScales||{})){if(!f.scales[pg] || f.scales[pg]===100)f.scales[pg]=sc;}
     if(f.name===f.originalName || f.autoNamed){ f.name=a.displayName+".pdf"; f.autoNamed=true; }
   }
 
   async function analyzeProjectFilesMissing(projectId){
     if(state.analysisBusy)return;
     const p=projectById(projectId); if(!p)return;
-    const ids=(p.files||[]).filter(id=>fileMeta(id)?.analysisVersion!==3);
+    const ids=(p.files||[]).filter(id=>fileMeta(id)?.analysisVersion!==4);
     if(!ids.length)return;
     state.analysisBusy=true;
     try{
@@ -220,7 +260,7 @@
         if(state.currentProjectId===projectId) $("#projectStatus").textContent=`Analyserar ritningar… ${i+1}/${ids.length}`;
         applyAnalysis(f,await analyzePdfBlob(blob,f.originalName));
       }
-      state.meta.version=3; saveMeta();
+      state.meta.version=4; saveMeta();
       if(state.currentProjectId===projectId){$("#projectStatus").textContent="PDF-analys klar.";renderProject()}
       renderProjects(); renderAllDrawings();
     }finally{state.analysisBusy=false}
@@ -489,7 +529,7 @@
       updateDrawingNav(); populateFloorSwitcher(); syncFloorButtonState(); syncSmartNavUI();
       if(pending){ state.pendingViewState=null; restoreViewState(pending); }
       else fitDrawing();
-      if(state.pendingArmatureTarget && f.documentType==="armatureSchedule"){
+      if(state.pendingArmatureTarget && ["armatureSchedule","occhioSchedule"].includes(f.documentType)){
         const target=state.pendingArmatureTarget; state.pendingArmatureTarget=null;
         focusArmatureTarget(target);
       }
@@ -550,7 +590,7 @@
   function routeLength(points){let n=0;for(let i=1;i<points.length;i++)n+=distancePt(points[i-1],points[i]);return n}
 
   function setTool(tool){
-    state.tool=tool; state.tempPoints=[];
+    state.tool=tool; state.tempPoints=[]; state.distanceDraft=null;
     $$(".tool[data-tool]").forEach(b=>b.classList.toggle("active",b.dataset.tool===tool));
     $("#finishMeasureBtn").classList.toggle("hidden",!(tool==="route"||tool==="area"));
     $("#overlayCanvas").style.pointerEvents=tool==="pan"?"none":"auto";
@@ -558,10 +598,10 @@
   }
   function updateHint(){
     const text={
-      pan:"Nyp för zoom • dubbeltryck på en armatur eller dess beteckning (t.ex. L13) för info.",
-      distance:"Tryck två punkter. Dra ändpunkterna för finjustering eller dra vita handtaget för att böja måttlinjen.",
+      pan:"Nyp för zoom • tryck eller dubbeltryck nära en armaturbeteckning för info.",
+      distance:"Tryck punkt A. Tryck sedan punkt B, dra till exakt läge och släpp. Måttet blir en rak linje.",
       route:"Tryck ut en kabelväg/sträcka. Tryck Slutför när du är klar.",
-      area:"Markera hörnen runt en yta. Tryck Slutför när du är klar."
+      area:"Markera hörnen runt en yta. Tryck Slutför när du är klar. Kalibrera gärna via en känd rumsarea först."
     }[state.tool];
     $("#measureHint").textContent=text;
   }
@@ -579,84 +619,103 @@
     }
     getMeasurements().forEach(m=>{
       if(m.type==="distance" && m.points?.length===2){
-        const a=toPx(m.points[0]),b=toPx(m.points[1]); const mx=(a.x+b.x)/2,my=(a.y+b.y)/2; const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1; const off=(m.curveOffset??-34)*state.renderScale; const cx=mx-dy/len*off,cy=my+dx/len*off;
-        ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.quadraticCurveTo(cx,cy,b.x,b.y);ctx.stroke();[a,b].forEach(q=>{ctx.beginPath();ctx.arc(q.x,q.y,6,0,Math.PI*2);ctx.fill()});ctx.beginPath();ctx.arc(cx,cy,7,0,Math.PI*2);ctx.fillStyle="#fff";ctx.fill();ctx.strokeStyle="#ff6a00";ctx.stroke();ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(cx+9,cy-19,Math.max(74,m.label.length*7),23);ctx.fillStyle="#ff6a00";ctx.fillText(m.label,cx+14,cy-4);ctx.strokeStyle="#ff6a00";ctx.fillStyle="#ff6a00";
+        const a=toPx(m.points[0]),b=toPx(m.points[1]);
+        ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+        [a,b].forEach((q,i)=>{ctx.beginPath();ctx.arc(q.x,q.y,6,0,Math.PI*2);ctx.fill();ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(q.x+8,q.y-12,20,20);ctx.fillStyle="#ff6a00";ctx.fillText(i?"B":"A",q.x+13,q.y+3);ctx.fillStyle="#ff6a00";});
+        const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(mx+7,my-21,Math.max(74,m.label.length*7),23);ctx.fillStyle="#ff6a00";ctx.fillText(m.label,mx+12,my-6);
       } else drawPath(m.points,m.type==="area",m.label);
     });
+    if(state.distanceDraft){
+      const a=toPx(state.distanceDraft.a),b=toPx(state.distanceDraft.b);ctx.save();ctx.setLineDash([7,5]);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.setLineDash([]);[a,b].forEach((q,i)=>{ctx.beginPath();ctx.arc(q.x,q.y,6,0,Math.PI*2);ctx.fill();ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(q.x+8,q.y-12,20,20);ctx.fillStyle="#ff6a00";ctx.fillText(i?"B":"A",q.x+13,q.y+3);ctx.fillStyle="#ff6a00";});ctx.restore();
+    }
     const f=fileMeta(state.currentFileId);
     const refs=f?.syncRefs?.[state.pageNum] || [];
     const live=state.syncCapture?.fileId===state.currentFileId ? state.syncCapture.points : [];
-    [...refs, ...live].forEach((p,i)=>{
-      const q=toPx(p);
-      ctx.beginPath(); ctx.arc(q.x,q.y,7,0,Math.PI*2); ctx.stroke();
-      ctx.fillStyle="rgba(11,11,12,.9)"; ctx.fillRect(q.x+9,q.y-13,24,22);
-      ctx.fillStyle="#ff6a00"; ctx.fillText(i%2===0?"A":"B",q.x+15,q.y+3);
-    });
+    [...refs, ...live].forEach((p,i)=>{const q=toPx(p);ctx.beginPath();ctx.arc(q.x,q.y,7,0,Math.PI*2);ctx.stroke();ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(q.x+9,q.y-13,24,22);ctx.fillStyle="#ff6a00";ctx.fillText(i%2===0?"A":"B",q.x+15,q.y+3)});
     const hi=state.armatureHighlight;
-    if(hi && hi.fileId===state.currentFileId && hi.page===state.pageNum){
-      const e=hi.entry,q=toPx({x:e.x,y:e.y});
-      const w=Math.max(42,(e.w||25)*state.renderScale),h=Math.max(26,(e.h||12)*state.renderScale);
-      ctx.save();ctx.strokeStyle="#ff6a00";ctx.lineWidth=4;ctx.strokeRect(q.x-10,q.y-10,w+20,h+20);ctx.restore();
-    }
+    if(hi && hi.fileId===state.currentFileId && hi.page===state.pageNum){const e=hi.entry,q=toPx({x:e.x,y:e.y});const w=Math.max(42,(e.w||25)*state.renderScale),h=Math.max(26,(e.h||12)*state.renderScale);ctx.save();ctx.strokeStyle="#ff6a00";ctx.lineWidth=4;ctx.strokeRect(q.x-10,q.y-10,w+20,h+20);ctx.restore();}
     if(state.tempPoints.length) drawPath(state.tempPoints,false,"");
   }
 
-  function finishTemp(){
+  function pointInPolygon(p,poly){let inside=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b=poly[j];const cross=((a.y>p.y)!=(b.y>p.y))&&(p.x<(b.x-a.x)*(p.y-a.y)/((b.y-a.y)||1e-9)+a.x);if(cross)inside=!inside;}return inside;}
+  function areaLabelsInside(points){
+    const vals=[]; for(const it of state.pageTextItems||[]){const m=String(it.str||"").match(/(\d+(?:[,.]\d+)?)\s*m(?:²|2)\b/i);if(!m)continue;const p={x:it.x+(it.w||0)/2,y:it.y+(it.h||0)/2};if(pointInPolygon(p,points))vals.push(Number(m[1].replace(",",".")));}return vals.filter(Number.isFinite);
+  }
+  async function applyAreaCalibration(points){
+    const raw=polygonAreaPt2(points)*(1/72*0.0254)**2;if(!(raw>0))return false;
+    const labels=areaLabelsInside(points);let known=labels.length===1?labels[0]:null;
+    if(!known){const hint=labels.length?`Hittade ${labels.map(v=>v.toFixed(1)).join(" / ")} m². Ange rätt area.`:"Ange arean som står utskriven i rummet, t.ex. 5.4 m².";const v=await promptModal("Kalibrera via rumsarea",hint,labels[0]?String(labels[0]):"","number");known=Number(String(v||"").replace(",","."));}
+    if(!(known>0))return false;const denom=Math.sqrt(known/raw);setScale(denom);toast(`Kalibrerad via ${known.toFixed(2)} m² → ca 1:${denom.toFixed(1)}`);return true;
+  }
+
+  async function finishTemp(){
     const pts=[...state.tempPoints]; if(!pts.length)return;
-    if(state.tool==="route"&&pts.length>=2){
-      const m=ptToM(routeLength(pts)); getMeasurements().push({id:uid(),type:"route",points:pts,label:formatLength(m)});
-      $("#measureResult").textContent=formatLength(m);
-    }else if(state.tool==="area"&&pts.length>=3){
-      const m2=pt2ToM2(polygonAreaPt2(pts)); getMeasurements().push({id:uid(),type:"area",points:pts,label:`${m2.toFixed(2)} m²`});
-      $("#measureResult").textContent=`${m2.toFixed(2)} m²`;
+    if(state.calibrationMode==="area"){
+      if(pts.length<3){toast("Markera minst tre hörn");return;}
+      await applyAreaCalibration(pts);state.calibrationMode=null;state.tempPoints=[];setTool("pan");drawOverlay();return;
     }
+    if(state.tool==="route"&&pts.length>=2){const m=ptToM(routeLength(pts));getMeasurements().push({id:uid(),type:"route",points:pts,label:formatLength(m)});$("#measureResult").textContent=formatLength(m);}
+    else if(state.tool==="area"&&pts.length>=3){const m2=pt2ToM2(polygonAreaPt2(pts));getMeasurements().push({id:uid(),type:"area",points:pts,label:`${m2.toFixed(2)} m²`});$("#measureResult").textContent=`${m2.toFixed(2)} m²`;}
     state.tempPoints=[]; saveMeta(); drawOverlay();
   }
 
-  $("#overlayCanvas").addEventListener("click",e=>{
-    if(Date.now()<state.suppressClickUntil)return;
-    if(state.tool==="pan")return;
+  // Distance: first tap fixes A. Second press starts B; drag and release commits a straight A–B distance.
+  $("#overlayCanvas").addEventListener("pointerdown",e=>{
+    if(state.tool!=="distance")return;
     const p=pdfPointFromEvent(e);
-    if(state.tool==="distance"){
-      state.tempPoints.push(p);
-      if(state.tempPoints.length===2){
-        const m=ptToM(distancePt(state.tempPoints[0],state.tempPoints[1]));
-        getMeasurements().push({id:uid(),type:"distance",points:[...state.tempPoints],label:formatLength(m),curveOffset:-34});
-        $("#measureResult").textContent=formatLength(m); state.tempPoints=[]; saveMeta();
-      }
-    }else state.tempPoints.push(p);
-    drawOverlay();
+    // Existing endpoint editing has priority.
+    let best=null,d=Infinity;for(const m of getMeasurements())for(const h of screenMeasureHandles(m)){const q=Math.hypot(e.clientX-h.cx,e.clientY-h.cy);if(q<30&&q<d){best={m,h};d=q}}
+    if(best){state.editMeasure=best;e.preventDefault();try{e.target.setPointerCapture(e.pointerId)}catch{}return;}
+    if(!state.tempPoints.length){state.tempPoints=[p];state.distanceDraft=null;drawOverlay();e.preventDefault();return;}
+    state.distanceDraft={a:state.tempPoints[0],b:p,pointerId:e.pointerId};e.preventDefault();try{e.target.setPointerCapture(e.pointerId)}catch{}drawOverlay();
   });
+  $("#overlayCanvas").addEventListener("pointermove",e=>{
+    if(state.editMeasure){const p=pdfPointFromEvent(e),m=state.editMeasure.m;if(state.editMeasure.h.kind==="a")m.points[0]=p;else m.points[1]=p;m.label=formatLength(ptToM(distancePt(m.points[0],m.points[1])));$("#measureResult").textContent=m.label;drawOverlay();return;}
+    if(state.distanceDraft && (state.distanceDraft.pointerId==null||state.distanceDraft.pointerId===e.pointerId)){state.distanceDraft.b=pdfPointFromEvent(e);const m=ptToM(distancePt(state.distanceDraft.a,state.distanceDraft.b));$("#measureResult").textContent=formatLength(m);drawOverlay();}
+  });
+  $("#overlayCanvas").addEventListener("pointerup",e=>{
+    if(state.editMeasure){saveMeta();state.editMeasure=null;drawOverlay();return;}
+    if(state.tool==="distance"&&state.distanceDraft){
+      const d=state.distanceDraft;d.b=pdfPointFromEvent(e);const rawPt=distancePt(d.a,d.b);const m=ptToM(rawPt);
+      if(rawPt>1){
+        if(state.calibrationMode==="distance"){
+          const rawM=rawPt/72*0.0254;
+          promptModal("Känt avstånd","Ange verkligt A–B-avstånd i meter.","3.00","number").then(v=>{
+            const known=Number(String(v||"").replace(",","."));if(known>0){const denom=known/rawM;setScale(denom);toast(`Kalibrerad → ca 1:${denom.toFixed(1)}`);}state.calibrationMode=null;setTool("pan");
+          });
+        }else{getMeasurements().push({id:uid(),type:"distance",points:[d.a,d.b],label:formatLength(m)});$("#measureResult").textContent=formatLength(m);saveMeta();}
+      }
+      state.tempPoints=[];state.distanceDraft=null;drawOverlay();
+    }
+  });
+  $("#overlayCanvas").addEventListener("pointercancel",()=>{if(state.editMeasure){state.editMeasure=null;}if(state.distanceDraft){state.distanceDraft=null;}drawOverlay();});
+  $("#overlayCanvas").addEventListener("click",e=>{if(Date.now()<state.suppressClickUntil||state.tool==="pan"||state.tool==="distance")return;state.tempPoints.push(pdfPointFromEvent(e));drawOverlay();});
 
   function screenMeasureHandles(m){
-    if(!m||m.type!=="distance"||m.points?.length!==2)return []; const sc=state.renderScale*state.viewZoom,r=$("#overlayCanvas").getBoundingClientRect(); const a=m.points[0],b=m.points[1],mx=(a.x+b.x)/2,my=(a.y+b.y)/2,dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1,off=(m.curveOffset??-34); const c={x:mx-dy/len*off,y:my+dx/len*off}; return [{kind:"a",p:a},{kind:"b",p:b},{kind:"curve",p:c}].map(h=>({...h,cx:r.left+h.p.x*sc,cy:r.top+h.p.y*sc}));
+    if(!m||m.type!=="distance"||m.points?.length!==2)return [];const sc=state.renderScale*state.viewZoom,r=$("#overlayCanvas").getBoundingClientRect();return [{kind:"a",p:m.points[0]},{kind:"b",p:m.points[1]}].map(h=>({...h,cx:r.left+h.p.x*sc,cy:r.top+h.p.y*sc}));
   }
-  $("#overlayCanvas").addEventListener("pointerdown",e=>{if(state.tool!=="distance")return; let best=null,d=Infinity; for(const m of getMeasurements())for(const h of screenMeasureHandles(m)){const q=Math.hypot(e.clientX-h.cx,e.clientY-h.cy);if(q<28&&q<d){best={m,h};d=q}} if(best){state.editMeasure=best; e.preventDefault(); try{e.target.setPointerCapture(e.pointerId)}catch{}}});
-  $("#overlayCanvas").addEventListener("pointermove",e=>{const ed=state.editMeasure;if(!ed)return;const p=pdfPointFromEvent(e),m=ed.m;if(ed.h.kind==="a")m.points[0]=p;else if(ed.h.kind==="b")m.points[1]=p;else{const a=m.points[0],b=m.points[1],mx=(a.x+b.x)/2,my=(a.y+b.y)/2,dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1;m.curveOffset=((p.x-mx)*(-dy/len)+(p.y-my)*(dx/len));}m.label=formatLength(ptToM(distancePt(m.points[0],m.points[1])));$("#measureResult").textContent=m.label;drawOverlay();});
-  $("#overlayCanvas").addEventListener("pointerup",()=>{if(state.editMeasure){saveMeta();state.editMeasure=null;drawOverlay()}});
-
 
   async function loadSmartHotspots(page,viewport){
-    state.smartHotspots=[];
-    const f=fileMeta(state.currentFileId); if(!f || f.documentType!=="drawing")return;
-    // Scan every drawing that belongs to a project with an armature schedule.
-    // Some drawing title blocks are not consistently categorized as Belysning,
-    // but an L/N/ARM tag can still be linked safely when it exists in the schedule.
-    const schedules=findArmatureSchedules(f.projectId); if(!schedules.length)return;
-    const index=new Map();
-    for(const sch of schedules) for(const e of (sch.armatureIndex||[])){ index.set(cleanTag(e.tag),e); for(const a of (e.aliases||[])) index.set(cleanTag(a),e); }
-    if(!index.size)return;
+    state.smartHotspots=[]; state.pageTextItems=[];
+    const f=fileMeta(state.currentFileId); if(!f)return;
+    const schedules=findArmatureSchedules(f.projectId);
     try{
       const tc=await page.getTextContent();
       for(const item of tc.items){
-        const hit=splitArmatureTag(item.str);
-        let entry=hit?index.get(hit.tag):index.get(cleanTag(item.str));
-        if(!entry){ const txt=String(item.str||"").trim().toLowerCase(); entry=schedules.flatMap(s=>s.armatureIndex||[]).find(e=>e.occhio && e.type && txt.length>5 && e.type.toLowerCase().includes(txt)); }
-        if(!entry)continue;
-        const tx=pdfjsLib.Util.transform(viewport.transform,item.transform);
-        const h=Math.max(6,Math.hypot(tx[2],tx[3]));
-        const w=Math.max(8,(item.width||hit.tag.length*5)*state.renderScale);
-        state.smartHotspots.push({tag:entry.tag,entry,x:tx[4]/state.renderScale,y:(tx[5]-h)/state.renderScale,w:w/state.renderScale,h:h/state.renderScale});
+        const tx=pdfjsLib.Util.transform(viewport.transform,item.transform),h=Math.max(6,Math.hypot(tx[2],tx[3])),w=Math.max(8,(item.width||String(item.str||"").length*5)*state.renderScale);
+        state.pageTextItems.push({str:String(item.str||""),x:tx[4]/state.renderScale,y:(tx[5]-h)/state.renderScale,w:w/state.renderScale,h:h/state.renderScale});
+      }
+      if(f.documentType!=="drawing"||!schedules.length)return;
+      const index=new Map();
+      for(const sch of schedules)for(const e0 of (sch.armatureIndex||[])){const e=enrichEntryWithOcchio(f.projectId,e0);index.set(cleanTag(e.tag),e);for(const a of(e.aliases||[]))index.set(cleanTag(a),e);}
+      for(const it of state.pageTextItems){
+        const tags=findTagOccurrences(it.str);let added=false;
+        for(const tag of tags){const entry=index.get(cleanTag(tag));if(!entry)continue;state.smartHotspots.push({tag:entry.tag,entry,x:it.x,y:it.y,w:Math.max(it.w,18),h:Math.max(it.h,10)});added=true;}
+        if(added)continue;
+        const txt=normalizeProductText(it.str);if(txt.length<5)continue;
+        let best=null,bestScore=0;
+        for(const sch of schedules)for(const e0 of(sch.armatureIndex||[])){const e=enrichEntryWithOcchio(f.projectId,e0);const cand=normalizeProductText([e.type,e.brand,e.occhioMatch?.type].filter(Boolean).join(" "));if(!cand)continue;const a=new Set(txt.split(" ").filter(x=>x.length>=3)),b=new Set(cand.split(" ").filter(x=>x.length>=3));let c=0;for(const x of a)if(b.has(x))c++;const score=c/Math.max(2,Math.min(a.size,b.size));if(score>bestScore){bestScore=score;best=e;}}
+        if(best&&bestScore>=.6)state.smartHotspots.push({tag:best.tag,entry:best,x:it.x,y:it.y,w:Math.max(it.w,24),h:Math.max(it.h,10)});
       }
     }catch(err){console.warn("Hotspot scan failed",err)}
   }
@@ -679,13 +738,14 @@
     }
     // 150 px at normal use is enough to hit the symbol next to its designation,
     // while avoiding jumps to a tag on the other side of the drawing.
-    return bestD<=150 ? best : null;
+    return bestD<=220 ? best : null;
   }
 
   function showArmatureCard(entry){
     state.selectedArmatureEntry=entry;
     $("#armatureTitle").textContent=entry.tag;
-    const rows=[["Fabrikat",entry.brand],["Typ",entry.type],["Bestyckning",entry.lamp],["Montage",entry.montage],["Styrning",entry.control],["Förteckning",`Sida ${entry.page}`]].filter(x=>x[1]);
+    const o=entry.occhioMatch;
+    const rows=[["Fabrikat",entry.brand],["Typ",entry.type],["Bestyckning",entry.lamp],["Montage",entry.montage],["Styrning",entry.control],...(o?[["Occhio position",o.tag],["Occhio produkt",o.type],["Occhio data",o.lamp],["Matchning",`${Math.round((entry.occhioConfidence||0)*100)}%`]]:[]),["Förteckning",`Sida ${entry.page}`]].filter(x=>x[1]);
     $("#armatureDetails").innerHTML=rows.map(([k,v])=>`<div class="k">${esc(k)}</div><div class="v">${esc(v)}</div>`).join("");
     $("#armatureSheet").classList.remove("hidden");
   }
@@ -699,14 +759,20 @@
     showArmatureCard(hit.entry); return true;
   }
 
+  $("#pdfViewport").addEventListener("click",async e=>{
+    if(state.tool!=="pan"||state.syncCapture)return;
+    if(await handleSmartDoubleTap(e.clientX,e.clientY)){state.suppressClickUntil=Date.now()+350;}
+  });
+
   async function openSelectedArmatureInPdf(){
     const entry=state.selectedArmatureEntry; if(!entry)return;
     const source=fileMeta(state.currentFileId); if(!source)return;
-    const schedule=findScheduleForEntry(source.projectId,entry); if(!schedule){toast("Ingen armaturförteckning hittades i projektet");return}
+    const targetEntry=entry.occhioMatch||entry;
+    const schedule=findScheduleForEntry(source.projectId,targetEntry); if(!schedule){toast("Ingen armaturförteckning hittades i projektet");return}
     closeArmatureCard();
     state.armatureReturn={fileId:state.currentFileId,page:state.pageNum,viewState:captureViewState()};
-    state.pendingArmatureTarget=entry;
-    await openPdf(schedule.id,{page:entry.page});
+    state.pendingArmatureTarget=targetEntry;
+    await openPdf(schedule.id,{page:targetEntry.page});
   }
 
   function focusArmatureTarget(entry){
@@ -736,24 +802,12 @@
   }
 
   async function calibrate(){
-    setTool("distance"); state.tempPoints=[];
-    $("#measureHint").textContent="Kalibrering: tryck på två punkter med ett känt mått.";
-    const handler=async e=>{
-      const p=pdfPointFromEvent(e); state.tempPoints.push(p); drawOverlay();
-      if(state.tempPoints.length===2){
-        $("#overlayCanvas").removeEventListener("click",handler,true);
-        const rawM=distancePt(state.tempPoints[0],state.tempPoints[1])/72*0.0254;
-        const input=await promptModal("Kalibrera ritningen","Ange det verkliga avståndet mellan punkterna i meter, t.ex. 3.00.","3.00","number");
-        if(input){
-          const known=Number(String(input).replace(",","."));
-          if(Number.isFinite(known)&&known>0){
-            const denom=known/rawM; setScale(denom); toast(`Kalibrerad till ca 1:${denom.toFixed(2)}`);
-          }
-        }
-        state.tempPoints=[]; setTool("pan"); drawOverlay();
-      }
-    };
-    $("#overlayCanvas").addEventListener("click",handler,true);
+    const mode=await promptModal("Kalibrera mätning","Skriv AREA för att kalibrera mot en rumsarea som står på ritningen, eller AVSTÅND för ett känt mått.","AREA");
+    if(!mode)return;
+    if(String(mode).trim().toUpperCase().startsWith("A") && !String(mode).trim().toUpperCase().startsWith("AVS")){
+      state.calibrationMode="area";setTool("area");state.calibrationMode="area";state.tempPoints=[];$("#measureHint").textContent="AREA-KALIBRERING: markera rummets hörn runt en utskriven area (t.ex. 5,4 m²) och tryck Slutför. Appen försöker läsa arean automatiskt.";return;
+    }
+    setTool("distance");state.calibrationMode="distance";state.tempPoints=[];$("#measureHint").textContent="AVSTÅNDSKALIBRERING: tryck A, tryck B och dra till exakt läge. När du släpper anger du det verkliga avståndet.";
   }
 
 

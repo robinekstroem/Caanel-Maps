@@ -14,14 +14,17 @@
 <body>
   <div id="ekisSplash" class="ekis-splash" aria-hidden="true">
     <div class="ekis-splash-logo-wrap">
-      <img class="ekis-splash-logo" src="logo.png" alt="">
+      <div class="ekis-splash-line ekis-splash-line-left"></div>
+      <img class="ekis-splash-logo" src="logo-transparent.png" alt="">
+      <div class="ekis-splash-line ekis-splash-line-right"></div>
       <div class="ekis-splash-scan"></div>
+      <div class="ekis-splash-sub">RITNING · MÄTNING · FÄLT</div>
     </div>
   </div>
   <div id="app">
     <header class="topbar">
       <button class="brand" id="brandBtn" aria-label="Gå till projekt">
-        <img src="logo.png" alt="EKIS FIELD">
+        <img src="logo-transparent.png" alt="EKIS FIELD">
       </button>
       <div class="top-actions">
         <span id="storageBadge" class="badge">Lokalt</span>
@@ -238,7 +241,7 @@
       window.setTimeout(function(){
         splash.classList.add('ekis-splash-out');
         window.setTimeout(function(){ if(splash && splash.parentNode) splash.parentNode.removeChild(splash); }, 520);
-      }, 2500);
+      }, 2800);
     })();
   </script>
 </body>

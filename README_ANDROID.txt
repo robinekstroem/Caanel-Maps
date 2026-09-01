@@ -12,3 +12,12 @@ Testfunktioner i denna version:
 - Avståndsmått ritas som båge; ändpunkter och vitt båghandtag kan dras i mätläge.
 
 OBS: Occhio autosync kräver att ritningen innehåller en maskinläsbar referens som kan matchas mot position/produkttext i Occhio-PDF:n. Appen gissar inte en koppling om ingen sådan referens finns.
+
+
+EKIS FIELD 3.1 TEST
+- Rak A–B-mätning: A låses, B dras och släpps. Ingen böjd måttlinje.
+- Automatisk PDF-skala läses från SKALA 1:xx när den finns.
+- Area-kalibrering kan använda utskriven rumsarea i PDF (m²) som referens.
+- Smart armaturmatchning söker taggar även inuti PDF-text och korslänkar vanlig armaturförteckning mot Occhio produktöversikt med försiktig matchningspoäng.
+- Armaturinfo kan öppnas med enkeltryck eller dubbeltryck nära matchad beteckning.
+- Splash använder transparent, beskuren logga på exakt appbakgrund för att ta bort den synliga svarta kvadraten.
