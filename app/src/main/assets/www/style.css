@@ -181,3 +181,7 @@ button.file-tag{cursor:pointer}
   .smart-back{font-size:11px;padding:0 8px}
   .viewer-head #prevDrawingBtn,.viewer-head #nextDrawingBtn{display:none}
 }
+
+/* EKIS FIELD test build */
+.brand img{max-height:54px;width:auto;object-fit:contain}
+.smart-docs{display:flex;flex-direction:column;gap:7px;margin:4px 0 12px}.smart-doc-title{font-size:11px;font-weight:900;letter-spacing:.14em;color:var(--muted);text-transform:uppercase}.smart-doc{display:grid;grid-template-columns:28px 1fr 24px;align-items:center;gap:9px;text-align:left;background:rgba(255,106,0,.07);border:1px solid rgba(255,106,0,.35);border-radius:13px;padding:10px 12px;color:var(--text)}.smart-doc>span,.smart-doc>b{color:var(--orange)}.smart-doc small{display:block;color:var(--muted);margin-top:2px}.todo-filters{display:flex;gap:7px;margin-top:14px}.todo-filter{border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:999px;padding:8px 12px;font-weight:800}.todo-filter.active{background:var(--orange);color:#fff;border-color:var(--orange)}.todo-text strong{display:block}.todo-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px;font-size:11px;color:var(--muted)}.prio{border-radius:999px;padding:2px 7px;background:#222}.prio.viktig{color:#ffc566}.prio.akut{color:#ff7b72}

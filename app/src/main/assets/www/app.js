@@ -4,7 +4,7 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   }
 
-  const META_KEY = "caanel-field-meta-v1";
+  const META_KEY = "caanel-field-meta-v1"; // keep key so existing projects survive rebrand
   const DB_NAME = "caanel-field-files";
   const STORE = "files";
 
@@ -41,11 +41,13 @@
     armatureReturn: null,
     armatureHighlight: null,
     selectedArmatureEntry: null,
-    analysisBusy: false
+    analysisBusy: false,
+    todoFilter: "open",
+    editMeasure: null
   };
 
   function defaultMeta() {
-    return { projects: [], todos: [], fileMeta: {}, measurements: {}, version: 2 };
+    return { projects: [], todos: [], fileMeta: {}, measurements: {}, version: 3 };
   }
   function loadMeta() {
     try { return {...defaultMeta(), ...JSON.parse(localStorage.getItem(META_KEY) || "{}")}; }
@@ -88,11 +90,23 @@
     const m=String(text||"").match(/\bPLAN\s*0*(\d{1,3})\b/i);
     return m ? String(Number(m[1])) : "";
   }
+  function extractPart(text, originalName="", plan=""){
+    const t=String(text||"");
+    let m=t.match(/\b(?:DEL|DELEN|PART)\s*0*(\d{1,2})\b/i);
+    if(m) return String(Number(m[1]));
+    const base=stripPdf(originalName).replace(/\s+/g,"");
+    m=base.match(/(?:^|[-_])([0-9]{2})([0-9]{2})(?:$|[-_])/);
+    if(m && (!plan || String(Number(m[1]))===String(Number(plan)))) return String(Number(m[2]));
+    m=base.match(/(?:^|[-_])([0-9]{2,3})([0-9])$/);
+    if(m && plan && String(Number(m[1]))===String(Number(plan))) return String(Number(m[2]));
+    return "";
+  }
   function smartSortFiles(a,b){
     const ca=CATEGORY_ORDER.indexOf(a.category||"Övrigt"), cb=CATEGORY_ORDER.indexOf(b.category||"Övrigt");
     if(ca!==cb) return (ca<0?99:ca)-(cb<0?99:cb);
     const pa=Number(a.plan||9999), pb=Number(b.plan||9999);
     if(pa!==pb) return pa-pb;
+    const da=Number(a.part||0), db=Number(b.part||0); if(da!==db)return da-db;
     return displayLabel(a).localeCompare(displayLabel(b),"sv");
   }
 
@@ -133,7 +147,8 @@
       const all=pages.flatMap(p=>p.items.map(x=>x.str));
       const allText=all.join(" ");
       const tagCount=all.filter(x=>splitArmatureTag(x)).length;
-      const isSchedule=/armatur/i.test(originalName||"") || (/BESTYCKNING/i.test(allText)&&/MONTAGE/i.test(allText)&&/STYRNING/i.test(allText)&&tagCount>=4);
+      const isOcchio=/occhio/i.test(originalName||"") || (/product overview/i.test(allText)&&/position\s*0?1/i.test(allText)&&/Occhio/i.test(allText));
+      const isSchedule=isOcchio || /armatur/i.test(originalName||"") || (/BESTYCKNING/i.test(allText)&&/MONTAGE/i.test(allText)&&/STYRNING/i.test(allText)&&tagCount>=4);
       const tail=first.slice(-Math.max(80,Math.ceil(first.length*.28)));
       const tailText=tail.join(" ");
       let category=isSchedule ? "Belysning" : "Övrigt";
@@ -144,8 +159,22 @@
         category=hit?hit[1]:normalizeCategory(tailText);
       }
       const plan=extractPlan(tailText)||extractPlan(first.join(" "));
+      const part=extractPart(tailText+" "+first.join(" "),originalName,plan);
       const armatureIndex=[];
-      if(isSchedule){
+      if(isOcchio){
+        for(const pg of pages){
+          const its=pg.items;
+          for(let i=0;i<its.length;i++){
+            const mm=its[i].str.match(/^position\s*0*(\d{1,2})$/i); if(!mm)continue;
+            const num=String(Number(mm[1])).padStart(2,"0");
+            const group=its.slice(i,Math.min(i+18,its.length)).map(x=>x.str);
+            const product=group.slice(1).find(v=>/^1\s*x\s+/i.test(v))||group[1]||"Occhio";
+            const power=(product.match(/\b\d+(?:[.,]\d+)?W\b/i)||[])[0]||"";
+            const kelvin=(product.match(/\b\d{4}(?:-\d{4})?K\b/i)||[])[0]||"";
+            armatureIndex.push({tag:`POS ${num}`,aliases:[`POSITION ${num}`,`POS${num}`,num],page:pg.page,x:its[i].x,y:its[i].y,w:its[i].w,h:its[i].h,brand:"Occhio",type:product.replace(/^1\s*x\s+/i,"").trim(),lamp:[power,kelvin].filter(Boolean).join(" · "),montage:"",control:"Occhio air",raw:group.slice(0,12),occhio:true});
+          }
+        }
+      } else if(isSchedule){
         for(const pg of pages){
           const its=pg.items;
           const starts=[];
@@ -165,23 +194,24 @@
         }
       }
       let displayName;
-      if(isSchedule) displayName="Armaturförteckning";
-      else if(category!=="Övrigt") displayName=category+(plan?` – Plan ${plan}`:"");
+      if(isOcchio) displayName="Armaturförteckning – Occhio";
+      else if(isSchedule) displayName="Armaturförteckning";
+      else if(category!=="Övrigt") displayName=category+(plan?` – P${plan}`:"")+(part?` – Del ${part}`:"");
       else displayName=stripPdf(originalName);
-      return {analysisVersion:2,documentType:isSchedule?"armatureSchedule":"drawing",category,plan,displayName,armatureIndex,pages:doc.numPages};
+      return {analysisVersion:3,documentType:isOcchio?"occhioSchedule":(isSchedule?"armatureSchedule":"drawing"),category,plan,part,displayName,armatureIndex,pages:doc.numPages};
     }catch(err){console.warn("PDF analysis failed",originalName,err);return null}
   }
 
   function applyAnalysis(f,a){
     if(!f||!a)return;
-    f.analysisVersion=2; f.documentType=a.documentType; f.category=a.category; f.plan=a.plan; f.armatureIndex=a.armatureIndex||[]; f.pageCount=a.pages||1;
+    f.analysisVersion=3; f.documentType=a.documentType; f.category=a.category; f.plan=a.plan; f.part=a.part||""; f.armatureIndex=a.armatureIndex||[]; f.pageCount=a.pages||1;
     if(f.name===f.originalName || f.autoNamed){ f.name=a.displayName+".pdf"; f.autoNamed=true; }
   }
 
   async function analyzeProjectFilesMissing(projectId){
     if(state.analysisBusy)return;
     const p=projectById(projectId); if(!p)return;
-    const ids=(p.files||[]).filter(id=>fileMeta(id)?.analysisVersion!==2);
+    const ids=(p.files||[]).filter(id=>fileMeta(id)?.analysisVersion!==3);
     if(!ids.length)return;
     state.analysisBusy=true;
     try{
@@ -190,16 +220,18 @@
         if(state.currentProjectId===projectId) $("#projectStatus").textContent=`Analyserar ritningar… ${i+1}/${ids.length}`;
         applyAnalysis(f,await analyzePdfBlob(blob,f.originalName));
       }
-      state.meta.version=2; saveMeta();
+      state.meta.version=3; saveMeta();
       if(state.currentProjectId===projectId){$("#projectStatus").textContent="PDF-analys klar.";renderProject()}
       renderProjects(); renderAllDrawings();
     }finally{state.analysisBusy=false}
   }
 
-  function findArmatureSchedule(projectId){
+  function findArmatureSchedules(projectId){
     const p=projectById(projectId);
-    return (p?.files||[]).map(id=>fileMeta(id)).find(f=>f?.documentType==="armatureSchedule" && (f.armatureIndex||[]).length);
+    return (p?.files||[]).map(id=>fileMeta(id)).filter(f=>["armatureSchedule","occhioSchedule"].includes(f?.documentType) && (f.armatureIndex||[]).length);
   }
+  function findArmatureSchedule(projectId){ return findArmatureSchedules(projectId)[0]||null; }
+  function findScheduleForEntry(projectId,entry){ return findArmatureSchedules(projectId).find(s=>(s.armatureIndex||[]).some(e=>e===entry || (e.tag===entry.tag && e.page===entry.page))) || findArmatureSchedule(projectId); }
 
   let dbPromise;
   function db() {
@@ -305,6 +337,8 @@
     if(sort==="recent") files.sort((a,b)=>(b.addedAt||0)-(a.addedAt||0));
     else if(sort==="name") files.sort((a,b)=>displayLabel(a).localeCompare(displayLabel(b),"sv"));
     else files.sort(smartSortFiles);
+    const docs=(p.files||[]).map(id=>fileMeta(id)).filter(f=>["armatureSchedule","occhioSchedule"].includes(f?.documentType));
+    const sd=$("#smartDocs"); if(sd){sd.innerHTML=docs.length ? (`<div class="smart-doc-title">Smarta dokument</div>` + docs.map(d=>`<button class="smart-doc" data-smart-open="${d.id}"><span>✓</span><div><strong>${esc(displayLabel(d))}</strong><small>${(d.armatureIndex||[]).length} poster indexerade · autosync aktiv</small></div><b>›</b></button>`).join("")) : ""; sd.querySelectorAll("[data-smart-open]").forEach(b=>b.onclick=()=>openPdf(b.dataset.smartOpen));}
     const list=$("#projectFiles");
     if(!files.length){
       list.innerHTML='<div class="empty">Inga PDF-filer i den här kategorin.</div>';
@@ -324,9 +358,9 @@
 
   function fileRowHtml(f, showProject=false){
     const project=projectById(f.projectId);
-    const tags=[f.category||"Övrigt",f.plan?`Plan ${f.plan}`:"",f.documentType==="armatureSchedule"?"Smart dokument":""].filter(Boolean);
+    const tags=[f.category||"Övrigt",f.plan?`P${f.plan}`:"",f.part?`Del ${f.part}`:"",["armatureSchedule","occhioSchedule"].includes(f.documentType)?"Smart dokument":""].filter(Boolean);
     return `<div class="file-row" data-file-row="${f.id}">
-      <div class="file-icon">${f.documentType==="armatureSchedule"?"LIST":"PDF"}</div>
+      <div class="file-icon">${["armatureSchedule","occhioSchedule"].includes(f.documentType)?"LIST":"PDF"}</div>
       <div class="file-main">
         <div class="file-name">${esc(displayLabel(f))}</div>
         <div class="file-tags">${tags.map((t,i)=>`<button class="file-tag ${i===2?"smart":""} ${i===0?"category-edit":""}" ${i===0?`data-category-edit="${f.id}"`:""}>${esc(t)}</button>`).join("")}</div>
@@ -430,16 +464,13 @@
   }
 
   function renderTodos(){
-    const list=$("#todoList");
-    if(!state.meta.todos.length){list.innerHTML='<div class="empty">Inga punkter ännu.</div>';return}
-    list.innerHTML=state.meta.todos.map(t=>`<div class="todo-row ${t.done?"done":""}" data-todo="${t.id}">
-      <input type="checkbox" ${t.done?"checked":""}><div class="todo-text">${esc(t.text)}</div><button class="row-btn">×</button>
-    </div>`).join("");
-    list.querySelectorAll("[data-todo]").forEach(row=>{
-      const id=row.dataset.todo, t=state.meta.todos.find(x=>x.id===id);
-      row.querySelector("input").onchange=e=>{t.done=e.target.checked;saveMeta();renderTodos()};
-      row.querySelector("button").onclick=()=>{state.meta.todos=state.meta.todos.filter(x=>x.id!==id);saveMeta();renderTodos()};
-    });
+    const list=$("#todoList"); const today=new Date().toISOString().slice(0,10);
+    let items=[...state.meta.todos];
+    if(state.todoFilter==="open")items=items.filter(t=>!t.done);
+    if(state.todoFilter==="today")items=items.filter(t=>!t.done && t.due===today);
+    if(!items.length){list.innerHTML='<div class="empty">Inga punkter här.</div>';return}
+    list.innerHTML=items.map(t=>{const p=projectById(t.projectId);return `<div class="todo-row ${t.done?"done":""}" data-todo="${t.id}"><input type="checkbox" ${t.done?"checked":""}><div class="todo-text"><strong>${esc(t.text)}</strong><div class="todo-meta"><span class="prio ${esc((t.priority||"Normal").toLowerCase())}">${esc(t.priority||"Normal")}</span>${t.due?`<span>📅 ${esc(t.due)}</span>`:""}${p?`<span>▦ ${esc(p.name)}</span>`:""}</div></div><button class="row-btn">×</button></div>`}).join("");
+    list.querySelectorAll("[data-todo]").forEach(row=>{const id=row.dataset.todo,t=state.meta.todos.find(x=>x.id===id);row.querySelector("input").onchange=e=>{t.done=e.target.checked;saveMeta();renderTodos()};row.querySelector("button").onclick=()=>{state.meta.todos=state.meta.todos.filter(x=>x.id!==id);saveMeta();renderTodos()}});
   }
 
   async function openPdf(id, opts={}){
@@ -527,8 +558,8 @@
   }
   function updateHint(){
     const text={
-      pan:"Nyp för zoom • dubbeltryck på t.ex. L13 för armaturinfo • dubbeltryck annars för helskärm.",
-      distance:"Tryck på två punkter för att mäta ett avstånd.",
+      pan:"Nyp för zoom • dubbeltryck på en armatur eller dess beteckning (t.ex. L13) för info.",
+      distance:"Tryck två punkter. Dra ändpunkterna för finjustering eller dra vita handtaget för att böja måttlinjen.",
       route:"Tryck ut en kabelväg/sträcka. Tryck Slutför när du är klar.",
       area:"Markera hörnen runt en yta. Tryck Slutför när du är klar."
     }[state.tool];
@@ -546,7 +577,12 @@
       q.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,4,0,Math.PI*2);ctx.fill()});
       if(label&&q.length){const p=q[Math.floor(q.length/2)];ctx.fillStyle="rgba(11,11,12,.88)";ctx.fillRect(p.x+6,p.y-20,Math.max(70,label.length*7),22);ctx.fillStyle="#ff6a00";ctx.fillText(label,p.x+11,p.y-5)}
     }
-    getMeasurements().forEach(m=>drawPath(m.points,m.type==="area",m.label));
+    getMeasurements().forEach(m=>{
+      if(m.type==="distance" && m.points?.length===2){
+        const a=toPx(m.points[0]),b=toPx(m.points[1]); const mx=(a.x+b.x)/2,my=(a.y+b.y)/2; const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1; const off=(m.curveOffset??-34)*state.renderScale; const cx=mx-dy/len*off,cy=my+dx/len*off;
+        ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.quadraticCurveTo(cx,cy,b.x,b.y);ctx.stroke();[a,b].forEach(q=>{ctx.beginPath();ctx.arc(q.x,q.y,6,0,Math.PI*2);ctx.fill()});ctx.beginPath();ctx.arc(cx,cy,7,0,Math.PI*2);ctx.fillStyle="#fff";ctx.fill();ctx.strokeStyle="#ff6a00";ctx.stroke();ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(cx+9,cy-19,Math.max(74,m.label.length*7),23);ctx.fillStyle="#ff6a00";ctx.fillText(m.label,cx+14,cy-4);ctx.strokeStyle="#ff6a00";ctx.fillStyle="#ff6a00";
+      } else drawPath(m.points,m.type==="area",m.label);
+    });
     const f=fileMeta(state.currentFileId);
     const refs=f?.syncRefs?.[state.pageNum] || [];
     const live=state.syncCapture?.fileId===state.currentFileId ? state.syncCapture.points : [];
@@ -585,43 +621,65 @@
       state.tempPoints.push(p);
       if(state.tempPoints.length===2){
         const m=ptToM(distancePt(state.tempPoints[0],state.tempPoints[1]));
-        getMeasurements().push({id:uid(),type:"distance",points:[...state.tempPoints],label:formatLength(m)});
+        getMeasurements().push({id:uid(),type:"distance",points:[...state.tempPoints],label:formatLength(m),curveOffset:-34});
         $("#measureResult").textContent=formatLength(m); state.tempPoints=[]; saveMeta();
       }
     }else state.tempPoints.push(p);
     drawOverlay();
   });
 
+  function screenMeasureHandles(m){
+    if(!m||m.type!=="distance"||m.points?.length!==2)return []; const sc=state.renderScale*state.viewZoom,r=$("#overlayCanvas").getBoundingClientRect(); const a=m.points[0],b=m.points[1],mx=(a.x+b.x)/2,my=(a.y+b.y)/2,dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1,off=(m.curveOffset??-34); const c={x:mx-dy/len*off,y:my+dx/len*off}; return [{kind:"a",p:a},{kind:"b",p:b},{kind:"curve",p:c}].map(h=>({...h,cx:r.left+h.p.x*sc,cy:r.top+h.p.y*sc}));
+  }
+  $("#overlayCanvas").addEventListener("pointerdown",e=>{if(state.tool!=="distance")return; let best=null,d=Infinity; for(const m of getMeasurements())for(const h of screenMeasureHandles(m)){const q=Math.hypot(e.clientX-h.cx,e.clientY-h.cy);if(q<28&&q<d){best={m,h};d=q}} if(best){state.editMeasure=best; e.preventDefault(); try{e.target.setPointerCapture(e.pointerId)}catch{}}});
+  $("#overlayCanvas").addEventListener("pointermove",e=>{const ed=state.editMeasure;if(!ed)return;const p=pdfPointFromEvent(e),m=ed.m;if(ed.h.kind==="a")m.points[0]=p;else if(ed.h.kind==="b")m.points[1]=p;else{const a=m.points[0],b=m.points[1],mx=(a.x+b.x)/2,my=(a.y+b.y)/2,dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1;m.curveOffset=((p.x-mx)*(-dy/len)+(p.y-my)*(dx/len));}m.label=formatLength(ptToM(distancePt(m.points[0],m.points[1])));$("#measureResult").textContent=m.label;drawOverlay();});
+  $("#overlayCanvas").addEventListener("pointerup",()=>{if(state.editMeasure){saveMeta();state.editMeasure=null;drawOverlay()}});
+
 
   async function loadSmartHotspots(page,viewport){
     state.smartHotspots=[];
-    const f=fileMeta(state.currentFileId); if(!f || f.documentType!=="drawing" || f.category!=="Belysning")return;
-    const schedule=findArmatureSchedule(f.projectId); if(!schedule)return;
-    const index=new Map((schedule.armatureIndex||[]).map(e=>[cleanTag(e.tag),e]));
+    const f=fileMeta(state.currentFileId); if(!f || f.documentType!=="drawing")return;
+    // Scan every drawing that belongs to a project with an armature schedule.
+    // Some drawing title blocks are not consistently categorized as Belysning,
+    // but an L/N/ARM tag can still be linked safely when it exists in the schedule.
+    const schedules=findArmatureSchedules(f.projectId); if(!schedules.length)return;
+    const index=new Map();
+    for(const sch of schedules) for(const e of (sch.armatureIndex||[])){ index.set(cleanTag(e.tag),e); for(const a of (e.aliases||[])) index.set(cleanTag(a),e); }
     if(!index.size)return;
     try{
       const tc=await page.getTextContent();
       for(const item of tc.items){
-        const hit=splitArmatureTag(item.str); if(!hit || !index.has(hit.tag))continue;
+        const hit=splitArmatureTag(item.str);
+        let entry=hit?index.get(hit.tag):index.get(cleanTag(item.str));
+        if(!entry){ const txt=String(item.str||"").trim().toLowerCase(); entry=schedules.flatMap(s=>s.armatureIndex||[]).find(e=>e.occhio && e.type && txt.length>5 && e.type.toLowerCase().includes(txt)); }
+        if(!entry)continue;
         const tx=pdfjsLib.Util.transform(viewport.transform,item.transform);
         const h=Math.max(6,Math.hypot(tx[2],tx[3]));
         const w=Math.max(8,(item.width||hit.tag.length*5)*state.renderScale);
-        state.smartHotspots.push({tag:hit.tag,entry:index.get(hit.tag),x:tx[4]/state.renderScale,y:(tx[5]-h)/state.renderScale,w:w/state.renderScale,h:h/state.renderScale});
+        state.smartHotspots.push({tag:entry.tag,entry,x:tx[4]/state.renderScale,y:(tx[5]-h)/state.renderScale,w:w/state.renderScale,h:h/state.renderScale});
       }
     }catch(err){console.warn("Hotspot scan failed",err)}
   }
 
   function nearestSmartHotspot(clientX,clientY){
     if(!state.smartHotspots.length)return null;
-    const p=pdfPointFromClient(clientX,clientY);
+    // Work in screen pixels. This lets the electrician double-tap the actual
+    // fixture symbol, not only the tiny L13 text. We select the nearest known
+    // armature tag within a generous but bounded radius.
+    const r=$("#overlayCanvas").getBoundingClientRect();
+    const scale=state.renderScale*state.viewZoom;
     let best=null,bestD=Infinity;
     for(const h of state.smartHotspots){
-      const pad=Math.max(14,28/state.viewZoom);
-      const inside=p.x>=h.x-pad&&p.x<=h.x+h.w+pad&&p.y>=h.y-pad&&p.y<=h.y+h.h+pad;
-      const cx=h.x+h.w/2,cy=h.y+h.h/2,d=Math.hypot(p.x-cx,p.y-cy);
-      if((inside||d<pad*1.6)&&d<bestD){best=h;bestD=d}
+      const left=r.left+h.x*scale, top=r.top+h.y*scale;
+      const right=left+h.w*scale, bottom=top+h.h*scale;
+      const nx=Math.max(left,Math.min(clientX,right));
+      const ny=Math.max(top,Math.min(clientY,bottom));
+      const d=Math.hypot(clientX-nx,clientY-ny);
+      if(d<bestD){best=h;bestD=d}
     }
-    return best;
+    // 150 px at normal use is enough to hit the symbol next to its designation,
+    // while avoiding jumps to a tag on the other side of the drawing.
+    return bestD<=150 ? best : null;
   }
 
   function showArmatureCard(entry){
@@ -644,7 +702,7 @@
   async function openSelectedArmatureInPdf(){
     const entry=state.selectedArmatureEntry; if(!entry)return;
     const source=fileMeta(state.currentFileId); if(!source)return;
-    const schedule=findArmatureSchedule(source.projectId); if(!schedule){toast("Ingen armaturförteckning hittades i projektet");return}
+    const schedule=findScheduleForEntry(source.projectId,entry); if(!schedule){toast("Ingen armaturförteckning hittades i projektet");return}
     closeArmatureCard();
     state.armatureReturn={fileId:state.currentFileId,page:state.pageNum,viewState:captureViewState()};
     state.pendingArmatureTarget=entry;
@@ -667,7 +725,7 @@
 
   function syncSmartNavUI(){
     const f=fileMeta(state.currentFileId);
-    const show=!!state.armatureReturn && f?.documentType==="armatureSchedule";
+    const show=!!state.armatureReturn && ["armatureSchedule","occhioSchedule"].includes(f?.documentType);
     $("#backToDrawingBtn").classList.toggle("hidden",!show);
   }
 
@@ -1076,9 +1134,9 @@
         if(handleSyncTap(cx,cy)){
           state.suppressClickUntil=Date.now()+400; return;
         }
-        if(state.tool==="pan" && dt<350){
+        if(state.tool==="pan" && dt<500){
           const now=Date.now();
-          if(now-state.lastTapAt<360){
+          if(now-state.lastTapAt<520){
             state.lastTapAt=0; state.suppressClickUntil=now+450;
             const smart=await handleSmartDoubleTap(cx,cy);
             if(!smart) await toggleFullscreen();
@@ -1103,7 +1161,7 @@
     for(const id of p.files||[]){
       const f=fileMeta(id), blob=await getBlob(id); if(f&&blob) folder.file(f.name,blob);
     }
-    folder.file("_CAANEL_metadata.json",JSON.stringify({project:p,files:(p.files||[]).map(id=>fileMeta(id))},null,2));
+    folder.file("_EKIS_metadata.json",JSON.stringify({project:p,files:(p.files||[]).map(id=>fileMeta(id))},null,2));
     const out=await zip.generateAsync({type:"blob"});
     downloadBlob(out,`${p.name.replace(/[\\/:*?"<>|]/g,"_")}.zip`);
     $("#projectStatus").textContent="Projektet exporterades."; toast("Projekt ZIP skapad");
@@ -1111,16 +1169,16 @@
 
   async function exportBackup(){
     if(!window.JSZip){toast("ZIP-modulen saknas");return}
-    const zip=new JSZip(); zip.file("caanel-backup.json",JSON.stringify(state.meta,null,2));
+    const zip=new JSZip(); zip.file("ekis-field-backup.json",JSON.stringify(state.meta,null,2));
     const folder=zip.folder("pdf");
     for(const id of Object.keys(state.meta.fileMeta)){const b=await getBlob(id);if(b)folder.file(id+".pdf",b)}
-    const out=await zip.generateAsync({type:"blob"}); downloadBlob(out,"CAANEL_Field_backup.zip"); toast("Backup skapad");
+    const out=await zip.generateAsync({type:"blob"}); downloadBlob(out,"EKIS_FIELD_backup.zip"); toast("Backup skapad");
   }
 
   async function importBackup(file){
     if(!window.JSZip)return;
     try{
-      const zip=await JSZip.loadAsync(file), mf=zip.file("caanel-backup.json"); if(!mf)throw new Error("metadata missing");
+      const zip=await JSZip.loadAsync(file), mf=zip.file("ekis-field-backup.json")||zip.file("caanel-backup.json"); if(!mf)throw new Error("metadata missing");
       const meta=JSON.parse(await mf.async("text"));
       await clearBlobs();
       for(const id of Object.keys(meta.fileMeta||{})){const zf=zip.file(`pdf/${id}.pdf`);if(zf)await putBlob(id,await zf.async("blob"))}
@@ -1152,7 +1210,8 @@
   $("#zipInput").onchange=e=>{if(e.target.files[0])importZip(e.target.files[0]);e.target.value=""};
   $("#projectSearch").oninput=renderProject; $("#sortSelect").onchange=renderProject; $("#drawingSearch").oninput=renderAllDrawings;
   $("#exportProjectBtn").onclick=exportProject; $("#exportBackupBtn").onclick=exportBackup; $("#backupInput").onchange=e=>{if(e.target.files[0])importBackup(e.target.files[0]);e.target.value=""};
-  $("#newTodoBtn").onclick=async()=>{const t=await promptModal("Ny punkt","Vad ska göras?","");if(t){state.meta.todos.unshift({id:uid(),text:t,done:false});saveMeta();renderTodos()}};
+  $("#newTodoBtn").onclick=async()=>{const t=await promptModal("Ny uppgift","Vad ska göras?","");if(!t)return;const pr=await promptModal("Prioritet","Skriv Normal, Viktig eller Akut.","Normal");const due=await promptModal("Deadline","Datum YYYY-MM-DD, eller lämna tomt.","");state.meta.todos.unshift({id:uid(),text:t,done:false,priority:["Normal","Viktig","Akut"].find(x=>x.toLowerCase()===String(pr||"").toLowerCase())||"Normal",due:/^\d{4}-\d{2}-\d{2}$/.test(due||"")?due:"",projectId:state.currentProjectId||null});saveMeta();renderTodos()};
+  $$("[data-todo-filter]").forEach(b=>b.onclick=()=>{state.todoFilter=b.dataset.todoFilter;$$('[data-todo-filter]').forEach(x=>x.classList.toggle('active',x===b));renderTodos()});
   $("#backFilesBtn").onclick=()=>{const f=fileMeta(state.currentFileId); state.armatureReturn=null; state.armatureHighlight=null; if(f){state.currentProjectId=f.projectId;renderProject();showView("projectView",false)}else showView("projectsView")};
   $("#backToDrawingBtn").onclick=returnToArmatureSource;
   $("#closeArmatureSheet").onclick=closeArmatureCard;

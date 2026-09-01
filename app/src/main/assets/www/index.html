@@ -4,18 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b0b0c">
-  <meta name="description" content="CAANEL Field – personlig ritnings- och projektapp">
+  <meta name="description" content="EKIS FIELD – personlig ritnings- och projektapp">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="style.css">
-  <title>CAANEL Field</title>
+  <title>EKIS FIELD</title>
 </head>
 <body>
   <div id="app">
     <header class="topbar">
       <button class="brand" id="brandBtn" aria-label="Gå till projekt">
-        <img src="logo.png" alt="CAANEL">
+        <img src="logo.png" alt="EKIS FIELD">
       </button>
       <div class="top-actions">
         <span id="storageBadge" class="badge">Lokalt</span>
@@ -27,7 +27,7 @@
       <section id="projectsView" class="view active">
         <div class="hero">
           <div>
-            <p class="eyebrow">CAANEL FIELD</p>
+            <p class="eyebrow">EKIS FIELD</p>
             <h1>Mina projekt</h1>
             <p class="muted">Ritningar, ZIP-filer och mätningar samlade på ett ställe.</p>
           </div>
@@ -55,7 +55,7 @@
           </div>
           <button id="newTodoBtn" class="btn primary">+ Punkt</button>
         </div>
-        <div id="todoList" class="todo-list"></div>
+        <div class="todo-filters" id="todoFilters"><button class="todo-filter active" data-todo-filter="open">Öppna</button><button class="todo-filter" data-todo-filter="today">Idag</button><button class="todo-filter" data-todo-filter="all">Alla</button></div><div id="todoList" class="todo-list"></div>
       </section>
 
       <section id="settingsView" class="view">
@@ -116,6 +116,7 @@
         </div>
         <div id="categoryTabs" class="category-tabs" aria-label="Ritningskategorier"></div>
         <div id="projectStatus" class="statusline"></div>
+        <div id="smartDocs" class="smart-docs"></div>
         <div id="projectFiles" class="file-list"></div>
       </section>
 

@@ -1,4 +1,4 @@
-name: Build CAANEL Field APK
+name: Build EKIS FIELD APK
 
 on:
   workflow_dispatch:
@@ -29,7 +29,7 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Make CAANEL Field fully offline
+      - name: Make EKIS FIELD fully offline
         run: |
           mkdir -p app/src/main/assets/www/vendor
           curl -L --fail --retry 3 \
@@ -60,11 +60,11 @@ jobs:
         run: gradle :app:assembleDebug
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk CAANEL-Field.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk EKIS-Field.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: CAANEL-Field-APK
-          path: CAANEL-Field.apk
+          name: EKIS-Field-APK
+          path: EKIS-Field.apk
           retention-days: 30

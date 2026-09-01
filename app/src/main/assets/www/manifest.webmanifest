@@ -1,11 +1,11 @@
 {
-  "name": "CAANEL Field",
-  "short_name": "CAANEL Field",
+  "name": "EKIS FIELD",
+  "short_name": "EKIS FIELD",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#0b0b0c",
   "theme_color": "#0b0b0c",
-  "description": "Personlig projekt- och ritningsapp för CAANEL",
+  "description": "Personlig projekt- och ritningsapp för EKIS FIELD",
   "icons": [
     {
       "src": "icon-192.png",

@@ -1,42 +1,14 @@
-CAANEL FIELD – ANDROID
+EKIS FIELD – TESTBUILD v3
 
-Detta är den riktiga Android-versionen av CAANEL Field.
+Detta är ett Android-projekt som byggs via GitHub Actions.
+Testfunktioner i denna version:
+- EKIS FIELD-logga och appnamn.
+- Ca 3 sekunders animerad startskärm.
+- Immersive Android-läge: status-/navigationsfält döljs, svep från kanten visar dem tillfälligt.
+- Ritningsanalys med Pxx + Del 1/2/3 när detta kan läsas ur ritningshuvud eller filnummer.
+- Vanlig armaturförteckning och Occhio product overview kan indexeras som smarta dokument.
+- Flera armaturförteckningar kan läggas in i efterhand och projektet analyseras om.
+- Förbättrad Att göra-lista med prioritet, deadline och filter.
+- Avståndsmått ritas som båge; ändpunkter och vitt båghandtag kan dras i mätläge.
 
-Ingår:
-- CAANEL Field v4 i en Android WebView-app
-- PDF/ZIP-filväljare från telefonens filer
-- LocalStorage + IndexedDB för projekt och PDF-filer
-- Pinch-zoom, swipe, helskärm och synkade våningsplan från v4
-- Export/backup sparas till Hämtade filer / CAANEL Field
-- GitHub Actions-fil som bygger CAANEL-Field.apk
-- Byggsteget hämtar PDF.js + JSZip och packar dem lokalt i APK:n för offline-användning
-
-BYGG VIA GITHUB:
-1. Lägg projektfilerna i ett eget GitHub-repository.
-2. Öppna fliken Actions.
-3. Välj "Build CAANEL Field APK".
-4. Kör workflow.
-5. När bygget är grönt: öppna körningen och ladda ner artifact "CAANEL-Field-APK".
-6. Packa upp artifact ZIP på telefonen och installera CAANEL-Field.apk.
-   Android kan fråga om tillåtelse att installera okända appar från webbläsaren/filer.
-
-OBS:
-Debug-APK:n är installerbar direkt och bra för test.
-När appen är färdig för skarp användning/Play Store bör en signerad release-nyckel läggas till.
-
-
-CAANEL FIELD v2.0 - SMART PDF
-=============================
-Nytt i denna version:
-- Automatisk analys av PDF vid import.
-- Ritningshuvud används för namn, kategori och plan när texten finns i PDF:en.
-- Exempel: E-640-1-118.pdf -> Tele - Plan 18.
-- Fasta kategoriflikar: Alla, Belysning, Kraft, Tele, Kanalisation, Brand, Passage, Övrigt.
-- Automatisk sortering på kategori och plan.
-- Armaturförteckningar identifieras och indexeras (L1, L13, L4A, N1, ARM 1 osv.).
-- På belysningsritning: dubbeltryck på en matchande armaturbeteckning för snabbinfo.
-- Knappen "Visa i armaturförteckning" öppnar rätt sida och markerar posten.
-- "Tillbaka till ritningen" återställer tidigare ritning, sida, zoom och position.
-- Befintliga PDF:er från äldre version analyseras automatiskt när projektet öppnas.
-- Manuell namnändring skrivs inte över av automatiken.
-- Kategori kan korrigeras manuellt genom att trycka på kategorichippen på en filrad.
+OBS: Occhio autosync kräver att ritningen innehåller en maskinläsbar referens som kan matchas mot position/produkttext i Occhio-PDF:n. Appen gissar inte en koppling om ingen sådan referens finns.
