@@ -414,6 +414,27 @@
       </button><button class="project-delete-btn" data-delete-project="${p.id}" aria-label="Ta bort ${esc(p.name)}">✕</button></div>`;
     }).join("");
     $$("[data-project]").forEach(b=>b.onclick=()=>openProject(b.dataset.project));
+    $$("[data-delete-project]").forEach(b=>b.onclick=async e=>{e.stopPropagation();await deleteProjectById(b.dataset.deleteProject)});
+  }
+
+  async function deleteProjectById(id){
+    const p=projectById(id); if(!p) return;
+    const fileCount=(p.files||[]).length;
+    const ok=await confirmDelete('Ta bort projekt?',`Vill du verkligen ta bort “${p.name}”? ${fileCount} ritning${fileCount===1?'':'ar'} samt projektets ÄTA, Att göra, markeringar och mätningar tas bort.`);
+    if(!ok) return;
+    const fileIds=[...(p.files||[])];
+    for(const fid of fileIds){
+      try{ await deleteBlob(fid); }catch(e){ console.warn('Kunde inte ta bort PDF-data',fid,e); }
+      delete state.meta.fileMeta[fid];
+      Object.keys(state.meta.measurements||{}).filter(k=>k.startsWith(fid+':')).forEach(k=>delete state.meta.measurements[k]);
+      Object.keys(state.meta.annotations||{}).filter(k=>k.startsWith(fid+':')).forEach(k=>delete state.meta.annotations[k]);
+    }
+    state.meta.todos=(state.meta.todos||[]).filter(t=>t.projectId!==id);
+    state.meta.atas=(state.meta.atas||[]).filter(a=>a.projectId!==id);
+    if(state.meta.occhioLinks) delete state.meta.occhioLinks[id];
+    state.meta.projects=(state.meta.projects||[]).filter(x=>x.id!==id);
+    if(state.currentProjectId===id) state.currentProjectId=null;
+    saveMeta(); renderProjects(); renderAllDrawings(); renderTodos(); renderAtas(); showView('projectsView'); toast('Projektet togs bort');
   }
 
   function openProject(id){
@@ -504,12 +525,13 @@
 
   async function deleteFile(id){
     const f=fileMeta(id); if(!f) return;
-    const ok=await promptModal("Ta bort ritning",`Skriv TA BORT för att radera ${f.name}.`,"");
-    if(ok!=="TA BORT") return;
+    const ok=await confirmDelete('Ta bort ritning?',`Vill du verkligen ta bort “${f.name}”? Ritningens sparade mätningar och markeringar tas också bort.`);
+    if(!ok) return;
     const p=projectById(f.projectId);
     p.files=(p.files||[]).filter(x=>x!==id);
     delete state.meta.fileMeta[id];
-    Object.keys(state.meta.measurements).filter(k=>k.startsWith(id+":")).forEach(k=>delete state.meta.measurements[k]);
+    Object.keys(state.meta.measurements||{}).filter(k=>k.startsWith(id+":")).forEach(k=>delete state.meta.measurements[k]);
+    Object.keys(state.meta.annotations||{}).filter(k=>k.startsWith(id+":")).forEach(k=>delete state.meta.annotations[k]);
     saveMeta(); await deleteBlob(id); renderProject(); renderProjects(); renderAllDrawings(); toast("Ritningen togs bort");
   }
 
@@ -1425,6 +1447,7 @@
   };
   $("#backProjectsBtn").onclick=()=>{renderProjects();showView("projectsView")};
   $("#renameProjectBtn").onclick=async()=>{const p=currentProject();const n=await promptModal("Byt projektnamn","",p.name);if(n){p.name=n;saveMeta();renderProject()}};
+  $("#deleteProjectBtn").onclick=()=>{const p=currentProject();if(p)deleteProjectById(p.id)};
   $("#pdfInput").onchange=e=>{if(e.target.files.length)importPdfs(e.target.files);e.target.value=""};
   $("#zipInput").onchange=e=>{if(e.target.files.length)importZips(e.target.files);e.target.value=""};
   $("#projectSearch").oninput=renderProject; $("#sortSelect").onchange=renderProject; $("#drawingSearch").oninput=renderAllDrawings;
@@ -1470,7 +1493,7 @@
   $("#calibrateBtn").onclick=calibrate;
   $$(".tool[data-tool]").forEach(b=>b.onclick=()=>setTool(b.dataset.tool));
   $("#finishMeasureBtn").onclick=finishTemp;
-  $("#clearMeasuresBtn").onclick=()=>{state.meta.measurements[pageKey()]=[];state.tempPoints=[];saveMeta();drawOverlay();$("#measureResult").textContent="Rensat"};
+  $("#clearMeasuresBtn").onclick=async()=>{const arr=getMeasurements();if(!arr.length){toast("Inga mätningar att rensa");return}if(!await confirmDelete("Rensa mätningar?",`Vill du verkligen ta bort alla ${arr.length} sparade mätningar på den här sidan?`))return;state.meta.measurements[pageKey()]=[];state.tempPoints=[];saveMeta();drawOverlay();$("#measureResult").textContent="Rensat"};
 
   // Install prompt
   window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();state.deferredInstall=e;$("#installBtn").classList.remove("hidden")});
