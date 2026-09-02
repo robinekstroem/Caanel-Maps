@@ -56,7 +56,7 @@ h1,h2,h3,p{margin:0}h1{font-size:clamp(28px,6vw,44px);line-height:1.02;letter-sp
 .measure-summary{display:flex;justify-content:space-between;gap:14px;padding:10px;color:var(--muted);font-size:13px}.measure-summary strong{color:var(--orange)}
 .bottom-nav{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:min(1100px,100%);height:72px;background:rgba(12,12,13,.96);backdrop-filter:blur(16px);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);z-index:40;padding-bottom:env(safe-area-inset-bottom)}
 .nav-btn{border:0;background:none;color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;font-weight:750;cursor:pointer}.nav-btn span{font-size:20px}.nav-btn.active{color:var(--orange)}
-.modal{position:fixed;inset:0;background:rgba(0,0,0,.72);display:grid;place-items:center;padding:18px;z-index:100}.modal-card{width:min(430px,100%);background:var(--panel2);border:1px solid var(--line);border-radius:18px;padding:20px}.modal-card h3{font-size:20px;margin-bottom:7px}.text-input{width:100%;height:48px;padding:0 13px;font-size:16px;margin:14px 0}.modal-actions{display:flex;justify-content:flex-end;gap:8px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.72);display:grid;place-items:center;padding:18px;z-index:100}.modal-card{width:min(430px,100%);background:var(--panel2);border:1px solid var(--line);border-radius:18px;padding:20px}.modal-card h3{font-size:20px;margin-bottom:7px}.text-input{width:100%;height:48px;padding:0 13px;font-size:16px;margin:14px 0}.modal-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}.modal-actions .btn{min-height:42px}
 .toast{position:fixed;left:50%;bottom:88px;transform:translateX(-50%);background:#232326;border:1px solid var(--line);padding:11px 14px;border-radius:12px;z-index:120;max-width:90%;font-size:13px}
 @media(max-width:650px){
   main{padding:18px 12px}.topbar{padding:8px 12px}.brand img{width:128px}.hero{align-items:flex-start;flex-direction:column}.hero .btn{width:100%}
@@ -200,7 +200,7 @@ button.file-tag{cursor:pointer}
 .bulb-cone{opacity:0;transform-origin:232px 215px;animation:coneOn .65s ease 1.30s forwards}
 .launch-orbit{stroke-width:2.15;stroke-dasharray:1;stroke-dashoffset:1;opacity:0;animation:orbitDraw .82s cubic-bezier(.2,.8,.2,1) 1.48s forwards}
 .launch-wordmark{position:absolute;top:69%;left:50%;width:78%;transform:translate(-50%,-50%) scale(.94);text-align:center;opacity:0;filter:blur(9px);animation:wordReveal .62s cubic-bezier(.16,1,.3,1) 1.88s forwards}
-.launch-ekis{font-family:Arial Black,Arial,Helvetica,sans-serif;font-size:clamp(51px,14.8vw,80px);font-weight:900;letter-spacing:.10em;padding-left:.10em;line-height:.88;color:#fff;white-space:nowrap;text-shadow:0 0 8px rgba(255,255,255,.12),0 0 28px rgba(255,151,48,.08)}
+.launch-ekis{font-family:Arial Black,Arial,Helvetica,sans-serif;font-size:clamp(51px,14.8vw,80px);font-weight:900;letter-spacing:.10em;padding-left:.10em;line-height:.88;color:#d7d7d7;background:linear-gradient(180deg,#fffdf7 0%,#d9d5cf 30%,#8d8d8d 58%,#f3eee6 78%,#a9a9a9 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap;text-shadow:0 1px 0 rgba(255,255,255,.18);filter:drop-shadow(0 2px 2px rgba(0,0,0,.72)) drop-shadow(0 0 5px rgba(255,106,0,.24))}
 .launch-e{display:inline-block;transform:skewX(-2deg);margin-right:.01em}
 .launch-field{margin-top:16px;font-family:Arial,Helvetica,sans-serif;font-size:clamp(18px,5.2vw,28px);font-weight:850;letter-spacing:.46em;padding-left:.46em;color:#ff6a00;white-space:nowrap;text-shadow:0 0 14px rgba(255,106,0,.42)}
 @keyframes wireDraw{to{stroke-dashoffset:0}}
@@ -223,3 +223,30 @@ button.file-tag{cursor:pointer}
 .viewer-view.fullscreen-ui .viewer-head{position:absolute;z-index:20;top:8px;left:8px;right:8px;background:rgba(11,11,12,.72);backdrop-filter:blur(12px);border-radius:14px;padding:6px}.viewer-view.fullscreen-ui .viewer-head .grow,.viewer-view.fullscreen-ui #renameDrawingBtn,.viewer-view.fullscreen-ui #prevDrawingBtn,.viewer-view.fullscreen-ui #nextDrawingBtn{display:none}.viewer-view.fullscreen-ui .viewer-controls{display:none}.viewer-view.fullscreen-ui .toolstrip{position:absolute;z-index:20;left:8px;right:8px;bottom:8px;background:rgba(11,11,12,.78);backdrop-filter:blur(12px);border-radius:14px;padding:6px}.viewer-view.fullscreen-ui .measure-summary{display:none}.viewer-view.fullscreen-ui .pdf-viewport{height:100vh!important;max-height:none!important;margin:0;border:0;border-radius:0}
 
 .pdf-viewport{padding:24px}.canvas-wrap{margin:0 auto}.viewer-view.fullscreen-ui .pdf-viewport{padding:28px}
+
+/* v4.0.4 premium project controls */
+.project-card-wrap{position:relative;min-width:0}
+.project-card-wrap .project-card{width:100%;height:100%;padding-right:58px}
+.project-delete-btn{position:absolute;right:12px;top:12px;z-index:2;width:42px;height:42px;border-radius:12px;border:1px solid rgba(255,255,255,.10);background:rgba(15,15,16,.86);color:#aaa;font-size:20px;display:grid;place-items:center}
+.project-delete-btn:active{transform:scale(.96);color:#ff6a00;border-color:rgba(255,106,0,.42)}
+
+
+/* EKIS FIELD v4.0.5 – PDF edge/corner reachability fix */
+.pdf-viewport{
+  /* Real gutters are part of the scroll area, so every PDF edge remains reachable. */
+  padding:18px !important;
+  overflow:auto !important;
+  scroll-padding:18px;
+}
+#canvasWrap{
+  display:block;
+  max-width:none;
+  max-height:none;
+  margin:0 auto !important;
+  flex:none;
+}
+.viewer-view.fullscreen-ui .pdf-viewport{padding:18px !important}
+@media(max-width:650px){
+  .pdf-viewport{padding:12px !important;scroll-padding:12px}
+  .viewer-view.fullscreen-ui .pdf-viewport{padding:14px !important}
+}

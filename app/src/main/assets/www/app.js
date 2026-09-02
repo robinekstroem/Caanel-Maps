@@ -240,13 +240,15 @@
       else displayName=stripPdf(originalName);
       const detectedScales={};
       for(const pg of pages){const ds=extractDrawingScale(pg.items.map(x=>x.str).join(" "));if(ds)detectedScales[pg.page]=ds;}
-      return {analysisVersion:5,documentType:isOcchio?"occhioSchedule":(isSchedule?"armatureSchedule":"drawing"),category,plan,part,displayName,armatureIndex,pages:doc.numPages,detectedScales};
+      const drawingNumber=(allText.match(/\bE[-–]\d{3}[-–]\d[-–]\d{3,5}\b/i)||[])[0]||stripPdf(originalName).match(/E[-–]\d{3}[-–]\d[-–]\d{3,5}/i)?.[0]||"";
+      const sourceDate=(allText.match(/\b20\d{2}[-./]\d{2}[-./]\d{2}\b/)||[])[0]||"";
+      return {analysisVersion:5,documentType:isOcchio?"occhioSchedule":(isSchedule?"armatureSchedule":"drawing"),category,plan,part,displayName,armatureIndex,pages:doc.numPages,detectedScales,drawingNumber,sourceDate};
     }catch(err){console.warn("PDF analysis failed",originalName,err);return null}
   }
 
   function applyAnalysis(f,a){
     if(!f||!a)return;
-    f.analysisVersion=4; f.documentType=a.documentType; f.category=a.category; f.plan=a.plan; f.part=a.part||""; f.armatureIndex=a.armatureIndex||[]; f.pageCount=a.pages||1;
+    f.analysisVersion=4; f.documentType=a.documentType; f.category=a.category; f.plan=a.plan; f.part=a.part||""; f.armatureIndex=a.armatureIndex||[]; f.pageCount=a.pages||1; f.drawingNumber=a.drawingNumber||f.drawingNumber||""; f.sourceDate=a.sourceDate||f.sourceDate||"";
     f.scales=f.scales||{}; for(const [pg,sc] of Object.entries(a.detectedScales||{})){if(!f.scales[pg] || f.scales[pg]===100)f.scales[pg]=sc;}
     if(f.name===f.originalName || f.autoNamed){ f.name=a.displayName+".pdf"; f.autoNamed=true; }
   }
@@ -357,6 +359,47 @@
     });
   }
 
+
+  function choiceModal(title, text, options){
+    return new Promise(resolve=>{
+      const modal=$("#modal"), input=$("#modalInput"), ok=$("#modalOk"), cancel=$("#modalCancel"), actions=modal.querySelector('.modal-actions');
+      $("#modalTitle").textContent=title; $("#modalText").textContent=text||""; input.classList.add('hidden'); ok.classList.add('hidden');
+      const made=[];
+      const done=val=>{made.forEach(b=>b.remove());modal.classList.add('hidden');input.classList.remove('hidden');ok.classList.remove('hidden');ok.textContent='Spara';cancel.textContent='Avbryt';cancel.onclick=null;resolve(val)};
+      for(const opt of options){const b=document.createElement('button');b.type='button';b.className='btn'+(opt.primary?' primary':'');b.textContent=opt.label;b.onclick=()=>done(opt.value);actions.insertBefore(b,cancel);made.push(b)}
+      cancel.textContent='Avbryt'; cancel.onclick=()=>done(null); modal.classList.remove('hidden'); setTimeout(()=>cancel.focus(),30);
+    });
+  }
+
+  async function sha256Blob(blob){
+    const buf=await blob.arrayBuffer();
+    const dig=await crypto.subtle.digest('SHA-256',buf);
+    return [...new Uint8Array(dig)].map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+
+  async function ensureFileHash(f){
+    if(f?.contentHash)return f.contentHash;
+    if(!f)return ''; const blob=await getBlob(f.id); if(!blob)return '';
+    try{f.contentHash=await sha256Blob(blob);saveMeta();return f.contentHash}catch{return ''}
+  }
+
+  function revisionKey(f){
+    if(!f)return '';
+    if(f.drawingNumber)return `NR|${String(f.drawingNumber).toUpperCase().replace(/\s+/g,'')}`;
+    const orig=stripPdf(f.originalName||f.name).toUpperCase().replace(/(?:[-_. ]?REV(?:ISION)?[-_. ]*[A-Z0-9]+)$/i,'').trim();
+    if(f.category&&f.plan&&f.part)return `${f.category}|P${f.plan}|D${f.part}`.toUpperCase();
+    return `NAME|${orig}`;
+  }
+
+  function revisionEvidence(existing,incoming){
+    const bits=[];
+    if(incoming.drawingNumber||existing.drawingNumber)bits.push(`Ritningsnr: ${incoming.drawingNumber||existing.drawingNumber}`);
+    if(incoming.plan)bits.push(`Plan ${incoming.plan}${incoming.part?`, Del ${incoming.part}`:''}`);
+    if(incoming.sourceDate||existing.sourceDate)bits.push(`Datum: ${existing.sourceDate||'–'} → ${incoming.sourceDate||'–'}`);
+    bits.push(`Befintlig: ${existing.originalName||existing.name}`); bits.push(`Ny: ${incoming.originalName||incoming.name}`);
+    return bits.join(' · ');
+  }
+
   function renderProjects() {
     const grid=$("#projectGrid");
     if(!state.meta.projects.length){
@@ -365,10 +408,10 @@
     }
     grid.innerHTML=state.meta.projects.map(p=>{
       const files=(p.files||[]).length;
-      return `<button class="project-card" data-project="${p.id}">
+      return `<div class="project-card-wrap"><button class="project-card" data-project="${p.id}">
         <div class="project-top"><div><p class="eyebrow">PROJEKT</p><h3>${esc(p.name)}</h3></div><span class="project-arrow">›</span></div>
         <div class="project-count">${files} ${files===1?"ritning":"ritningar"}</div>
-      </button>`;
+      </button><button class="project-delete-btn" data-delete-project="${p.id}" aria-label="Ta bort ${esc(p.name)}">✕</button></div>`;
     }).join("");
     $$("[data-project]").forEach(b=>b.onclick=()=>openProject(b.dataset.project));
   }
@@ -470,43 +513,95 @@
     saveMeta(); await deleteBlob(id); renderProject(); renderProjects(); renderAllDrawings(); toast("Ritningen togs bort");
   }
 
-  async function addPdfBlob(blob, originalName, path=""){
-    const p=currentProject(); if(!p) return;
-    const id=uid();
-    await putBlob(id, blob);
-    const base=originalName.split("/").pop();
-    const f={id,projectId:p.id,name:base,originalName:base,path,size:blob.size,addedAt:Date.now(),scales:{},category:"Övrigt"};
-    state.meta.fileMeta[id]=f;
-    p.files=p.files||[]; p.files.push(id); saveMeta();
-    $("#projectStatus").textContent=`Läser ${base}…`;
-    applyAnalysis(f,await analyzePdfBlob(blob,base));
-    saveMeta();
+  async function removeImportedDrawing(id){
+    const f=fileMeta(id); if(!f)return;
+    const p=projectById(f.projectId); if(p)p.files=(p.files||[]).filter(x=>x!==id);
+    delete state.meta.fileMeta[id];
+    Object.keys(state.meta.measurements||{}).filter(k=>k.startsWith(id+":")).forEach(k=>delete state.meta.measurements[k]);
+    Object.keys(state.meta.annotations||{}).filter(k=>k.startsWith(id+":")).forEach(k=>delete state.meta.annotations[k]);
+    await deleteBlob(id); saveMeta();
+  }
+
+  async function inspectIncomingPdf(blob, originalName, path=""){
+    const hash=await sha256Blob(blob);
+    const analysis=await analyzePdfBlob(blob,originalName);
+    const temp={name:originalName,originalName,path,size:blob.size,category:analysis?.category||'Övrigt',plan:analysis?.plan||'',part:analysis?.part||'',documentType:analysis?.documentType||'drawing',drawingNumber:analysis?.drawingNumber||'',sourceDate:analysis?.sourceDate||''};
+    return {blob,originalName,path,hash,analysis,temp};
+  }
+
+  async function addInspectedPdf(item){
+    const p=currentProject(); if(!p)return null;
+    const id=uid(), base=item.originalName.split('/').pop();
+    await putBlob(id,item.blob);
+    const f={id,projectId:p.id,name:base,originalName:base,path:item.path||'',size:item.blob.size,addedAt:Date.now(),scales:{},category:'Övrigt',contentHash:item.hash};
+    state.meta.fileMeta[id]=f; p.files=p.files||[]; p.files.push(id);
+    applyAnalysis(f,item.analysis); saveMeta(); return f;
+  }
+
+  async function processImportItems(rawItems, sourceLabel='filer'){
+    const p=currentProject(); if(!p)return;
+    const existing=(p.files||[]).map(fileMeta).filter(Boolean);
+    let imported=0, skipped=0, duplicateCount=0, revisionCount=0;
+    let duplicateBatch=null, revisionBatch=null;
+    const prepared=[];
+    $("#projectStatus").textContent=`Analyserar ${rawItems.length} PDF-filer…`;
+    for(let i=0;i<rawItems.length;i++){
+      $("#projectStatus").textContent=`Analyserar PDF… ${i+1}/${rawItems.length}`;
+      try{prepared.push(await inspectIncomingPdf(rawItems[i].blob,rawItems[i].name,rawItems[i].path||''))}catch(err){console.warn('Importanalys misslyckades',rawItems[i].name,err);prepared.push({blob:rawItems[i].blob,originalName:rawItems[i].name,path:rawItems[i].path||'',hash:'',analysis:null,temp:{name:rawItems[i].name,originalName:rawItems[i].name,category:'Övrigt'}})}
+    }
+    for(let i=0;i<prepared.length;i++){
+      const item=prepared[i]; $("#projectStatus").textContent=`Importerar… ${i+1}/${prepared.length}`;
+      let exact=null;
+      if(item.hash){for(const f of [...existing]){if(await ensureFileHash(f)===item.hash){exact=f;break}}}
+      if(exact){
+        duplicateCount++;
+        let action=duplicateBatch;
+        if(!action){action=await choiceModal('Identisk ritning hittad',`${item.originalName} är exakt identisk med en ritning som redan finns. (${duplicateCount} dubblett${duplicateCount===1?'':'er'} hittills)`,[
+          {label:'Behåll befintlig',value:'skip'},{label:'Ersätt denna',value:'replace',primary:true},{label:'Behåll båda',value:'both'},{label:'Behåll alla befintliga',value:'skipAll'},{label:'Ersätt alla identiska',value:'replaceAll'}
+        ])}
+        if(action==='skipAll'){duplicateBatch='skip';action='skip'} if(action==='replaceAll'){duplicateBatch='replace';action='replace'}
+        if(action===null||action==='skip'){skipped++;continue}
+        if(action==='replace'){await removeImportedDrawing(exact.id);existing.splice(existing.indexOf(exact),1)}
+      }else{
+        const key=revisionKey(item.temp);
+        const possible=existing.find(f=>revisionKey(f)===key && (!item.hash || f.contentHash!==item.hash));
+        if(possible && key){
+          revisionCount++;
+          let action=revisionBatch;
+          if(!action){action=await choiceModal('Möjlig revidering',`${revisionEvidence(possible,item.temp)}. Innehållet skiljer sig från befintlig ritning.`,[
+            {label:'Ny revision',value:'revision',primary:true},{label:'Ersätt denna',value:'replace'},{label:'Behåll båda',value:'both'},{label:'Alla som nya revisioner',value:'revisionAll'},{label:'Ersätt alla möjliga',value:'replaceAll'}
+          ])}
+          if(action==='revisionAll'){revisionBatch='revision';action='revision'} if(action==='replaceAll'){revisionBatch='replace';action='replace'}
+          if(action===null){skipped++;continue}
+          if(action==='replace'){possible.revisionStatus='Tidigare revision';possible.replacedAt=Date.now();item.temp.replacesId=possible.id}
+          if(action==='revision'){item.temp.replacesId=possible.id}
+        }
+      }
+      const added=await addInspectedPdf(item); if(added){if(item.temp.replacesId)added.replacesId=item.temp.replacesId; existing.push(added); imported++}
+    }
+    saveMeta(); renderProject();renderProjects();renderAllDrawings();
+    $("#projectStatus").textContent=`Import klar: ${imported} importerade · ${duplicateCount} identiska · ${revisionCount} möjliga revisioner${skipped?` · ${skipped} hoppades över`:''}.`;
+    toast(`${imported} PDF importerade från ${sourceLabel}`);
   }
 
   async function importPdfs(fileList){
-    $("#projectStatus").textContent="Importerar PDF-filer…";
-    for(const file of [...fileList]) if(file.name.toLowerCase().endsWith(".pdf")) await addPdfBlob(file,file.name,"");
-    $("#projectStatus").textContent="Klart.";
-    renderProject(); renderProjects(); renderAllDrawings(); toast("PDF-filer importerade");
+    const files=[...fileList].filter(f=>f.name.toLowerCase().endsWith('.pdf'));
+    await processImportItems(files.map(f=>({blob:f,name:f.name,path:''})),`${files.length} PDF`);
   }
 
-  async function importZip(file){
-    if(!window.JSZip){toast("ZIP-modulen kunde inte laddas");return}
-    $("#projectStatus").textContent=`Packar upp ${file.name}…`;
+  async function importZips(fileList){
+    if(!window.JSZip){toast('ZIP-modulen kunde inte laddas');return}
+    const zips=[...fileList].filter(f=>f.name.toLowerCase().endsWith('.zip')); const raw=[]; let zipDone=0;
     try{
-      const zip=await JSZip.loadAsync(file);
-      const entries=Object.values(zip.files).filter(e=>!e.dir&&e.name.toLowerCase().endsWith(".pdf"));
-      if(!entries.length){$("#projectStatus").textContent="ZIP-filen innehöll inga PDF-filer.";return}
-      let n=0;
-      for(const e of entries){
-        const blob=await e.async("blob");
-        const parts=e.name.split("/"); const name=parts.pop(); const path=parts.join("/");
-        await addPdfBlob(blob,name,path); n++;
-        $("#projectStatus").textContent=`Packar upp… ${n}/${entries.length}`;
+      for(const file of zips){
+        $("#projectStatus").textContent=`Packar upp ${file.name}… (${zipDone+1}/${zips.length})`;
+        const zip=await JSZip.loadAsync(file); const entries=Object.values(zip.files).filter(e=>!e.dir&&e.name.toLowerCase().endsWith('.pdf'));
+        for(const e of entries){const blob=await e.async('blob');const parts=e.name.split('/');const name=parts.pop();raw.push({blob,name,path:parts.join('/'),zipName:file.name})}
+        zipDone++;
       }
-      $("#projectStatus").textContent=`Klart: ${n} PDF-filer extraherades.`;
-      renderProject(); renderProjects(); renderAllDrawings(); toast(`${n} PDF-filer uppackade`);
-    }catch(err){ console.error(err); $("#projectStatus").textContent="Kunde inte packa upp ZIP-filen."; }
+      if(!raw.length){$("#projectStatus").textContent='ZIP-filerna innehöll inga PDF-filer.';return}
+      await processImportItems(raw,`${zips.length} ZIP`);
+    }catch(err){console.error(err);$("#projectStatus").textContent='Kunde inte packa upp en eller flera ZIP-filer.'}
   }
 
   function renderAllDrawings(){
@@ -860,13 +955,26 @@
 
   function clamp(v,min,max){return Math.max(min,Math.min(max,v))}
 
+  function viewportInnerSize(){
+    const viewport=$("#pdfViewport");
+    const cs=getComputedStyle(viewport);
+    const px=v=>Number.parseFloat(v)||0;
+    // clientWidth/clientHeight include padding. Subtract it so “Passa” really
+    // fits the complete PDF sheet inside the visible drawing area.
+    const width=Math.max(1,viewport.clientWidth-px(cs.paddingLeft)-px(cs.paddingRight));
+    const height=Math.max(1,viewport.clientHeight-px(cs.paddingTop)-px(cs.paddingBottom));
+    return {width,height};
+  }
+
   function computeFitZoom(){
     const viewport=$("#pdfViewport");
     if(!state.baseCanvasWidth || !state.baseCanvasHeight || !viewport.clientWidth || !viewport.clientHeight) return 1;
-    const pad=8;
+    const inner=viewportInnerSize();
+    // Leave a tiny safety gutter for rounding/scrollbar differences in Android WebView.
+    const safety=4;
     return Math.min(
-      Math.max(.08,(viewport.clientWidth-pad)/state.baseCanvasWidth),
-      Math.max(.08,(viewport.clientHeight-pad)/state.baseCanvasHeight),
+      Math.max(.08,(inner.width-safety)/state.baseCanvasWidth),
+      Math.max(.08,(inner.height-safety)/state.baseCanvasHeight),
       1
     );
   }
@@ -1318,7 +1426,7 @@
   $("#backProjectsBtn").onclick=()=>{renderProjects();showView("projectsView")};
   $("#renameProjectBtn").onclick=async()=>{const p=currentProject();const n=await promptModal("Byt projektnamn","",p.name);if(n){p.name=n;saveMeta();renderProject()}};
   $("#pdfInput").onchange=e=>{if(e.target.files.length)importPdfs(e.target.files);e.target.value=""};
-  $("#zipInput").onchange=e=>{if(e.target.files[0])importZip(e.target.files[0]);e.target.value=""};
+  $("#zipInput").onchange=e=>{if(e.target.files.length)importZips(e.target.files);e.target.value=""};
   $("#projectSearch").oninput=renderProject; $("#sortSelect").onchange=renderProject; $("#drawingSearch").oninput=renderAllDrawings;
   $("#exportProjectBtn").onclick=exportProject; $("#exportBackupBtn").onclick=exportBackup; $("#backupInput").onchange=e=>{if(e.target.files[0])importBackup(e.target.files[0]);e.target.value=""};
   $('#newAtaBtn').onclick=createAta;
