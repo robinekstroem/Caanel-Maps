@@ -70,6 +70,7 @@
   const fileMeta = id => state.meta.fileMeta[id];
 
 
+  const ANALYSIS_VERSION = 6;
   const CATEGORY_ORDER = ["Belysning","Kraft","Tele","Kanalisation","Brand","Passage","Övrigt"];
   const stripPdf = name => String(name||"").replace(/\.pdf$/i,"");
   const displayLabel = f => stripPdf(f?.name || f?.originalName || "Ritning");
@@ -93,6 +94,11 @@
   function extractPlan(text){
     const m=String(text||"").match(/\bPLAN\s*0*(\d{1,3})\b/i);
     return m ? String(Number(m[1])) : "";
+  }
+  function extractTitlePlanPart(text){
+    const t=String(text||"").replace(/\s+/g," ");
+    const m=t.match(/\bPLAN\s*0*(\d{1,3})\s*[,;:\-]?\s*DEL\s*0*(\d{1,2})\b/i);
+    return m ? {plan:String(Number(m[1])),part:String(Number(m[2]))} : null;
   }
   function extractPart(text, originalName="", plan=""){
     const t=String(text||"");
@@ -198,8 +204,10 @@
         const hit=exactMap.find(([k])=>exact.includes(k));
         category=hit?hit[1]:normalizeCategory(tailText);
       }
-      const plan=extractPlan(tailText)||extractPlan(first.join(" "));
-      const part=extractPart(tailText+" "+first.join(" "),originalName,plan);
+      // Title block wins over orientation figures and other PLAN references on the sheet.
+      const titlePlanPart=extractTitlePlanPart(tailText)||extractTitlePlanPart(first.join(" "));
+      const plan=titlePlanPart?.plan || extractPlan(tailText)||extractPlan(first.join(" "));
+      const part=titlePlanPart?.part || extractPart(tailText+" "+first.join(" "),originalName,plan);
       const armatureIndex=[];
       if(isOcchio){
         for(const pg of pages){
@@ -242,13 +250,13 @@
       for(const pg of pages){const ds=extractDrawingScale(pg.items.map(x=>x.str).join(" "));if(ds)detectedScales[pg.page]=ds;}
       const drawingNumber=(allText.match(/\bE[-–]\d{3}[-–]\d[-–]\d{3,5}\b/i)||[])[0]||stripPdf(originalName).match(/E[-–]\d{3}[-–]\d[-–]\d{3,5}/i)?.[0]||"";
       const sourceDate=(allText.match(/\b20\d{2}[-./]\d{2}[-./]\d{2}\b/)||[])[0]||"";
-      return {analysisVersion:5,documentType:isOcchio?"occhioSchedule":(isSchedule?"armatureSchedule":"drawing"),category,plan,part,displayName,armatureIndex,pages:doc.numPages,detectedScales,drawingNumber,sourceDate};
+      return {analysisVersion:ANALYSIS_VERSION,documentType:isOcchio?"occhioSchedule":(isSchedule?"armatureSchedule":"drawing"),category,plan,part,displayName,armatureIndex,pages:doc.numPages,detectedScales,drawingNumber,sourceDate};
     }catch(err){console.warn("PDF analysis failed",originalName,err);return null}
   }
 
   function applyAnalysis(f,a){
     if(!f||!a)return;
-    f.analysisVersion=4; f.documentType=a.documentType; f.category=a.category; f.plan=a.plan; f.part=a.part||""; f.armatureIndex=a.armatureIndex||[]; f.pageCount=a.pages||1; f.drawingNumber=a.drawingNumber||f.drawingNumber||""; f.sourceDate=a.sourceDate||f.sourceDate||"";
+    f.analysisVersion=ANALYSIS_VERSION; f.documentType=a.documentType; f.category=a.category; f.plan=a.plan; f.part=a.part||""; f.armatureIndex=a.armatureIndex||[]; f.pageCount=a.pages||1; f.drawingNumber=a.drawingNumber||f.drawingNumber||""; f.sourceDate=a.sourceDate||f.sourceDate||"";
     f.scales=f.scales||{}; for(const [pg,sc] of Object.entries(a.detectedScales||{})){if(!f.scales[pg] || f.scales[pg]===100)f.scales[pg]=sc;}
     if(f.name===f.originalName || f.autoNamed){ f.name=a.displayName+".pdf"; f.autoNamed=true; }
   }
@@ -256,7 +264,7 @@
   async function analyzeProjectFilesMissing(projectId){
     if(state.analysisBusy)return;
     const p=projectById(projectId); if(!p)return;
-    const ids=(p.files||[]).filter(id=>fileMeta(id)?.analysisVersion!==4);
+    const ids=(p.files||[]).filter(id=>fileMeta(id)?.analysisVersion!==ANALYSIS_VERSION);
     if(!ids.length)return;
     state.analysisBusy=true;
     try{
@@ -265,7 +273,7 @@
         if(state.currentProjectId===projectId) $("#projectStatus").textContent=`Analyserar ritningar… ${i+1}/${ids.length}`;
         applyAnalysis(f,await analyzePdfBlob(blob,f.originalName));
       }
-      state.meta.version=4; saveMeta();
+      state.meta.version=ANALYSIS_VERSION; saveMeta();
       if(state.currentProjectId===projectId){$("#projectStatus").textContent="PDF-analys klar.";renderProject()}
       renderProjects(); renderAllDrawings();
     }finally{state.analysisBusy=false}
@@ -821,7 +829,7 @@
   $('#overlayCanvas').addEventListener('pointerdown',e=>{if(!['pen','arrow','circle'].includes(state.tool))return;const p=pdfPointFromEvent(e);state.drawDraft={type:state.tool,points:[p],pointerId:e.pointerId};try{e.target.setPointerCapture(e.pointerId)}catch{}e.preventDefault()});
   $('#overlayCanvas').addEventListener('pointermove',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;const p=pdfPointFromEvent(e);if(d.type==='pen')d.points.push(p);else d.points[1]=p;state.tempPoints=d.points;drawOverlay()});
   $('#overlayCanvas').addEventListener('pointerup',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;const p=pdfPointFromEvent(e);if(d.type!=='pen')d.points[1]=p;if(d.points.length>1){const a={id:uid(),type:d.type,points:d.points};getAnnotations().push(a);if(state.activeAtaMark){const ata=(state.meta.atas||[]).find(x=>x.id===state.activeAtaMark);if(ata){ata.drawing={fileId:state.currentFileId,page:state.pageNum,view:captureViewState(),annotationId:a.id};ata.drawingNote=`${displayLabel(fileMeta(state.currentFileId))}, sida ${state.pageNum}`;}state.activeAtaMark=null}saveMeta()}state.drawDraft=null;state.tempPoints=[];setTool('pan');drawOverlay()});
-  $('#overlayCanvas').addEventListener('click',async e=>{if(state.tool==='text'){const text=await promptModal('Text på ritning','Skriv texten som ska sparas på ritningen.','');if(text){getAnnotations().push({id:uid(),type:'text',points:[pdfPointFromEvent(e)],text});saveMeta();setTool('pan');drawOverlay()}return}if(state.tool==='pan'&&Date.now()>state.suppressClickUntil){const hit=nearestOverlayObject(e);state.selectedOverlay=hit;for(const a of getAnnotations())a.selected=hit?.kind==='annotation'&&hit.obj.id===a.id;$('#deleteSelectedBtn').classList.toggle('hidden',!hit);drawOverlay()}});
+  $('#overlayCanvas').addEventListener('click',async e=>{if(state.tool==='text'){const text=await promptModal('Text på ritning','Skriv texten som ska sparas på ritningen.','');if(text){getAnnotations().push({id:uid(),type:'text',points:[pdfPointFromEvent(e)],text});saveMeta();setTool('pan');drawOverlay()}return}});
 
   // Distance: first tap fixes A. Second press starts B; drag and release commits a straight A–B distance.
   $("#overlayCanvas").addEventListener("pointerdown",e=>{
@@ -924,7 +932,13 @@
   }
 
   $("#pdfViewport").addEventListener("click",async e=>{
-    if(state.tool!=="pan"||state.syncCapture)return;
+    if(state.tool!=="pan"||state.syncCapture||Date.now()<state.suppressClickUntil)return;
+    const hit=nearestOverlayObject(e);
+    state.selectedOverlay=hit;
+    for(const a of getAnnotations())a.selected=hit?.kind==='annotation'&&hit.obj.id===a.id;
+    $("#deleteSelectedBtn").classList.toggle("hidden",!hit);
+    if(hit){drawOverlay();state.suppressClickUntil=Date.now()+250;return;}
+    drawOverlay();
     if(await handleSmartDoubleTap(e.clientX,e.clientY)){state.suppressClickUntil=Date.now()+350;}
   });
 
@@ -1101,6 +1115,7 @@
       sourcePage:state.pageNum,
       zoom:state.viewZoom,
       fitZoom:state.fitZoom,
+      zoomRatio:state.fitZoom?state.viewZoom/state.fitZoom:1,
       center:p,
       normX:pdfW?p.x/pdfW:.5,
       normY:pdfH?p.y/pdfH:.5
@@ -1136,15 +1151,16 @@
     const mapped=mapByTwoRefs(v.center,sourceRefs,targetRefs);
 
     let targetCenter, targetZoom;
+    const relative=Number.isFinite(v.zoomRatio) ? v.zoomRatio : (v.fitZoom? v.zoom/v.fitZoom : 1);
     if(mapped){
       targetCenter={x:mapped.x,y:mapped.y};
-      targetZoom=clamp(v.zoom/mapped.scale,state.fitZoom,Math.max(6,state.fitZoom*10));
-      $("#measureHint").textContent="Synkad vy: samma fysiska område mellan våningsplan.";
+      // Locked view means the same visual zoom level on the next floor.
+      targetZoom=clamp(state.fitZoom*relative,state.fitZoom,Math.max(6,state.fitZoom*10));
+      $("#measureHint").textContent="Synkad vy: samma plats och zoom mellan våningsplan.";
     }else{
       const pdfW=state.baseCanvasWidth/state.renderScale;
       const pdfH=state.baseCanvasHeight/state.renderScale;
       targetCenter={x:(v.normX??.5)*pdfW,y:(v.normY??.5)*pdfH};
-      const relative=v.fitZoom? v.zoom/v.fitZoom : 1;
       targetZoom=clamp(state.fitZoom*relative,state.fitZoom,Math.max(6,state.fitZoom*10));
     }
 
@@ -1173,10 +1189,37 @@
 
   async function openAdjacentFloor(dir){const f=fileMeta(state.currentFileId);if(!f)return;const p=projectById(f.projectId);const candidates=(p?.files||[]).map(fileMeta).filter(x=>x&&x.category===f.category&&String(x.part||'')===String(f.part||'')&&x.plan);const cur=Number(f.plan), target=candidates.filter(x=>dir>0?Number(x.plan)>cur:Number(x.plan)<cur).sort((a,b)=>dir>0?Number(a.plan)-Number(b.plan):Number(b.plan)-Number(a.plan))[0];if(!target){toast(dir>0?'Ingen våning ovanför':'Ingen våning under');return}await switchDrawingKeepView(target.id)}
 
+  function adjacentFloorTarget(dir){
+    const f=fileMeta(state.currentFileId);if(!f)return null;
+    const p=projectById(f.projectId);
+    const candidates=(p?.files||[]).map(fileMeta).filter(x=>x&&x.category===f.category&&String(x.part||'')===String(f.part||'')&&x.plan);
+    const cur=Number(f.plan);
+    return candidates.filter(x=>dir>0?Number(x.plan)>cur:Number(x.plan)<cur).sort((a,b)=>dir>0?Number(a.plan)-Number(b.plan):Number(b.plan)-Number(a.plan))[0]||null;
+  }
+  function syncRiserControls(){
+    const nav=$("#riserNav"); if(!nav)return;
+    nav.classList.toggle("hidden",!state.riserMode);
+    $("#riserUpBtn").disabled=!state.riserMode||!adjacentFloorTarget(1);
+    $("#riserDownBtn").disabled=!state.riserMode||!adjacentFloorTarget(-1);
+  }
+  function setRiserMode(on){
+    state.riserMode=!!on;
+    if(state.riserMode && !state.lockViewAcrossDrawings){
+      state.lockViewAcrossDrawings=true;
+      $("#lockViewBtn").classList.add("active");
+      $("#lockViewBtn").textContent="🔒 Vy";
+    }
+    $("#riserBtn").classList.toggle("active",state.riserMode);
+    $("#riserBtn").textContent=state.riserMode?'🔒 STIGARE':'⇅ Stigare';
+    syncRiserControls();
+    toast(state.riserMode?'Stigare aktiv – plats och zoom låses':'Stigare av');
+  }
+
   function updateDrawingNav(){
     const ids=orderedProjectFiles(), i=ids.indexOf(state.currentFileId);
     $("#prevDrawingBtn").disabled=i<=0;
     $("#nextDrawingBtn").disabled=i<0||i>=ids.length-1;
+    syncRiserControls();
   }
 
   function syncFloorButtonState(){
@@ -1458,7 +1501,9 @@
   $('#shareAtaBtn').onclick=shareSelectedAtas;
   $('#ataPhotoInput').onchange=e=>{const a=(state.meta.atas||[]).find(x=>x.id===state.ataPhotoTarget);if(!a)return;for(const f of [...e.target.files].slice(0,5)){const r=new FileReader();r.onload=()=>{a.photos=a.photos||[];a.photos.push(r.result);saveMeta();renderAtas()};r.readAsDataURL(f)}e.target.value=''};
   $('#deleteSelectedBtn').onclick=async()=>{const h=state.selectedOverlay;if(!h)return;if(!await confirmDelete('Ta bort från ritning?','Vill du verkligen ta bort den markerade mätningen/markeringen?'))return;if(h.kind==='measure'){const arr=getMeasurements(),i=arr.findIndex(x=>x.id===h.obj.id);if(i>=0)arr.splice(i,1)}else{const arr=getAnnotations(),i=arr.findIndex(x=>x.id===h.obj.id);if(i>=0)arr.splice(i,1)}state.selectedOverlay=null;$('#deleteSelectedBtn').classList.add('hidden');saveMeta();drawOverlay()};
-  $('#riserBtn').onclick=()=>{state.riserMode=!state.riserMode;$('#riserBtn').classList.toggle('active',state.riserMode);$('#riserBtn').textContent=state.riserMode?'🔒 STIGARE':'⇅ Stigare';toast(state.riserMode?'Stigare aktiv':'Stigare av')};
+  $('#riserBtn').onclick=()=>setRiserMode(!state.riserMode);
+  $('#riserUpBtn').onclick=()=>openAdjacentFloor(1);
+  $('#riserDownBtn').onclick=()=>openAdjacentFloor(-1);
   $("#newTodoBtn").onclick=async()=>{const t=await promptModal("Ny uppgift","Vad ska göras?","");if(!t)return;const pr=await promptModal("Prioritet","Skriv Normal, Viktig eller Akut.","Normal");const due=await promptModal("Deadline","Datum YYYY-MM-DD, eller lämna tomt.","");state.meta.todos.unshift({id:uid(),text:t,done:false,priority:["Normal","Viktig","Akut"].find(x=>x.toLowerCase()===String(pr||"").toLowerCase())||"Normal",due:/^\d{4}-\d{2}-\d{2}$/.test(due||"")?due:"",projectId:state.currentProjectId||null});saveMeta();renderTodos()};
   $$("[data-todo-filter]").forEach(b=>b.onclick=()=>{state.todoFilter=b.dataset.todoFilter;$$('[data-todo-filter]').forEach(x=>x.classList.toggle('active',x===b));renderTodos()});
   $("#backFilesBtn").onclick=()=>{const f=fileMeta(state.currentFileId); state.armatureReturn=null; state.armatureHighlight=null; if(f){state.currentProjectId=f.projectId;renderProject();showView("projectView",false)}else showView("projectsView")};
@@ -1477,7 +1522,8 @@
     state.lockViewAcrossDrawings=!state.lockViewAcrossDrawings;
     $("#lockViewBtn").classList.toggle("active",state.lockViewAcrossDrawings);
     $("#lockViewBtn").textContent=state.lockViewAcrossDrawings?"🔒 Vy":"🔓 Vy";
-    toast(state.lockViewAcrossDrawings?"Vy följer med mellan ritningar":"Vy-lås av");
+    if(!state.lockViewAcrossDrawings && state.riserMode)setRiserMode(false);
+    else toast(state.lockViewAcrossDrawings?"Vy låst – plats och zoom följer med":"Vy-lås av");
   };
   $("#syncFloorBtn").onclick=startFloorSync;
   document.addEventListener("fullscreenchange",syncFullscreenUI);

@@ -252,3 +252,5 @@ button.file-tag{cursor:pointer}
 
 /* v4.0.7 destructive-action polish */
 .danger-icon{color:#ff7b72!important;border-color:rgba(255,123,114,.25)!important}.danger-icon:active{background:rgba(255,70,70,.12)!important}
+
+.riser-nav{display:inline-flex;gap:6px;align-items:center}.riser-nav.hidden{display:none}.riser-arrow{min-width:48px;padding-left:12px;padding-right:12px}.riser-arrow:disabled{opacity:.35}

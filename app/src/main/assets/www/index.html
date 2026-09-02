@@ -187,7 +187,11 @@
           </label>
           <button id="lockViewBtn" class="mini-btn active" title="Behåll samma område när du byter våning">🔒 Vy</button>
           <button id="syncFloorBtn" class="mini-btn" title="Synka våningsritningar med två gemensamma referenspunkter">⌖ Synka plan</button>
-          <button id="riserBtn" class="mini-btn" title="Stigare: svep upp/ner mellan plan, vänster/höger mellan delar">⇅ Stigare</button>
+          <button id="riserBtn" class="mini-btn" title="Stigare: byt våning och behåll samma plats/zoom">⇅ Stigare</button>
+          <span id="riserNav" class="riser-nav hidden" aria-label="Stigare våningsbyte">
+            <button id="riserUpBtn" class="mini-btn riser-arrow" title="Nästa våning">▲</button>
+            <button id="riserDownBtn" class="mini-btn riser-arrow" title="Våningen under">▼</button>
+          </span>
         </div>
 
         <div class="toolstrip" role="toolbar" aria-label="Ritningsverktyg">
