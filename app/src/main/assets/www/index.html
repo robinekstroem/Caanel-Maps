@@ -13,12 +13,22 @@
 </head>
 <body>
   <div id="ekisSplash" class="ekis-splash" aria-hidden="true">
-    <div class="ekis-splash-logo-wrap">
-      <div class="ekis-splash-line ekis-splash-line-left"></div>
-      <img class="ekis-splash-logo cinematic" src="splash-cinematic.png" alt="">
-      <div class="ekis-splash-line ekis-splash-line-right"></div>
-      <div class="ekis-splash-scan"></div>
-      <div class="ekis-splash-sub">RITNING · MÄTNING · FÄLT</div>
+    <div class="launch-mark">
+      <svg class="launch-svg" viewBox="0 0 420 390" aria-hidden="true">
+        <defs>
+          <filter id="orangeGlow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          <radialGradient id="bulbGlow"><stop offset="0" stop-color="#fff7d6" stop-opacity=".95"/><stop offset=".22" stop-color="#ffb14a" stop-opacity=".55"/><stop offset="1" stop-color="#ff6a00" stop-opacity="0"/></radialGradient>
+        </defs>
+        <path class="launch-wire" pathLength="1" d="M0 58 H210 Q232 58 232 80 V116"/>
+        <g class="launch-bulb">
+          <path class="bulb-base" d="M216 120h32m-29 8h26m-23 8h20"/>
+          <path class="bulb-glass" d="M220 139 C198 154 199 194 215 211 C222 219 225 225 225 234 H239 C239 225 242 219 249 211 C265 194 266 154 244 139 Z"/>
+          <path class="bulb-filament" d="M221 190 Q226 178 232 190 Q238 178 243 190 M232 190 V207"/>
+          <circle class="bulb-aura" cx="232" cy="180" r="75" fill="url(#bulbGlow)"/>
+        </g>
+        <path class="launch-orbit" pathLength="1" d="M87 254 C47 292 73 350 145 364 C236 382 335 348 353 286 C363 251 344 228 322 214"/>
+      </svg>
+      <div class="launch-wordmark"><div class="launch-ekis">EKIS</div><div class="launch-field">FIELD</div></div>
     </div>
   </div>
   <div id="app">
@@ -258,7 +268,7 @@
       window.setTimeout(function(){
         splash.classList.add('ekis-splash-out');
         window.setTimeout(function(){ if(splash && splash.parentNode) splash.parentNode.removeChild(splash); }, 520);
-      }, 2800);
+      }, 3000);
     })();
   </script>
 </body>
