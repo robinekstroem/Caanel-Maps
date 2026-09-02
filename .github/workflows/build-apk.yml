@@ -41,6 +41,9 @@ jobs:
           curl -L --fail --retry 3 \
             https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js \
             -o app/src/main/assets/www/vendor/jszip.min.js
+          curl -L --fail --retry 3 \
+            https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js \
+            -o app/src/main/assets/www/vendor/jspdf.umd.min.js
 
           python3 - <<'PY'
           from pathlib import Path
@@ -48,6 +51,7 @@ jobs:
           s=p.read_text()
           s=s.replace("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js","vendor/pdf.min.js")
           s=s.replace("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js","vendor/jszip.min.js")
+          s=s.replace("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js","vendor/jspdf.umd.min.js")
           p.write_text(s)
 
           p=Path("app/src/main/assets/www/app.js")

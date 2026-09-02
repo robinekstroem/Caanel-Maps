@@ -15,7 +15,7 @@
   <div id="ekisSplash" class="ekis-splash" aria-hidden="true">
     <div class="ekis-splash-logo-wrap">
       <div class="ekis-splash-line ekis-splash-line-left"></div>
-      <img class="ekis-splash-logo" src="logo-transparent.png" alt="">
+      <img class="ekis-splash-logo cinematic" src="splash-cinematic.png" alt="">
       <div class="ekis-splash-line ekis-splash-line-right"></div>
       <div class="ekis-splash-scan"></div>
       <div class="ekis-splash-sub">RITNING · MÄTNING · FÄLT</div>
@@ -65,6 +65,15 @@
           <button id="newTodoBtn" class="btn primary">+ Punkt</button>
         </div>
         <div class="todo-filters" id="todoFilters"><button class="todo-filter active" data-todo-filter="open">Öppna</button><button class="todo-filter" data-todo-filter="today">Idag</button><button class="todo-filter" data-todo-filter="all">Alla</button></div><div id="todoList" class="todo-list"></div>
+      </section>
+
+      <section id="ataView" class="view">
+        <div class="section-head"><div><p class="eyebrow">EXTRAARBETE</p><h1>ÄTA / Avvikelser</h1></div><button id="newAtaBtn" class="btn primary">+ Ny ÄTA</button></div>
+        <div class="ata-summary" id="ataSummary"></div>
+        <div class="todo-filters"><button class="todo-filter active" data-ata-filter="open">Öppna</button><button class="todo-filter" data-ata-filter="ongoing">Pågående</button><button class="todo-filter" data-ata-filter="done">Utförda</button><button class="todo-filter" data-ata-filter="all">Alla</button></div>
+        <div class="ata-actions"><button id="selectAllAtaBtn" class="btn">Markera alla</button><button id="shareAtaBtn" class="btn primary">Dela valda <span id="ataSelectedCount">0</span></button></div>
+        <div id="ataList" class="ata-list"></div>
+        <input id="ataPhotoInput" type="file" accept="image/*" multiple hidden>
       </section>
 
       <section id="settingsView" class="view">
@@ -166,6 +175,7 @@
           </label>
           <button id="lockViewBtn" class="mini-btn active" title="Behåll samma område när du byter våning">🔒 Vy</button>
           <button id="syncFloorBtn" class="mini-btn" title="Synka våningsritningar med två gemensamma referenspunkter">⌖ Synka plan</button>
+          <button id="riserBtn" class="mini-btn" title="Stigare: svep upp/ner mellan plan, vänster/höger mellan delar">⇅ Stigare</button>
         </div>
 
         <div class="toolstrip" role="toolbar" aria-label="Ritningsverktyg">
@@ -173,12 +183,16 @@
           <button class="tool" data-tool="distance">📏 <span>Avstånd</span></button>
           <button class="tool" data-tool="route">⌁ <span>Sträcka</span></button>
           <button class="tool" data-tool="area">▱ <span>Area</span></button>
+          <button class="tool" data-tool="pen">✎ <span>Penna</span></button>
+          <button class="tool" data-tool="text">T <span>Text</span></button>
+          <button class="tool" data-tool="arrow">➜ <span>Pil</span></button>
+          <button class="tool" data-tool="circle">◯ <span>Ring</span></button>
+          <button id="deleteSelectedBtn" class="tool hidden">✕ <span>Ta bort</span></button>
           <button id="finishMeasureBtn" class="tool hidden">✓ <span>Slutför</span></button>
           <button id="clearMeasuresBtn" class="tool">⌫ <span>Rensa</span></button>
         </div>
 
-        <div id="measureHint" class="measure-hint">Nyp med två fingrar för zoom • dubbeltryck en armaturbeteckning för info.</div>
-
+        <div id="measureHint" class="hidden"></div>
         <div id="pdfViewport" class="pdf-viewport">
           <div id="canvasWrap" class="canvas-wrap">
             <canvas id="pdfCanvas"></canvas>
@@ -197,6 +211,7 @@
       <button class="nav-btn active" data-view="projectsView"><span>▦</span>Projekt</button>
       <button class="nav-btn" data-view="drawingsView"><span>▤</span>Ritningar</button>
       <button class="nav-btn" data-view="todoView"><span>✓</span>Att göra</button>
+      <button class="nav-btn" data-view="ataView"><span>ÄTA</span>Avvikelser</button>
       <button class="nav-btn" data-view="settingsView"><span>⚙</span>Mer</button>
     </nav>
 
@@ -212,6 +227,7 @@
         <div id="armatureDetails" class="armature-details"></div>
         <div class="smart-sheet-actions">
           <button id="showArmaturePdfBtn" class="btn primary">Visa i armaturförteckning</button>
+          <button id="linkOcchioBtn" class="btn">Koppla Occhio</button>
         </div>
       </div>
     </div>
@@ -233,6 +249,7 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
   <script src="app.js"></script>
   <script>
     (function(){

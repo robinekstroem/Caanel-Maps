@@ -19,6 +19,10 @@ import android.webkit.WebViewClient;
 import android.widget.Toast;
 
 import androidx.webkit.WebViewAssetLoader;
+import androidx.core.content.FileProvider;
+
+import java.io.File;
+import java.io.FileOutputStream;
 
 import java.io.OutputStream;
 
@@ -117,6 +121,16 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    public void onBackPressed() {
+        if (webView == null) { super.onBackPressed(); return; }
+        webView.evaluateJavascript("(window.ekisBack?window.ekisBack():false)", value -> {
+            if (!"true".equals(value)) {
+                if (webView.canGoBack()) webView.goBack(); else MainActivity.super.onBackPressed();
+            }
+        });
+    }
+
+    @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode != FILE_CHOOSER_REQUEST || filePathCallback == null) return;
@@ -140,6 +154,24 @@ public class MainActivity extends Activity {
     }
 
     public class AndroidBridge {
+        @JavascriptInterface
+        public void shareBase64(String filename, String base64Data, String mimeType) {
+            new Thread(() -> {
+                try {
+                    String pure = base64Data;
+                    int comma = pure.indexOf(',');
+                    if (comma >= 0) pure = pure.substring(comma + 1);
+                    byte[] bytes = Base64.decode(pure, Base64.DEFAULT);
+                    File dir = new File(getCacheDir(), "share"); dir.mkdirs();
+                    File file = new File(dir, filename.replaceAll("[^a-zA-Z0-9._\\-]", "_"));
+                    try (FileOutputStream out = new FileOutputStream(file)) { out.write(bytes); }
+                    Uri uri = FileProvider.getUriForFile(MainActivity.this, getPackageName() + ".fileprovider", file);
+                    Intent send = new Intent(Intent.ACTION_SEND); send.setType(mimeType); send.putExtra(Intent.EXTRA_STREAM, uri); send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    runOnUiThread(() -> startActivity(Intent.createChooser(send, "Dela ÄTA-underlag")));
+                } catch (Exception e) { runOnUiThread(() -> Toast.makeText(MainActivity.this, "Kunde inte dela filen", Toast.LENGTH_LONG).show()); }
+            }).start();
+        }
+
         @JavascriptInterface
         public void saveBase64(String filename, String base64Data) {
             new Thread(() -> {

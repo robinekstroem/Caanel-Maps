@@ -46,11 +46,12 @@
     editMeasure: null,
     distanceDraft: null,
     pageTextItems: [],
-    calibrationMode: null
+    calibrationMode: null,
+    ataFilter: "open", ataSelected: new Set(), ataPhotoTarget: null, riserMode:false, selectedOverlay:null, drawDraft:null
   };
 
   function defaultMeta() {
-    return { projects: [], todos: [], fileMeta: {}, measurements: {}, version: 4 };
+    return { projects: [], todos: [], atas: [], fileMeta: {}, measurements: {}, annotations: {}, version: 5 };
   }
   function loadMeta() {
     try { return {...defaultMeta(), ...JSON.parse(localStorage.getItem(META_KEY) || "{}")}; }
@@ -125,6 +126,8 @@
   function enrichEntryWithOcchio(projectId,entry){
     if(!entry || entry.occhio)return entry;
     const occ=findArmatureSchedules(projectId).filter(s=>s.documentType==="occhioSchedule").flatMap(s=>s.armatureIndex||[]);
+    const manual=state.meta.occhioLinks?.[projectId]?.[cleanTag(entry.tag)];
+    if(manual){const hit=occ.find(o=>cleanTag(o.tag)===cleanTag(manual)||cleanTag(o.aliases?.[0])===cleanTag(manual));if(hit)return {...entry,occhioMatch:hit,occhioConfidence:1,occhioManual:true};}
     let best=null,score=0;
     for(const o of occ){const q=occhioMatchScore(entry,o);if(q>score){score=q;best=o;}}
     if(best && score>=.42){return {...entry,occhioMatch:best,occhioConfidence:score};}
@@ -237,7 +240,7 @@
       else displayName=stripPdf(originalName);
       const detectedScales={};
       for(const pg of pages){const ds=extractDrawingScale(pg.items.map(x=>x.str).join(" "));if(ds)detectedScales[pg.page]=ds;}
-      return {analysisVersion:4,documentType:isOcchio?"occhioSchedule":(isSchedule?"armatureSchedule":"drawing"),category,plan,part,displayName,armatureIndex,pages:doc.numPages,detectedScales};
+      return {analysisVersion:5,documentType:isOcchio?"occhioSchedule":(isSchedule?"armatureSchedule":"drawing"),category,plan,part,displayName,armatureIndex,pages:doc.numPages,detectedScales};
     }catch(err){console.warn("PDF analysis failed",originalName,err);return null}
   }
 
@@ -513,6 +516,22 @@
     list.querySelectorAll("[data-todo]").forEach(row=>{const id=row.dataset.todo,t=state.meta.todos.find(x=>x.id===id);row.querySelector("input").onchange=e=>{t.done=e.target.checked;saveMeta();renderTodos()};row.querySelector("button").onclick=()=>{state.meta.todos=state.meta.todos.filter(x=>x.id!==id);saveMeta();renderTodos()}});
   }
 
+  function getAnnotations(){ const k=pageKey(); state.meta.annotations=state.meta.annotations||{}; return state.meta.annotations[k]||(state.meta.annotations[k]=[]); }
+  function ataNumber(){ const nums=(state.meta.atas||[]).map(a=>Number(String(a.number||'').replace(/\D/g,''))||0); return `ÄTA-${String(Math.max(0,...nums)+1).padStart(3,'0')}`; }
+  function ataHours(a){ return (a.sessions||[]).reduce((n,x)=>n+(Number(x.hours)||0),0); }
+  function renderAtas(){
+    const all=state.meta.atas||[], list=$('#ataList'); let items=[...all];
+    if(state.ataFilter==='open')items=items.filter(a=>a.status!=='Utförd'); if(state.ataFilter==='ongoing')items=items.filter(a=>a.status==='Pågående'); if(state.ataFilter==='done')items=items.filter(a=>a.status==='Utförd');
+    const total=all.reduce((n,a)=>n+ataHours(a),0), done=all.filter(a=>a.status==='Utförd').length, open=all.length-done;
+    $('#ataSummary').innerHTML=`<div><small>Öppna</small><b>${open}</b></div><div><small>Utförda</small><b>${done}</b></div><div><small>Extra timmar</small><b>${total.toFixed(1)} h</b></div>`;
+    $('#ataSelectedCount').textContent=state.ataSelected.size;
+    if(!items.length){list.innerHTML='<div class="empty">Inga avvikelser här.</div>';return}
+    list.innerHTML=items.map(a=>{const p=projectById(a.projectId);return `<div class="ata-card ${a.status==='Utförd'?'done':''}" data-ata="${a.id}"><div class="ata-top"><input class="ata-select" type="checkbox" ${state.ataSelected.has(a.id)?'checked':''}><div class="ata-main"><div class="ata-num">${esc(a.number)}</div><strong>${esc(a.title)}</strong><div class="ata-meta"><span class="ata-status ${a.status==='Utförd'?'done':''}">${esc(a.status)}</span><span>📅 ${esc(a.date||'')}</span><span>⏱ ${ataHours(a).toFixed(1)} h${a.estimate?` / est. ${Number(a.estimate).toFixed(1)} h`:''}</span>${p?`<span>▦ ${esc(p.name)}</span>`:''}</div>${a.description?`<p class="muted" style="margin-top:7px">${esc(a.description)}</p>`:''}${a.drawingNote?`<p class="muted" style="margin-top:5px">📍 ${esc(a.drawingNote)}</p>`:''}<div class="ata-photos">${(a.photos||[]).map(x=>`<img src="${x}" alt="ÄTA-bild">`).join('')}</div></div></div><div class="ata-card-actions"><button class="mini-btn ata-status-btn">${a.status==='Utförd'?'↺ Öppna':'✓ Utförd'}</button><button class="mini-btn ata-hours-btn">+ Timmar</button><button class="mini-btn ata-photo-btn">+ Bild</button><button class="mini-btn ata-mark-btn">⌖ Markera på ritning</button><button class="mini-btn ata-delete-btn">✕</button></div></div>`}).join('');
+    list.querySelectorAll('[data-ata]').forEach(row=>{const a=all.find(x=>x.id===row.dataset.ata); row.querySelector('.ata-select').onchange=e=>{e.target.checked?state.ataSelected.add(a.id):state.ataSelected.delete(a.id);renderAtas()}; row.querySelector('.ata-status-btn').onclick=()=>{a.status=a.status==='Utförd'?'Pågående':'Utförd';if(a.status==='Utförd')a.completed=new Date().toISOString().slice(0,10);saveMeta();renderAtas()}; row.querySelector('.ata-hours-btn').onclick=async()=>{const h=Number(String(await promptModal('Lägg till timmar','Arbetade timmar för detta pass.','1.0','number')||'').replace(',','.'));if(h>0){a.sessions=a.sessions||[];a.sessions.push({date:new Date().toISOString().slice(0,10),hours:h});a.status='Pågående';saveMeta();renderAtas()}}; row.querySelector('.ata-photo-btn').onclick=()=>{state.ataPhotoTarget=a.id;$('#ataPhotoInput').click()}; row.querySelector('.ata-mark-btn').onclick=async()=>{state.currentProjectId=a.projectId||state.currentProjectId; const p=projectById(state.currentProjectId); const id=a.drawing?.fileId || p?.files?.[0]; if(!id){toast('Lägg först in en ritning i projektet');return} await openPdf(id); state.activeAtaMark=a.id; setTool('circle'); toast('Ringa in avvikelsen på ritningen')}; row.querySelector('.ata-delete-btn').onclick=()=>{state.meta.atas=all.filter(x=>x.id!==a.id);state.ataSelected.delete(a.id);saveMeta();renderAtas()};});
+  }
+  async function createAta(){ const title=await promptModal('Ny ÄTA / Avvikelse','Beskriv extraarbetet kort.','');if(!title)return; const desc=await promptModal('Beskrivning','Orsak / vad som ska göras.',''); const est=Number(String(await promptModal('Beräknade timmar','Kan lämnas 0 om okänt.','0','number')||0).replace(',','.'))||0; const projectId=state.currentProjectId||state.meta.projects[0]?.id||null; state.meta.atas.unshift({id:uid(),number:ataNumber(),title,description:desc||'',date:new Date().toISOString().slice(0,10),status:'Ej påbörjad',estimate:est,sessions:[],photos:[],projectId});saveMeta();renderAtas(); }
+  async function shareSelectedAtas(){ const items=(state.meta.atas||[]).filter(a=>state.ataSelected.has(a.id));if(!items.length){toast('Välj minst en ÄTA');return} if(!window.jspdf?.jsPDF){toast('PDF-modulen saknas');return} const {jsPDF}=window.jspdf, doc=new jsPDF();let y=18;doc.setFontSize(18);doc.text('EKIS FIELD – ÄTA / Avvikelser',14,y);y+=10;doc.setFontSize(10); for(const a of items){if(y>270){doc.addPage();y=18}doc.setFont(undefined,'bold');doc.text(`${a.number} – ${a.title}`,14,y);y+=6;doc.setFont(undefined,'normal');doc.text(`Status: ${a.status}   Datum: ${a.date}   Timmar: ${ataHours(a).toFixed(1)} h`,14,y);y+=5;if(a.description){const lines=doc.splitTextToSize(a.description,180);doc.text(lines,14,y);y+=lines.length*5}if(a.drawingNote){doc.text(`Ritning: ${a.drawingNote}`,14,y);y+=5}y+=5} const data=doc.output('datauristring'); const name=`EKIS_FIELD_ATA_${new Date().toISOString().slice(0,10)}.pdf`; if(window.Android?.shareBase64)Android.shareBase64(name,data,'application/pdf'); else downloadBlob(doc.output('blob'),name); }
+
   async function openPdf(id, opts={}){
     const f=fileMeta(id); if(!f) return;
     const blob=await getBlob(id); if(!blob){toast("PDF-filen saknas lokalt");return}
@@ -601,7 +620,8 @@
       pan:"Nyp för zoom • tryck eller dubbeltryck nära en armaturbeteckning för info.",
       distance:"Tryck punkt A. Tryck sedan punkt B, dra till exakt läge och släpp. Måttet blir en rak linje.",
       route:"Tryck ut en kabelväg/sträcka. Tryck Slutför när du är klar.",
-      area:"Markera hörnen runt en yta. Tryck Slutför när du är klar. Kalibrera gärna via en känd rumsarea först."
+      area:"Markera hörnen runt en yta. Tryck Slutför när du är klar. Kalibrera gärna via en känd rumsarea först.",
+      pen:"Rita direkt på ritningen. Markeringen sparas automatiskt.",text:"Tryck där texten ska ligga.",arrow:"Dra från start till pilspets.",circle:"Dra runt området som ska markeras."
     }[state.tool];
     $("#measureHint").textContent=text;
   }
@@ -634,6 +654,13 @@
     [...refs, ...live].forEach((p,i)=>{const q=toPx(p);ctx.beginPath();ctx.arc(q.x,q.y,7,0,Math.PI*2);ctx.stroke();ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(q.x+9,q.y-13,24,22);ctx.fillStyle="#ff6a00";ctx.fillText(i%2===0?"A":"B",q.x+15,q.y+3)});
     const hi=state.armatureHighlight;
     if(hi && hi.fileId===state.currentFileId && hi.page===state.pageNum){const e=hi.entry,q=toPx({x:e.x,y:e.y});const w=Math.max(42,(e.w||25)*state.renderScale),h=Math.max(26,(e.h||12)*state.renderScale);ctx.save();ctx.strokeStyle="#ff6a00";ctx.lineWidth=4;ctx.strokeRect(q.x-10,q.y-10,w+20,h+20);ctx.restore();}
+    for(const a of getAnnotations()){
+      ctx.save();ctx.strokeStyle=a.selected?'#ff4d4f':'#ff6a00';ctx.fillStyle='#ff6a00';ctx.lineWidth=a.selected?4:3;
+      if(a.type==='pen'){ctx.beginPath();a.points.forEach((p,i)=>{const q=toPx(p);i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y)});ctx.stroke()}
+      if(a.type==='arrow'){const p=toPx(a.points[0]),q=toPx(a.points[1]);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();const an=Math.atan2(q.y-p.y,q.x-p.x);ctx.beginPath();ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-16*Math.cos(an-.5),q.y-16*Math.sin(an-.5));ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-16*Math.cos(an+.5),q.y-16*Math.sin(an+.5));ctx.stroke()}
+      if(a.type==='circle'){const p=toPx(a.points[0]),q=toPx(a.points[1]);ctx.beginPath();ctx.ellipse((p.x+q.x)/2,(p.y+q.y)/2,Math.abs(q.x-p.x)/2,Math.abs(q.y-p.y)/2,0,0,Math.PI*2);ctx.stroke()}
+      if(a.type==='text'){const p=toPx(a.points[0]);ctx.font='bold 16px sans-serif';ctx.fillText(a.text,p.x,p.y)}ctx.restore();
+    }
     if(state.tempPoints.length) drawPath(state.tempPoints,false,"");
   }
 
@@ -658,6 +685,12 @@
     else if(state.tool==="area"&&pts.length>=3){const m2=pt2ToM2(polygonAreaPt2(pts));getMeasurements().push({id:uid(),type:"area",points:pts,label:`${m2.toFixed(2)} m²`});$("#measureResult").textContent=`${m2.toFixed(2)} m²`;}
     state.tempPoints=[]; saveMeta(); drawOverlay();
   }
+
+  function nearestOverlayObject(e){const p=pdfPointFromEvent(e),tol=18/(state.renderScale*state.viewZoom);let best=null,d=1e9;for(const m of getMeasurements()){for(const q of m.points||[]){const z=distancePt(p,q);if(z<d&&z<tol){best={kind:'measure',obj:m};d=z}}}for(const a of getAnnotations()){for(const q of a.points||[]){const z=distancePt(p,q);if(z<d&&z<tol){best={kind:'annotation',obj:a};d=z}}}return best}
+  $('#overlayCanvas').addEventListener('pointerdown',e=>{if(!['pen','arrow','circle'].includes(state.tool))return;const p=pdfPointFromEvent(e);state.drawDraft={type:state.tool,points:[p],pointerId:e.pointerId};try{e.target.setPointerCapture(e.pointerId)}catch{}e.preventDefault()});
+  $('#overlayCanvas').addEventListener('pointermove',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;const p=pdfPointFromEvent(e);if(d.type==='pen')d.points.push(p);else d.points[1]=p;state.tempPoints=d.points;drawOverlay()});
+  $('#overlayCanvas').addEventListener('pointerup',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;const p=pdfPointFromEvent(e);if(d.type!=='pen')d.points[1]=p;if(d.points.length>1){const a={id:uid(),type:d.type,points:d.points};getAnnotations().push(a);if(state.activeAtaMark){const ata=(state.meta.atas||[]).find(x=>x.id===state.activeAtaMark);if(ata){ata.drawing={fileId:state.currentFileId,page:state.pageNum,view:captureViewState(),annotationId:a.id};ata.drawingNote=`${displayLabel(fileMeta(state.currentFileId))}, sida ${state.pageNum}`;}state.activeAtaMark=null}saveMeta()}state.drawDraft=null;state.tempPoints=[];setTool('pan');drawOverlay()});
+  $('#overlayCanvas').addEventListener('click',async e=>{if(state.tool==='text'){const text=await promptModal('Text på ritning','Skriv texten som ska sparas på ritningen.','');if(text){getAnnotations().push({id:uid(),type:'text',points:[pdfPointFromEvent(e)],text});saveMeta();setTool('pan');drawOverlay()}return}if(state.tool==='pan'&&Date.now()>state.suppressClickUntil){const hit=nearestOverlayObject(e);state.selectedOverlay=hit;for(const a of getAnnotations())a.selected=hit?.kind==='annotation'&&hit.obj.id===a.id;$('#deleteSelectedBtn').classList.toggle('hidden',!hit);drawOverlay()}});
 
   // Distance: first tap fixes A. Second press starts B; drag and release commits a straight A–B distance.
   $("#overlayCanvas").addEventListener("pointerdown",e=>{
@@ -742,7 +775,7 @@
   }
 
   function showArmatureCard(entry){
-    state.selectedArmatureEntry=entry;
+    state.selectedArmatureEntry=entry; state.activeArmatureEntry=entry;
     $("#armatureTitle").textContent=entry.tag;
     const o=entry.occhioMatch;
     const rows=[["Fabrikat",entry.brand],["Typ",entry.type],["Bestyckning",entry.lamp],["Montage",entry.montage],["Styrning",entry.control],...(o?[["Occhio position",o.tag],["Occhio produkt",o.type],["Occhio data",o.lamp],["Matchning",`${Math.round((entry.occhioConfidence||0)*100)}%`]]:[]),["Förteckning",`Sida ${entry.page}`]].filter(x=>x[1]);
@@ -994,6 +1027,8 @@
     await switchDrawingKeepView(ids[next]);
   }
 
+  async function openAdjacentFloor(dir){const f=fileMeta(state.currentFileId);if(!f)return;const p=projectById(f.projectId);const candidates=(p?.files||[]).map(fileMeta).filter(x=>x&&x.category===f.category&&String(x.part||'')===String(f.part||'')&&x.plan);const cur=Number(f.plan), target=candidates.filter(x=>dir>0?Number(x.plan)>cur:Number(x.plan)<cur).sort((a,b)=>dir>0?Number(a.plan)-Number(b.plan):Number(b.plan)-Number(a.plan))[0];if(!target){toast(dir>0?'Ingen våning ovanför':'Ingen våning under');return}await switchDrawingKeepView(target.id)}
+
   function updateDrawingNav(){
     const ids=orderedProjectFiles(), i=ids.indexOf(state.currentFileId);
     $("#prevDrawingBtn").disabled=i<=0;
@@ -1082,6 +1117,8 @@
     $("#fullscreenBtn").textContent=active?"⤢":"⛶";
     $("#viewerView").classList.toggle("fullscreen-ui",active);
   }
+
+  window.ekisBack=function(){const viewer=$("#viewerView");const active=!!(document.fullscreenElement||document.webkitFullscreenElement)||viewer.classList.contains("pseudo-fullscreen");if(active){toggleFullscreen();return true}if(state.currentView==="viewerView"){showView("projectView",false);renderProject();return true}return false};
 
   function installViewerGestures(){
     const viewport=$("#pdfViewport");
@@ -1176,6 +1213,12 @@
       if(ts.mode!=="single")return;
       const dx=ts.lastX-ts.startX,dy=ts.lastY-ts.startY,dt=Date.now()-ts.time;
 
+      if(state.riserMode && state.tool==='pan' && dt<1100 && Math.max(Math.abs(dx),Math.abs(dy))>85){
+        state.suppressClickUntil=Date.now()+400;
+        if(Math.abs(dx)>Math.abs(dy)*1.15){await openAdjacentDrawing(dx<0?1:-1);return;}
+        if(Math.abs(dy)>Math.abs(dx)*1.15){await openAdjacentFloor(dy<0?1:-1);return;}
+      }
+
       if(isFullyZoomedOut() && state.tool==="pan" && dt<850 && Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.2){
         state.suppressClickUntil=Date.now()+400;
         await openAdjacentDrawing(dx<0?1:-1);
@@ -1252,7 +1295,7 @@
   }
 
   // Navigation & UI wiring
-  $$(".nav-btn").forEach(b=>b.onclick=()=>{showView(b.dataset.view); if(b.dataset.view==="projectsView")renderProjects(); if(b.dataset.view==="drawingsView")renderAllDrawings(); if(b.dataset.view==="todoView")renderTodos()});
+  $$(".nav-btn").forEach(b=>b.onclick=()=>{showView(b.dataset.view); if(b.dataset.view==="projectsView")renderProjects(); if(b.dataset.view==="drawingsView")renderAllDrawings(); if(b.dataset.view==="todoView")renderTodos(); if(b.dataset.view==="ataView")renderAtas()});
   $("#brandBtn").onclick=()=>{renderProjects();showView("projectsView")};
   $("#newProjectBtn").onclick=async()=>{
     const name=await promptModal("Nytt projekt","Ge projektet ett namn.","Nytt projekt");
@@ -1264,12 +1307,20 @@
   $("#zipInput").onchange=e=>{if(e.target.files[0])importZip(e.target.files[0]);e.target.value=""};
   $("#projectSearch").oninput=renderProject; $("#sortSelect").onchange=renderProject; $("#drawingSearch").oninput=renderAllDrawings;
   $("#exportProjectBtn").onclick=exportProject; $("#exportBackupBtn").onclick=exportBackup; $("#backupInput").onchange=e=>{if(e.target.files[0])importBackup(e.target.files[0]);e.target.value=""};
+  $('#newAtaBtn').onclick=createAta;
+  $$('[data-ata-filter]').forEach(b=>b.onclick=()=>{state.ataFilter=b.dataset.ataFilter;$$('[data-ata-filter]').forEach(x=>x.classList.toggle('active',x===b));renderAtas()});
+  $('#selectAllAtaBtn').onclick=()=>{const items=(state.meta.atas||[]).filter(a=>state.ataFilter==='all'||(state.ataFilter==='open'&&a.status!=='Utförd')||(state.ataFilter==='ongoing'&&a.status==='Pågående')||(state.ataFilter==='done'&&a.status==='Utförd'));items.forEach(a=>state.ataSelected.add(a.id));renderAtas()};
+  $('#shareAtaBtn').onclick=shareSelectedAtas;
+  $('#ataPhotoInput').onchange=e=>{const a=(state.meta.atas||[]).find(x=>x.id===state.ataPhotoTarget);if(!a)return;for(const f of [...e.target.files].slice(0,5)){const r=new FileReader();r.onload=()=>{a.photos=a.photos||[];a.photos.push(r.result);saveMeta();renderAtas()};r.readAsDataURL(f)}e.target.value=''};
+  $('#deleteSelectedBtn').onclick=()=>{const h=state.selectedOverlay;if(!h)return;if(h.kind==='measure'){const arr=getMeasurements(),i=arr.findIndex(x=>x.id===h.obj.id);if(i>=0)arr.splice(i,1)}else{const arr=getAnnotations(),i=arr.findIndex(x=>x.id===h.obj.id);if(i>=0)arr.splice(i,1)}state.selectedOverlay=null;$('#deleteSelectedBtn').classList.add('hidden');saveMeta();drawOverlay()};
+  $('#riserBtn').onclick=()=>{state.riserMode=!state.riserMode;$('#riserBtn').classList.toggle('active',state.riserMode);$('#riserBtn').textContent=state.riserMode?'🔒 STIGARE':'⇅ Stigare';toast(state.riserMode?'Stigare aktiv':'Stigare av')};
   $("#newTodoBtn").onclick=async()=>{const t=await promptModal("Ny uppgift","Vad ska göras?","");if(!t)return;const pr=await promptModal("Prioritet","Skriv Normal, Viktig eller Akut.","Normal");const due=await promptModal("Deadline","Datum YYYY-MM-DD, eller lämna tomt.","");state.meta.todos.unshift({id:uid(),text:t,done:false,priority:["Normal","Viktig","Akut"].find(x=>x.toLowerCase()===String(pr||"").toLowerCase())||"Normal",due:/^\d{4}-\d{2}-\d{2}$/.test(due||"")?due:"",projectId:state.currentProjectId||null});saveMeta();renderTodos()};
   $$("[data-todo-filter]").forEach(b=>b.onclick=()=>{state.todoFilter=b.dataset.todoFilter;$$('[data-todo-filter]').forEach(x=>x.classList.toggle('active',x===b));renderTodos()});
   $("#backFilesBtn").onclick=()=>{const f=fileMeta(state.currentFileId); state.armatureReturn=null; state.armatureHighlight=null; if(f){state.currentProjectId=f.projectId;renderProject();showView("projectView",false)}else showView("projectsView")};
   $("#backToDrawingBtn").onclick=returnToArmatureSource;
   $("#closeArmatureSheet").onclick=closeArmatureCard;
   $("#armatureSheet").onclick=e=>{if(e.target===$("#armatureSheet"))closeArmatureCard()};
+  $("#linkOcchioBtn").onclick=async()=>{const e=state.activeArmatureEntry;if(!e){toast("Öppna först en armatur");return}const occ=findArmatureSchedules(fileMeta(state.currentFileId)?.projectId||state.currentProjectId).filter(x=>x.documentType==="occhioSchedule").flatMap(x=>x.armatureIndex||[]);if(!occ.length){toast("Ingen Occhio-förteckning hittad i projektet");return}const hint=occ.map(x=>`${x.tag}: ${x.type||''}`).join(" | ").slice(0,1200);const v=await promptModal("Koppla Occhio-position",hint,"POS 01");if(!v)return;const projectId=fileMeta(state.currentFileId)?.projectId||state.currentProjectId;state.meta.occhioLinks=state.meta.occhioLinks||{};state.meta.occhioLinks[projectId]=state.meta.occhioLinks[projectId]||{};state.meta.occhioLinks[projectId][cleanTag(e.tag)]=cleanTag(v);saveMeta();toast("Occhio-koppling sparad");$("#armatureSheet").classList.add("hidden")};
   $("#showArmaturePdfBtn").onclick=openSelectedArmatureInPdf;
   $("#renameDrawingBtn").onclick=()=>renameFile(state.currentFileId);
   $("#prevDrawingBtn").onclick=()=>openAdjacentDrawing(-1);
