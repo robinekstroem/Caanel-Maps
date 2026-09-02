@@ -1491,6 +1491,7 @@
   }
 
   // Navigation & UI wiring
+  // Keep startup wiring resilient: removed/renamed controls must never abort the rest of the app.
   function updateAtaMarkBar(){
     let bar=$("#ataMarkBar");
     if(!bar){bar=document.createElement("div");bar.id="ataMarkBar";bar.className="ata-actions hidden";bar.innerHTML='<strong>ÄTA-markering</strong><button id="saveAtaMarkBtn" class="btn primary">Spara markering</button><button id="cancelAtaMarkBtn" class="btn">Avbryt</button>';$("#viewerView .viewer-head").after(bar);
@@ -1511,9 +1512,10 @@
   $("#backProjectsBtn").onclick=()=>{renderProjects();showView("projectsView")};
   $("#projectMenuBtn").onclick=()=>$("#projectMenu").classList.remove("hidden"); $("#menuCloseProject").onclick=()=>$("#projectMenu").classList.add("hidden");
   $("#menuAddPdf").onclick=()=>{$("#projectMenu").classList.add("hidden");$("#pdfInput").click()}; $("#menuAddZip").onclick=()=>{$("#projectMenu").classList.add("hidden");$("#zipInput").click()}; $("#menuExportProject").onclick=()=>{$("#projectMenu").classList.add("hidden");$("#exportProjectBtn").click()};
-  $("#menuRenameProject").onclick=()=>{$("#projectMenu").classList.add("hidden");renameCurrentProject()}; $("#menuDeleteProject").onclick=()=>{$("#projectMenu").classList.add("hidden");deleteCurrentProject()};
-  const renameCurrentProject=async()=>{const p=currentProject();const n=await promptModal("Byt projektnamn","",p.name);if(n){p.name=n;saveMeta();renderProject()}};
-  $("#deleteProjectBtn").onclick=()=>{const p=currentProject();if(p)deleteProjectById(p.id)};
+  const renameCurrentProject=async()=>{const p=currentProject();if(!p)return;const n=await promptModal("Byt projektnamn","",p.name);if(n){p.name=n;saveMeta();renderProject()}};
+  const deleteCurrentProject=async()=>{const p=currentProject();if(p)await deleteProjectById(p.id)};
+  $("#menuRenameProject").onclick=()=>{$("#projectMenu").classList.add("hidden");renameCurrentProject()};
+  $("#menuDeleteProject").onclick=()=>{$("#projectMenu").classList.add("hidden");deleteCurrentProject()};
   $("#pdfInput").onchange=e=>{if(e.target.files.length)importPdfs(e.target.files);e.target.value=""};
   $("#zipInput").onchange=e=>{if(e.target.files.length)importZips(e.target.files);e.target.value=""};
   $("#projectSearch").oninput=renderProject; $("#sortSelect").onchange=renderProject; $("#drawingSearch").oninput=renderAllDrawings;
