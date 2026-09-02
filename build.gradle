@@ -1,0 +1,3 @@
+// EKIS FIELD root build file.
+// Android plugin version is declared in app/build.gradle so GitHub Actions
+// can resolve it even if Gradle does not inherit the root plugin declaration.
