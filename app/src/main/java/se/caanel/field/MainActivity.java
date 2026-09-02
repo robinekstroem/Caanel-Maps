@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -23,13 +25,17 @@ import androidx.core.content.FileProvider;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
 
 import java.io.OutputStream;
 
 public class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 501;
+    private static final int CAMERA_REQUEST = 502;
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
+    private Uri pendingCameraUri;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,14 +84,26 @@ public class MainActivity extends Activity {
                 if (filePathCallback != null) filePathCallback.onReceiveValue(null);
                 filePathCallback = callback;
 
+                boolean wantsImage = false;
+                String[] acceptTypes = params.getAcceptTypes();
+                if (acceptTypes != null) {
+                    for (String type : acceptTypes) {
+                        if (type != null && type.toLowerCase().startsWith("image/")) { wantsImage = true; break; }
+                    }
+                }
+
                 Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
-                intent.setType("*/*");
-                intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
-                        "application/pdf",
-                        "application/zip",
-                        "application/x-zip-compressed"
-                });
+                if (wantsImage) {
+                    intent.setType("image/*");
+                } else {
+                    intent.setType("*/*");
+                    intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                            "application/pdf",
+                            "application/zip",
+                            "application/x-zip-compressed"
+                    });
+                }
                 intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,
                         params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
                 startActivityForResult(intent, FILE_CHOOSER_REQUEST);
@@ -133,6 +151,18 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == CAMERA_REQUEST) {
+            if (resultCode == Activity.RESULT_OK && pendingCameraUri != null) {
+                deliverCameraPhoto(pendingCameraUri);
+            } else if (webView != null) {
+                webView.evaluateJavascript("window.ekisCameraCancelled&&window.ekisCameraCancelled()", null);
+            }
+            pendingCameraUri = null;
+            applyImmersiveMode();
+            return;
+        }
+
         if (requestCode != FILE_CHOOSER_REQUEST || filePathCallback == null) return;
 
         Uri[] result = null;
@@ -153,7 +183,59 @@ public class MainActivity extends Activity {
         applyImmersiveMode();
     }
 
+    private void launchNativeCamera() {
+        try {
+            File dir = new File(getCacheDir(), "camera");
+            if (!dir.exists()) dir.mkdirs();
+            File photo = new File(dir, "ata_" + System.currentTimeMillis() + ".jpg");
+            pendingCameraUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", photo);
+            Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            intent.putExtra(MediaStore.EXTRA_OUTPUT, pendingCameraUri);
+            intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            if (intent.resolveActivity(getPackageManager()) == null) throw new Exception("Ingen kameraapp hittades");
+            startActivityForResult(intent, CAMERA_REQUEST);
+        } catch (Exception e) {
+            pendingCameraUri = null;
+            Toast.makeText(this, "Kunde inte starta kameran", Toast.LENGTH_LONG).show();
+            if (webView != null) webView.evaluateJavascript("window.ekisCameraCancelled&&window.ekisCameraCancelled()", null);
+        }
+    }
+
+    private void deliverCameraPhoto(Uri uri) {
+        new Thread(() -> {
+            try (InputStream input = getContentResolver().openInputStream(uri)) {
+                if (input == null) throw new Exception("Kunde inte läsa kamerabilden");
+                Bitmap source = BitmapFactory.decodeStream(input);
+                if (source == null) throw new Exception("Ogiltig kamerabild");
+                int w = source.getWidth(), h = source.getHeight();
+                int max = Math.max(w, h);
+                Bitmap output = source;
+                if (max > 1920) {
+                    float scale = 1920f / max;
+                    output = Bitmap.createScaledBitmap(source, Math.max(1, Math.round(w * scale)), Math.max(1, Math.round(h * scale)), true);
+                }
+                ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+                output.compress(Bitmap.CompressFormat.JPEG, 84, bytes);
+                String dataUrl = "data:image/jpeg;base64," + Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP);
+                if (output != source) output.recycle();
+                source.recycle();
+                String js = "window.ekisCameraPhoto&&window.ekisCameraPhoto(" + org.json.JSONObject.quote(dataUrl) + ")";
+                runOnUiThread(() -> webView.evaluateJavascript(js, null));
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    Toast.makeText(MainActivity.this, "Kunde inte läsa kamerabilden", Toast.LENGTH_LONG).show();
+                    webView.evaluateJavascript("window.ekisCameraCancelled&&window.ekisCameraCancelled()", null);
+                });
+            }
+        }).start();
+    }
+
     public class AndroidBridge {
+        @JavascriptInterface
+        public void capturePhoto() {
+            runOnUiThread(() -> launchNativeCamera());
+        }
+
         @JavascriptInterface
         public void shareBase64(String filename, String base64Data, String mimeType) {
             new Thread(() -> {
