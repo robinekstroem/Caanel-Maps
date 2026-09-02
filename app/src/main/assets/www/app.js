@@ -47,7 +47,7 @@
     distanceDraft: null,
     pageTextItems: [],
     calibrationMode: null,
-    ataFilter: "open", ataSelected: new Set(), ataPhotoTarget: null, riserMode:false, selectedOverlay:null, drawDraft:null
+    ataFilter: "open", ataSelected: new Set(), ataPhotoTarget: null, activeAtaMark:null, ataMarkAnnotationId:null, riserMode:false, selectedOverlay:null, drawDraft:null
   };
 
   function defaultMeta() {
@@ -97,7 +97,8 @@
   }
   function extractTitlePlanPart(text){
     const t=String(text||"").replace(/\s+/g," ");
-    const m=t.match(/\bPLAN\s*0*(\d{1,3})\s*[,;:\-]?\s*DEL\s*0*(\d{1,2})\b/i);
+    const hits=[...t.matchAll(/\bPLAN\s*0*(\d{1,3})\s*[,;:\-]?\s*DEL\s*0*(\d{1,2})\b/ig)];
+    const m=hits[hits.length-1];
     return m ? {plan:String(Number(m[1])),part:String(Number(m[2]))} : null;
   }
   function extractPart(text, originalName="", plan=""){
@@ -205,7 +206,7 @@
         category=hit?hit[1]:normalizeCategory(tailText);
       }
       // Title block wins over orientation figures and other PLAN references on the sheet.
-      const titlePlanPart=extractTitlePlanPart(tailText)||extractTitlePlanPart(first.join(" "));
+      const titlePlanPart=extractTitlePlanPart(tailText)||extractTitlePlanPart(first.join(" "))||extractTitlePlanPart(allText);
       const plan=titlePlanPart?.plan || extractPlan(tailText)||extractPlan(first.join(" "));
       const part=titlePlanPart?.part || extractPart(tailText+" "+first.join(" "),originalName,plan);
       const armatureIndex=[];
@@ -457,6 +458,7 @@
     const p=currentProject(); if(!p) return;
     $("#projectName").textContent=p.name;
     $("#projectMeta").textContent=`${(p.files||[]).length} PDF-filer`;
+    $("#projectQuickActions")?.classList.toggle("hidden",(p.files||[]).length>0);
     const q=$("#projectSearch").value.trim().toLowerCase();
     let files=(p.files||[]).map(id=>fileMeta(id)).filter(Boolean);
     renderCategoryTabs(files);
@@ -621,17 +623,21 @@
 
   async function importZips(fileList){
     if(!window.JSZip){toast('ZIP-modulen kunde inte laddas');return}
-    const zips=[...fileList].filter(f=>f.name.toLowerCase().endsWith('.zip')); const raw=[]; let zipDone=0;
+    const zips=[...fileList].filter(f=>f.name.toLowerCase().endsWith('.zip')); let totalImported=0;
     try{
-      for(const file of zips){
-        $("#projectStatus").textContent=`Packar upp ${file.name}… (${zipDone+1}/${zips.length})`;
-        const zip=await JSZip.loadAsync(file); const entries=Object.values(zip.files).filter(e=>!e.dir&&e.name.toLowerCase().endsWith('.pdf'));
-        for(const e of entries){const blob=await e.async('blob');const parts=e.name.split('/');const name=parts.pop();raw.push({blob,name,path:parts.join('/'),zipName:file.name})}
-        zipDone++;
+      for(let zi=0;zi<zips.length;zi++){
+        const file=zips[zi]; $("#projectStatus").textContent=`ZIP ${zi+1}/${zips.length}: packar upp ${file.name}…`;
+        let zip=await JSZip.loadAsync(file); const entries=Object.values(zip.files).filter(e=>!e.dir&&e.name.toLowerCase().endsWith('.pdf'));
+        for(let pi=0;pi<entries.length;pi++){
+          const e=entries[pi]; $("#projectStatus").textContent=`ZIP ${zi+1}/${zips.length} · PDF ${pi+1}/${entries.length}: analyserar ${e.name.split('/').pop()}`;
+          const blob=await e.async('blob'); const parts=e.name.split('/'); const name=parts.pop();
+          await processImportItems([{blob,name,path:parts.join('/'),zipName:file.name}],`${file.name} · ${pi+1}/${entries.length}`);
+          totalImported++; await new Promise(r=>setTimeout(r,0));
+        }
+        zip=null;
       }
-      if(!raw.length){$("#projectStatus").textContent='ZIP-filerna innehöll inga PDF-filer.';return}
-      await processImportItems(raw,`${zips.length} ZIP`);
-    }catch(err){console.error(err);$("#projectStatus").textContent='Kunde inte packa upp en eller flera ZIP-filer.'}
+      $("#projectStatus").textContent=`Import klar · ${zips.length} ZIP behandlade · ${totalImported} PDF lästa.`;
+    }catch(err){console.error(err);$("#projectStatus").textContent='Importen avbröts vid analys. Prova igen – redan sparade PDF:er ligger kvar.'}
   }
 
   function renderAllDrawings(){
@@ -665,8 +671,8 @@
     $('#ataSummary').innerHTML=`<div><small>Öppna</small><b>${open}</b></div><div><small>Utförda</small><b>${done}</b></div><div><small>Extra timmar</small><b>${total.toFixed(1)} h</b></div>`;
     $('#ataSelectedCount').textContent=state.ataSelected.size;
     if(!items.length){list.innerHTML='<div class="empty">Inga avvikelser här.</div>';return}
-    list.innerHTML=items.map(a=>{const p=projectById(a.projectId);return `<div class="ata-card ${a.status==='Utförd'?'done':''}" data-ata="${a.id}"><div class="ata-top"><input class="ata-select" type="checkbox" ${state.ataSelected.has(a.id)?'checked':''}><div class="ata-main"><div class="ata-num">${esc(a.number)}</div><strong>${esc(a.title)}</strong><div class="ata-meta"><span class="ata-status ${a.status==='Utförd'?'done':''}">${esc(a.status)}</span><span>📅 ${esc(a.date||'')}</span><span>⏱ ${ataHours(a).toFixed(1)} h${a.estimate?` / est. ${Number(a.estimate).toFixed(1)} h`:''}</span>${p?`<span>▦ ${esc(p.name)}</span>`:''}</div>${a.description?`<p class="muted" style="margin-top:7px">${esc(a.description)}</p>`:''}${a.drawingNote?`<p class="muted" style="margin-top:5px">📍 ${esc(a.drawingNote)}</p>`:''}<div class="ata-photos">${(a.photos||[]).map(x=>`<img src="${x}" alt="ÄTA-bild">`).join('')}</div></div></div><div class="ata-card-actions"><button class="mini-btn ata-status-btn">${a.status==='Utförd'?'↺ Öppna':'✓ Utförd'}</button><button class="mini-btn ata-hours-btn">+ Timmar</button><button class="mini-btn ata-photo-btn">+ Bild</button><button class="mini-btn ata-mark-btn">⌖ Markera på ritning</button><button class="mini-btn ata-delete-btn">✕</button></div></div>`}).join('');
-    list.querySelectorAll('[data-ata]').forEach(row=>{const a=all.find(x=>x.id===row.dataset.ata); row.querySelector('.ata-select').onchange=e=>{e.target.checked?state.ataSelected.add(a.id):state.ataSelected.delete(a.id);renderAtas()}; row.querySelector('.ata-status-btn').onclick=()=>{a.status=a.status==='Utförd'?'Pågående':'Utförd';if(a.status==='Utförd')a.completed=new Date().toISOString().slice(0,10);saveMeta();renderAtas()}; row.querySelector('.ata-hours-btn').onclick=async()=>{const h=Number(String(await promptModal('Lägg till timmar','Arbetade timmar för detta pass.','1.0','number')||'').replace(',','.'));if(h>0){a.sessions=a.sessions||[];a.sessions.push({date:new Date().toISOString().slice(0,10),hours:h});a.status='Pågående';saveMeta();renderAtas()}}; row.querySelector('.ata-photo-btn').onclick=()=>{state.ataPhotoTarget=a.id;$('#ataPhotoInput').click()}; row.querySelector('.ata-mark-btn').onclick=async()=>{state.currentProjectId=a.projectId||state.currentProjectId; const p=projectById(state.currentProjectId); const id=a.drawing?.fileId || p?.files?.[0]; if(!id){toast('Lägg först in en ritning i projektet');return} await openPdf(id); state.activeAtaMark=a.id; setTool('circle'); toast('Ringa in avvikelsen på ritningen')}; row.querySelector('.ata-delete-btn').onclick=async()=>{if(!await confirmDelete('Ta bort ÄTA?',`Vill du verkligen ta bort ${a.number} – ${a.title}?`))return;state.meta.atas=all.filter(x=>x.id!==a.id);state.ataSelected.delete(a.id);saveMeta();renderAtas()};});
+    list.innerHTML=items.map(a=>{const p=projectById(a.projectId);return `<div class="ata-card ${a.status==='Utförd'?'done':''}" data-ata="${a.id}"><div class="ata-top"><input class="ata-select" type="checkbox" ${state.ataSelected.has(a.id)?'checked':''}><div class="ata-main"><div class="ata-num">${esc(a.number)}</div><strong>${esc(a.title)}</strong><div class="ata-meta"><span class="ata-status ${a.status==='Utförd'?'done':''}">${esc(a.status)}</span><span>📅 ${esc(a.date||'')}</span><span>⏱ ${ataHours(a).toFixed(1)} h${a.estimate?` / est. ${Number(a.estimate).toFixed(1)} h`:''}</span>${p?`<span>▦ ${esc(p.name)}</span>`:''}</div>${a.description?`<p class="muted" style="margin-top:7px">${esc(a.description)}</p>`:''}${a.drawingNote?`<p class="muted" style="margin-top:5px">📍 ${esc(a.drawingNote)}</p>`:''}<div class="ata-photos">${(a.photos||[]).map(x=>`<img src="${x}" alt="ÄTA-bild">`).join('')}</div></div></div><div class="ata-card-actions"><button class="mini-btn ata-status-btn">${a.status==='Utförd'?'↺ Öppna':'✓ Utförd'}</button><button class="mini-btn ata-hours-btn">+ Timmar</button><button class="mini-btn ata-camera-btn">📷 Ta foto</button><button class="mini-btn ata-photo-btn">🖼 Galleri</button><button class="mini-btn ata-mark-btn">⌖ Markera på ritning</button><button class="mini-btn ata-delete-btn">✕</button></div></div>`}).join('');
+    list.querySelectorAll('[data-ata]').forEach(row=>{const a=all.find(x=>x.id===row.dataset.ata); row.querySelector('.ata-select').onchange=e=>{e.target.checked?state.ataSelected.add(a.id):state.ataSelected.delete(a.id);renderAtas()}; row.querySelector('.ata-status-btn').onclick=()=>{a.status=a.status==='Utförd'?'Pågående':'Utförd';if(a.status==='Utförd')a.completed=new Date().toISOString().slice(0,10);saveMeta();renderAtas()}; row.querySelector('.ata-hours-btn').onclick=async()=>{const h=Number(String(await promptModal('Lägg till timmar','Arbetade timmar för detta pass.','1.0','number')||'').replace(',','.'));if(h>0){a.sessions=a.sessions||[];a.sessions.push({date:new Date().toISOString().slice(0,10),hours:h});a.status='Pågående';saveMeta();renderAtas()}}; row.querySelector('.ata-camera-btn').onclick=()=>{state.ataPhotoTarget=a.id;$('#ataCameraInput').click()}; row.querySelector('.ata-photo-btn').onclick=()=>{state.ataPhotoTarget=a.id;$('#ataPhotoInput').click()}; row.querySelector('.ata-mark-btn').onclick=async()=>{state.currentProjectId=a.projectId||state.currentProjectId; const p=projectById(state.currentProjectId); const id=a.drawing?.fileId || p?.files?.[0]; if(!id){toast('Lägg först in en ritning i projektet');return} state.activeAtaMark=a.id; state.ataMarkAnnotationId=null; await openPdf(id); setTool('circle'); updateAtaMarkBar(); toast('Ringa in avvikelsen och tryck Spara ÄTA-markering')}; row.querySelector('.ata-delete-btn').onclick=async()=>{if(!await confirmDelete('Ta bort ÄTA?',`Vill du verkligen ta bort ${a.number} – ${a.title}?`))return;state.meta.atas=all.filter(x=>x.id!==a.id);state.ataSelected.delete(a.id);saveMeta();renderAtas()};});
   }
   async function createAta(){ const title=await promptModal('Ny ÄTA / Avvikelse','Beskriv extraarbetet kort.','');if(!title)return; const desc=await promptModal('Beskrivning','Orsak / vad som ska göras.',''); const est=Number(String(await promptModal('Beräknade timmar','Kan lämnas 0 om okänt.','0','number')||0).replace(',','.'))||0; const projectId=state.currentProjectId||state.meta.projects[0]?.id||null; state.meta.atas.unshift({id:uid(),number:ataNumber(),title,description:desc||'',date:new Date().toISOString().slice(0,10),status:'Ej påbörjad',estimate:est,sessions:[],photos:[],projectId});saveMeta();renderAtas(); }
   async function shareSelectedAtas(){ const items=(state.meta.atas||[]).filter(a=>state.ataSelected.has(a.id));if(!items.length){toast('Välj minst en ÄTA');return} if(!window.jspdf?.jsPDF){toast('PDF-modulen saknas');return} const {jsPDF}=window.jspdf, doc=new jsPDF();let y=18;doc.setFontSize(18);doc.text('EKIS FIELD – ÄTA / Avvikelser',14,y);y+=10;doc.setFontSize(10); for(const a of items){if(y>270){doc.addPage();y=18}doc.setFont(undefined,'bold');doc.text(`${a.number} – ${a.title}`,14,y);y+=6;doc.setFont(undefined,'normal');doc.text(`Status: ${a.status}   Datum: ${a.date}   Timmar: ${ataHours(a).toFixed(1)} h`,14,y);y+=5;if(a.description){const lines=doc.splitTextToSize(a.description,180);doc.text(lines,14,y);y+=lines.length*5}if(a.drawingNote){doc.text(`Ritning: ${a.drawingNote}`,14,y);y+=5}y+=5} const data=doc.output('datauristring'); const name=`EKIS_FIELD_ATA_${new Date().toISOString().slice(0,10)}.pdf`; if(window.Android?.shareBase64)Android.shareBase64(name,data,'application/pdf'); else downloadBlob(doc.output('blob'),name); }
@@ -828,12 +834,13 @@
   function nearestOverlayObject(e){const p=pdfPointFromEvent(e),tol=18/(state.renderScale*state.viewZoom);let best=null,d=1e9;for(const m of getMeasurements()){for(const q of m.points||[]){const z=distancePt(p,q);if(z<d&&z<tol){best={kind:'measure',obj:m};d=z}}}for(const a of getAnnotations()){for(const q of a.points||[]){const z=distancePt(p,q);if(z<d&&z<tol){best={kind:'annotation',obj:a};d=z}}}return best}
   $('#overlayCanvas').addEventListener('pointerdown',e=>{if(!['pen','arrow','circle'].includes(state.tool))return;const p=pdfPointFromEvent(e);state.drawDraft={type:state.tool,points:[p],pointerId:e.pointerId};try{e.target.setPointerCapture(e.pointerId)}catch{}e.preventDefault()});
   $('#overlayCanvas').addEventListener('pointermove',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;const p=pdfPointFromEvent(e);if(d.type==='pen')d.points.push(p);else d.points[1]=p;state.tempPoints=d.points;drawOverlay()});
-  $('#overlayCanvas').addEventListener('pointerup',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;const p=pdfPointFromEvent(e);if(d.type!=='pen')d.points[1]=p;if(d.points.length>1){const a={id:uid(),type:d.type,points:d.points};getAnnotations().push(a);if(state.activeAtaMark){const ata=(state.meta.atas||[]).find(x=>x.id===state.activeAtaMark);if(ata){ata.drawing={fileId:state.currentFileId,page:state.pageNum,view:captureViewState(),annotationId:a.id};ata.drawingNote=`${displayLabel(fileMeta(state.currentFileId))}, sida ${state.pageNum}`;}state.activeAtaMark=null}saveMeta()}state.drawDraft=null;state.tempPoints=[];setTool('pan');drawOverlay()});
+  $('#overlayCanvas').addEventListener('pointerup',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;const p=pdfPointFromEvent(e);if(d.type!=='pen')d.points[1]=p;if(d.points.length>1){const a={id:uid(),type:d.type,points:d.points};getAnnotations().push(a);if(state.activeAtaMark){state.ataMarkAnnotationId=a.id; updateAtaMarkBar();}saveMeta()}state.drawDraft=null;state.tempPoints=[];setTool('pan');drawOverlay()});
   $('#overlayCanvas').addEventListener('click',async e=>{if(state.tool==='text'){const text=await promptModal('Text på ritning','Skriv texten som ska sparas på ritningen.','');if(text){getAnnotations().push({id:uid(),type:'text',points:[pdfPointFromEvent(e)],text});saveMeta();setTool('pan');drawOverlay()}return}});
 
   // Distance: first tap fixes A. Second press starts B; drag and release commits a straight A–B distance.
   $("#overlayCanvas").addEventListener("pointerdown",e=>{
     if(state.tool!=="distance")return;
+    showMeasureMagnifier(e);
     const p=pdfPointFromEvent(e);
     // Existing endpoint editing has priority.
     let best=null,d=Infinity;for(const m of getMeasurements())for(const h of screenMeasureHandles(m)){const q=Math.hypot(e.clientX-h.cx,e.clientY-h.cy);if(q<30&&q<d){best={m,h};d=q}}
@@ -842,10 +849,12 @@
     state.distanceDraft={a:state.tempPoints[0],b:p,pointerId:e.pointerId};e.preventDefault();try{e.target.setPointerCapture(e.pointerId)}catch{}drawOverlay();
   });
   $("#overlayCanvas").addEventListener("pointermove",e=>{
+    if(state.tool==="distance"&&(state.distanceDraft||state.editMeasure))showMeasureMagnifier(e);
     if(state.editMeasure){const p=pdfPointFromEvent(e),m=state.editMeasure.m;if(state.editMeasure.h.kind==="a")m.points[0]=p;else m.points[1]=p;m.label=formatLength(ptToM(distancePt(m.points[0],m.points[1])));$("#measureResult").textContent=m.label;drawOverlay();return;}
     if(state.distanceDraft && (state.distanceDraft.pointerId==null||state.distanceDraft.pointerId===e.pointerId)){state.distanceDraft.b=pdfPointFromEvent(e);const m=ptToM(distancePt(state.distanceDraft.a,state.distanceDraft.b));$("#measureResult").textContent=formatLength(m);drawOverlay();}
   });
   $("#overlayCanvas").addEventListener("pointerup",e=>{
+    hideMeasureMagnifier();
     if(state.editMeasure){saveMeta();state.editMeasure=null;drawOverlay();return;}
     if(state.tool==="distance"&&state.distanceDraft){
       const d=state.distanceDraft;d.b=pdfPointFromEvent(e);const rawPt=distancePt(d.a,d.b);const m=ptToM(rawPt);
@@ -886,7 +895,7 @@
         if(added)continue;
         const txt=normalizeProductText(it.str);if(txt.length<5)continue;
         let best=null,bestScore=0;
-        for(const sch of schedules)for(const e0 of(sch.armatureIndex||[])){const e=enrichEntryWithOcchio(f.projectId,e0);const cand=normalizeProductText([e.type,e.brand,e.occhioMatch?.type].filter(Boolean).join(" "));if(!cand)continue;const a=new Set(txt.split(" ").filter(x=>x.length>=3)),b=new Set(cand.split(" ").filter(x=>x.length>=3));let c=0;for(const x of a)if(b.has(x))c++;const score=c/Math.max(2,Math.min(a.size,b.size));if(score>bestScore){bestScore=score;best=e;}}
+        for(const sch of schedules.filter(x=>x.documentType!=="occhioSchedule"))for(const e0 of(sch.armatureIndex||[])){const e=enrichEntryWithOcchio(f.projectId,e0);const cand=normalizeProductText([e.type,e.brand,e.occhioMatch?.type].filter(Boolean).join(" "));if(!cand)continue;const a=new Set(txt.split(" ").filter(x=>x.length>=3)),b=new Set(cand.split(" ").filter(x=>x.length>=3));let c=0;for(const x of a)if(b.has(x))c++;const score=c/Math.max(2,Math.min(a.size,b.size));if(score>bestScore){bestScore=score;best=e;}}
         if(best&&bestScore>=.6)state.smartHotspots.push({tag:best.tag,entry:best,x:it.x,y:it.y,w:Math.max(it.w,24),h:Math.max(it.h,10)});
       }
     }catch(err){console.warn("Hotspot scan failed",err)}
@@ -1482,6 +1491,17 @@
   }
 
   // Navigation & UI wiring
+  function updateAtaMarkBar(){
+    let bar=$("#ataMarkBar");
+    if(!bar){bar=document.createElement("div");bar.id="ataMarkBar";bar.className="ata-actions hidden";bar.innerHTML='<strong>ÄTA-markering</strong><button id="saveAtaMarkBtn" class="btn primary">Spara markering</button><button id="cancelAtaMarkBtn" class="btn">Avbryt</button>';$("#viewerView .viewer-head").after(bar);
+      $("#saveAtaMarkBtn").onclick=saveAtaMark; $("#cancelAtaMarkBtn").onclick=cancelAtaMark;}
+    bar.classList.toggle("hidden",!state.activeAtaMark);
+  }
+  function returnToAta(){showView("ataView",false);renderAtas();setTimeout(()=>document.querySelector(`[data-ata="${state.activeAtaMark}"]`)?.scrollIntoView({block:"center"}),50)}
+  function saveAtaMark(){const id=state.activeAtaMark,a=(state.meta.atas||[]).find(x=>x.id===id);if(!a||!state.ataMarkAnnotationId){toast("Ringa först in området på ritningen");return}a.drawing={fileId:state.currentFileId,page:state.pageNum,view:captureViewState(),annotationId:state.ataMarkAnnotationId};a.drawingNote=`${displayLabel(fileMeta(state.currentFileId))}, sida ${state.pageNum}`;saveMeta();returnToAta();state.activeAtaMark=null;state.ataMarkAnnotationId=null;updateAtaMarkBar();toast("ÄTA-markeringen sparades")}
+  function cancelAtaMark(){const id=state.activeAtaMark;if(state.ataMarkAnnotationId){const arr=getAnnotations(),i=arr.findIndex(x=>x.id===state.ataMarkAnnotationId);if(i>=0)arr.splice(i,1);saveMeta()}returnToAta();state.activeAtaMark=null;state.ataMarkAnnotationId=null;updateAtaMarkBar()}
+  function showMeasureMagnifier(e){if(state.tool!=="distance")return;const mag=$("#measureMagnifier"),base=$("#pdfCanvas"),over=$("#overlayCanvas"),vp=$("#pdfViewport");if(!mag||!base)return;mag.classList.remove("hidden");const vr=vp.getBoundingClientRect();mag.style.left=Math.max(8,Math.min(vp.clientWidth-160,e.clientX-vr.left-75))+"px";mag.style.top=Math.max(8,e.clientY-vr.top-190)+"px";const ctx=mag.getContext("2d"),r=over.getBoundingClientRect(),sx=(e.clientX-r.left)*(over.width/r.width),sy=(e.clientY-r.top)*(over.height/r.height),crop=45;ctx.clearRect(0,0,180,180);ctx.drawImage(base,sx-crop,sy-crop,crop*2,crop*2,0,0,180,180);ctx.strokeStyle="#ff6a00";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(90,68);ctx.lineTo(90,112);ctx.moveTo(68,90);ctx.lineTo(112,90);ctx.stroke();}
+  function hideMeasureMagnifier(){$("#measureMagnifier")?.classList.add("hidden")}
   $$(".nav-btn").forEach(b=>b.onclick=()=>{showView(b.dataset.view); if(b.dataset.view==="projectsView")renderProjects(); if(b.dataset.view==="drawingsView")renderAllDrawings(); if(b.dataset.view==="todoView")renderTodos(); if(b.dataset.view==="ataView")renderAtas()});
   $("#brandBtn").onclick=()=>{renderProjects();showView("projectsView")};
   $("#newProjectBtn").onclick=async()=>{
@@ -1489,7 +1509,10 @@
     if(!name)return; const p={id:uid(),name,files:[],createdAt:Date.now()};state.meta.projects.unshift(p);saveMeta();renderProjects();openProject(p.id);
   };
   $("#backProjectsBtn").onclick=()=>{renderProjects();showView("projectsView")};
-  $("#renameProjectBtn").onclick=async()=>{const p=currentProject();const n=await promptModal("Byt projektnamn","",p.name);if(n){p.name=n;saveMeta();renderProject()}};
+  $("#projectMenuBtn").onclick=()=>$("#projectMenu").classList.remove("hidden"); $("#menuCloseProject").onclick=()=>$("#projectMenu").classList.add("hidden");
+  $("#menuAddPdf").onclick=()=>{$("#projectMenu").classList.add("hidden");$("#pdfInput").click()}; $("#menuAddZip").onclick=()=>{$("#projectMenu").classList.add("hidden");$("#zipInput").click()}; $("#menuExportProject").onclick=()=>{$("#projectMenu").classList.add("hidden");$("#exportProjectBtn").click()};
+  $("#menuRenameProject").onclick=()=>{$("#projectMenu").classList.add("hidden");renameCurrentProject()}; $("#menuDeleteProject").onclick=()=>{$("#projectMenu").classList.add("hidden");deleteCurrentProject()};
+  const renameCurrentProject=async()=>{const p=currentProject();const n=await promptModal("Byt projektnamn","",p.name);if(n){p.name=n;saveMeta();renderProject()}};
   $("#deleteProjectBtn").onclick=()=>{const p=currentProject();if(p)deleteProjectById(p.id)};
   $("#pdfInput").onchange=e=>{if(e.target.files.length)importPdfs(e.target.files);e.target.value=""};
   $("#zipInput").onchange=e=>{if(e.target.files.length)importZips(e.target.files);e.target.value=""};
@@ -1499,6 +1522,7 @@
   $$('[data-ata-filter]').forEach(b=>b.onclick=()=>{state.ataFilter=b.dataset.ataFilter;$$('[data-ata-filter]').forEach(x=>x.classList.toggle('active',x===b));renderAtas()});
   $('#selectAllAtaBtn').onclick=()=>{const items=(state.meta.atas||[]).filter(a=>state.ataFilter==='all'||(state.ataFilter==='open'&&a.status!=='Utförd')||(state.ataFilter==='ongoing'&&a.status==='Pågående')||(state.ataFilter==='done'&&a.status==='Utförd'));items.forEach(a=>state.ataSelected.add(a.id));renderAtas()};
   $('#shareAtaBtn').onclick=shareSelectedAtas;
+  $('#ataCameraInput').onchange=e=>{const a=(state.meta.atas||[]).find(x=>x.id===state.ataPhotoTarget);if(!a)return;const f=e.target.files?.[0];if(f){const r=new FileReader();r.onload=()=>{a.photos=a.photos||[];a.photos.push(r.result);saveMeta();renderAtas();toast('Fotot lades till i ÄTA')};r.readAsDataURL(f)}e.target.value=''};
   $('#ataPhotoInput').onchange=e=>{const a=(state.meta.atas||[]).find(x=>x.id===state.ataPhotoTarget);if(!a)return;for(const f of [...e.target.files].slice(0,5)){const r=new FileReader();r.onload=()=>{a.photos=a.photos||[];a.photos.push(r.result);saveMeta();renderAtas()};r.readAsDataURL(f)}e.target.value=''};
   $('#deleteSelectedBtn').onclick=async()=>{const h=state.selectedOverlay;if(!h)return;if(!await confirmDelete('Ta bort från ritning?','Vill du verkligen ta bort den markerade mätningen/markeringen?'))return;if(h.kind==='measure'){const arr=getMeasurements(),i=arr.findIndex(x=>x.id===h.obj.id);if(i>=0)arr.splice(i,1)}else{const arr=getAnnotations(),i=arr.findIndex(x=>x.id===h.obj.id);if(i>=0)arr.splice(i,1)}state.selectedOverlay=null;$('#deleteSelectedBtn').classList.add('hidden');saveMeta();drawOverlay()};
   $('#riserBtn').onclick=()=>setRiserMode(!state.riserMode);
