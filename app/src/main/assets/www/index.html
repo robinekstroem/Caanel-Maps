@@ -129,11 +129,12 @@
         <div class="settings-card about-card">
           <div class="about-head">
             <div class="about-mark"><span>EKIS</span><small>FIELD</small></div>
-            <div><h3>Om EKIS FIELD</h3><div class="version-badge">Version 4.0.21 · Build 27</div></div>
+            <div><h3>Om EKIS FIELD</h3><div class="version-badge">Version 4.0.22 · Build 28</div></div>
           </div>
           <div class="owner-card"><strong>Utvecklad för och ägs av Robin Ekström</strong><span>© 2026 Robin Ekström · Alla rättigheter förbehållna.</span></div>
           <div class="about-section-title">Versionshistorik</div>
-          <details class="release-note" open><summary><span><b>4.0.21</b> Line Splash Stable</span><em>Senaste</em></summary><p><strong>Fixat</strong> Lampan är helt borttagen. Splashen använder endast två animerade ritningsledningar med mjuk fade, samt native EKIS FIELD och undertiteln RITNINGAR • ÄTA • DOKUMENTATION. Inga bildlager används.</p></details>
+          <details class="release-note" open><summary><span><b>4.0.22</b> Splash Final-State Fix</span><em>Senaste</em></summary><p><strong>Fixat</strong> Splashens slutläge låses nu explicit i WebView så EKIS FIELD och ledningarna inte kan blinka till och sedan falla tillbaka till mörkt läge.</p></details>
+          <details class="release-note"><summary><span><b>4.0.21</b> Line Splash Stable</span></summary><p>Lampan togs bort och ersattes av två animerade ritningsledningar.</p></details>
           <details class="release-note"><summary><span><b>4.0.20</b> Splash Stable</span></summary><p>Tidigare lampbaserad splash med transparent objekt.</p></details>
           <details class="release-note"><summary><span><b>4.0.19</b> Splash Rebuild & ÄTA Polish</span></summary><p>Tidigare splashförsök samt renare ÄTA / Avvikelser.</p></details>
           <details class="release-note"><summary><span><b>4.0.18</b> Splash Hotfix</span></summary><p>Tidigare splashförsök med realistisk lampreferens.</p></details>
@@ -316,9 +317,11 @@
     (function(){
       var splash=document.getElementById('ekisSplash');
       if(!splash)return;
+      // WebView-safe final state: force the completed splash before exit.
+      window.setTimeout(function(){ splash.classList.add('s21-final'); }, 1650);
       window.setTimeout(function(){
         splash.classList.add('ekis-splash-out');
-        window.setTimeout(function(){ if(splash && splash.parentNode) splash.parentNode.removeChild(splash); }, 520);
+        window.setTimeout(function(){ if(splash && splash.parentNode) splash.parentNode.removeChild(splash); }, 380);
       }, 3000);
     })();
   </script>
