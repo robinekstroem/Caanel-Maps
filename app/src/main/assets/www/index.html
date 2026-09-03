@@ -13,34 +13,13 @@
 </head>
 <body>
   <div id="ekisSplash" class="ekis-splash" aria-hidden="true">
-    <div class="launch-mark">
-      <svg class="launch-svg" viewBox="0 0 420 470" aria-hidden="true">
-        <defs>
-          <radialGradient id="bulbGlow"><stop offset="0" stop-color="#fffef5" stop-opacity="1"/><stop offset=".10" stop-color="#fff0b9" stop-opacity=".96"/><stop offset=".28" stop-color="#ffb24d" stop-opacity=".58"/><stop offset=".60" stop-color="#ff6a00" stop-opacity=".18"/><stop offset="1" stop-color="#ff6a00" stop-opacity="0"/></radialGradient>
-          <linearGradient id="glassStroke" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f5f5f5"/><stop offset=".28" stop-color="#7b7d80"/><stop offset=".52" stop-color="#fff7e8"/><stop offset=".78" stop-color="#636569"/><stop offset="1" stop-color="#f0f0f0"/></linearGradient>
-          <linearGradient id="metalBase" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#3c3d40"/><stop offset=".18" stop-color="#d8d8da"/><stop offset=".42" stop-color="#66686d"/><stop offset=".68" stop-color="#f2f2f2"/><stop offset="1" stop-color="#43454a"/></linearGradient>
-          <linearGradient id="lightCone" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff8d7" stop-opacity=".34"/><stop offset=".28" stop-color="#ffbd62" stop-opacity=".16"/><stop offset="1" stop-color="#ff6a00" stop-opacity="0"/></linearGradient>
-        </defs>
-        <path class="launch-wire" pathLength="1" d="M-20 78 H176 Q205 78 218 95 L232 114"/>
-        <path class="launch-drop" pathLength="1" d="M232 114 V138"/>
-        <g class="launch-bulb">
-          <circle class="bulb-aura" cx="232" cy="201" r="98" fill="url(#bulbGlow)"/>
-          <path class="bulb-cone" d="M196 225 L156 351 H308 L268 225 Z" fill="url(#lightCone)"/>
-          <path class="bulb-glass" d="M206 167 C206 142 225 126 232 126 C239 126 258 142 258 167 C258 187 249 198 243 206 C239 211 238 218 238 224 H226 C226 218 225 211 221 206 C215 198 206 187 206 167 Z"/>
-          <path class="bulb-highlight" d="M215 151 C210 161 211 177 216 186"/>
-          <path class="bulb-neck" d="M222 224 H242 M220 230 H244 M222 236 H242"/>
-          <path class="bulb-filament" d="M220 183 C224 170 228 170 232 183 C236 170 240 170 244 183 M232 183 V202"/>
-          <ellipse class="filament-core" cx="232" cy="183" rx="17" ry="19" fill="url(#bulbGlow)"/>
-          <path class="bulb-base-fill" d="M220 236 H244 L240 253 H224 Z" fill="url(#metalBase)"/>
-          <path class="bulb-base" d="M219 238 H245 M221 244 H243 M223 250 H241"/>
-          <path class="bulb-contact" d="M226 254 H238"/>
-        </g>
-        <path class="launch-floor" pathLength="1" d="M232 257 V345 M174 353 H290 M150 376 H314"/>
-      </svg>
-      <div class="launch-wordmark">
-        <div class="launch-ekis">EKIS</div>
-        <div class="launch-field"><span></span>FIELD<span></span></div>
-        <div class="launch-tagline">RITNINGAR. ÄTA. DOKUMENTATION.</div>
+    <div class="splash-stage">
+      <div class="splash-cable" aria-hidden="true"></div>
+      <div class="splash-lightwash" aria-hidden="true"></div>
+      <img class="splash-logo-photo" src="splash-logo-lit.png" alt="">
+      <div class="splash-bulb-wrap">
+        <img class="splash-bulb splash-bulb-off" src="splash-bulb-unlit.png" alt="">
+        <img class="splash-bulb splash-bulb-on" src="splash-bulb-lit.png" alt="">
       </div>
     </div>
   </div>
@@ -126,11 +105,12 @@
         <div class="settings-card about-card">
           <div class="about-head">
             <div class="about-mark"><span>EKIS</span><small>FIELD</small></div>
-            <div><h3>Om EKIS FIELD</h3><div class="version-badge">Version 4.0.17 · Build 23</div></div>
+            <div><h3>Om EKIS FIELD</h3><div class="version-badge">Version 4.0.18 · Build 24</div></div>
           </div>
           <div class="owner-card"><strong>Utvecklad för och ägs av Robin Ekström</strong><span>© 2026 Robin Ekström · Alla rättigheter förbehållna.</span></div>
           <div class="about-section-title">Versionshistorik</div>
-          <details class="release-note" open><summary><span><b>4.0.17</b> UI & Splash Polish</span><em>Senaste</em></summary><p><strong>Förbättrat</strong> Ny klinisk splash där EKIS FIELD ligger dolt i mörkret och belyses när lampan tänds. Renare startsida och omarbetad Om-sida.</p></details>
+          <details class="release-note" open><summary><span><b>4.0.18</b> Splash Hotfix</span><em>Senaste</em></summary><p><strong>Fixat</strong> Splashen använder nu den godkända realistiska glaslampan. EKIS FIELD är helt dolt tills lampan tänds och ljuset avslöjar logotypen ur mörkret.</p></details>
+          <details class="release-note"><summary><span><b>4.0.17</b> UI & Splash Polish</span></summary><p>Renare startsida och omarbetad Om-sida.</p></details>
           <details class="release-note"><summary><span><b>4.0.16</b> Stability Bugfix</span></summary><p>Helskärmscentrering · projektsök i ⋮ · jämnare ÄTA/Avvikelser · långtryck och dra för ritobjekt.</p></details>
           <details class="release-note"><summary><span><b>4.0.15</b> Markup Fix</span></summary><p>Text, Penna, Pil, Ring och mätningar kan markeras och tas bort individuellt.</p></details>
           <details class="release-note"><summary><span><b>4.0.14</b> Themes & ÄTA</span></summary><p>Svart/vitt tema · ritningsmarkering sparas som bild till rätt ÄTA · stabilare retur.</p></details>
