@@ -331,3 +331,14 @@ button.file-tag{cursor:pointer}
 :root[data-theme="light"] .viewer-view.fullscreen-ui .viewer-head,:root[data-theme="light"] .viewer-view.fullscreen-ui .toolstrip{background:rgba(255,255,255,.88)}
 :root[data-theme="light"] #ataMarkBar{box-shadow:0 8px 26px rgba(25,28,34,.06)}
 @media(max-width:520px){.theme-picker{grid-template-columns:1fr 1fr}.theme-option{padding:9px}.theme-preview{height:50px}}
+
+/* EKIS FIELD v4.0.16 stability polish */
+.project-menu-actions{display:grid;grid-template-columns:1fr 1fr}.project-menu-actions .btn{width:100%}
+#projectSearchModal .search{margin:14px 0;width:100%}
+.bottom-nav .nav-btn[data-view="ataView"]{font-size:11px;font-weight:750;letter-spacing:0}.bottom-nav .nav-btn[data-view="ataView"] span{font-size:15px;line-height:20px;font-weight:900;letter-spacing:.02em}
+.viewer-view.fullscreen-ui .pdf-viewport{min-height:calc(100vh - 190px);padding:18px 18px 0}
+.viewer-view.fullscreen-ui .canvas-wrap{margin-left:auto;margin-right:auto}
+/* cleaner clinical intro: restrained glow, pure black mask */
+.ekis-splash{background:#000!important}.bulb-cone{display:none}.launch-floor{opacity:.12!important}.bulb-aura{filter:blur(2px)}
+.launch-wire,.launch-drop{stroke-width:1.65;filter:drop-shadow(0 0 3px rgba(255,106,0,.42))}.launch-ekis{filter:drop-shadow(0 3px 3px rgba(0,0,0,.92)) drop-shadow(0 0 2px rgba(255,106,0,.12))}
+@media(max-width:650px){.project-menu-actions{grid-template-columns:1fr}.viewer-view.fullscreen-ui .pdf-viewport{padding:14px 14px 0}}

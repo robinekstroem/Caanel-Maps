@@ -789,7 +789,7 @@
     await loadSmartHotspots(page,viewport);
     $("#pageLabel").textContent=`${state.pageNum} / ${state.pageCount}`;
     $("#prevPageBtn").disabled=state.pageNum<=1; $("#nextPageBtn").disabled=state.pageNum>=state.pageCount;
-    syncScaleUI(); state.tempPoints=[]; drawOverlay(); updateHint();
+    syncScaleUI(); state.tempPoints=[]; drawOverlay(); updateHint(); setTimeout(centerFullscreenDrawing,60);
   }
 
   function getMeasurements(){
@@ -888,7 +888,58 @@
     state.tempPoints=[]; saveMeta(); drawOverlay();
   }
 
-  function nearestOverlayObject(e){const p=pdfPointFromEvent(e),tol=18/(state.renderScale*state.viewZoom);let best=null,d=1e9;for(const m of getMeasurements()){for(const q of m.points||[]){const z=distancePt(p,q);if(z<d&&z<tol){best={kind:'measure',obj:m};d=z}}}for(const a of getAnnotations()){for(const q of a.points||[]){const z=distancePt(p,q);if(z<d&&z<tol){best={kind:'annotation',obj:a};d=z}}}return best}
+  function nearestOverlayObject(e){
+    // Hit-test in screen pixels so *all* visible markup can be selected for deletion,
+    // including the body of text, freehand strokes, arrows and circles — not only
+    // their anchor/control points.
+    const r=$("#overlayCanvas").getBoundingClientRect();
+    const sc=state.renderScale*state.viewZoom;
+    const x=e.clientX-r.left, y=e.clientY-r.top;
+    const tol=26;
+    const sp=p=>({x:p.x*sc,y:p.y*sc});
+    const pointDist=p=>Math.hypot(x-p.x,y-p.y);
+    const segDist=(p,a,b)=>{
+      const vx=b.x-a.x,vy=b.y-a.y,wx=p.x-a.x,wy=p.y-a.y;
+      const vv=vx*vx+vy*vy||1;
+      const t=Math.max(0,Math.min(1,(wx*vx+wy*vy)/vv));
+      return Math.hypot(p.x-(a.x+t*vx),p.y-(a.y+t*vy));
+    };
+    let best=null,bestD=Infinity;
+    const take=(kind,obj,d)=>{if(d<=tol&&d<bestD){best={kind,obj};bestD=d}};
+
+    for(const m of getMeasurements()){
+      const pts=(m.points||[]).map(sp);
+      for(const q of pts)take('measure',m,pointDist(q));
+      for(let i=1;i<pts.length;i++)take('measure',m,segDist({x,y},pts[i-1],pts[i]));
+      if(m.type==='area'&&pts.length>2)take('measure',m,segDist({x,y},pts[pts.length-1],pts[0]));
+    }
+
+    for(const a of getAnnotations()){
+      const pts=(a.points||[]).map(sp);
+      if(a.type==='text'&&pts[0]){
+        const q=pts[0], text=String(a.text||'');
+        const w=Math.max(44,text.length*10), h=30;
+        const left=q.x-8,right=q.x+w+8,top=q.y-h,bottom=q.y+10;
+        const nx=Math.max(left,Math.min(x,right)),ny=Math.max(top,Math.min(y,bottom));
+        take('annotation',a,Math.hypot(x-nx,y-ny));
+        continue;
+      }
+      if(a.type==='circle'&&pts.length>=2){
+        const p=pts[0],q=pts[1],cx=(p.x+q.x)/2,cy=(p.y+q.y)/2;
+        const rx=Math.max(2,Math.abs(q.x-p.x)/2),ry=Math.max(2,Math.abs(q.y-p.y)/2);
+        const ang=Math.atan2(y-cy,x-cx);
+        const ex=cx+rx*Math.cos(ang),ey=cy+ry*Math.sin(ang);
+        take('annotation',a,Math.hypot(x-ex,y-ey));
+        // Also allow tapping inside a small/skinny ring.
+        const inside=((x-cx)*(x-cx))/(rx*rx)+((y-cy)*(y-cy))/(ry*ry)<=1;
+        if(inside&&rx<55&&ry<55)take('annotation',a,0);
+        continue;
+      }
+      for(const q of pts)take('annotation',a,pointDist(q));
+      for(let i=1;i<pts.length;i++)take('annotation',a,segDist({x,y},pts[i-1],pts[i]));
+    }
+    return best;
+  }
   $('#overlayCanvas').addEventListener('pointerdown',e=>{if(!['pen','arrow','circle'].includes(state.tool))return;const p=pdfPointFromEvent(e);state.drawDraft={type:state.tool,points:[p],pointerId:e.pointerId};try{e.target.setPointerCapture(e.pointerId)}catch{}e.preventDefault()});
   $('#overlayCanvas').addEventListener('pointermove',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;const p=pdfPointFromEvent(e);if(d.type==='pen')d.points.push(p);else d.points[1]=p;state.tempPoints=d.points;drawOverlay()});
   $('#overlayCanvas').addEventListener('pointerup',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;const p=pdfPointFromEvent(e);if(d.type!=='pen')d.points[1]=p;if(d.points.length>1){const a={id:uid(),type:d.type,points:d.points};getAnnotations().push(a);if(state.activeAtaMark){state.ataMarkAnnotationId=a.id; updateAtaMarkBar();}saveMeta()}state.drawDraft=null;state.tempPoints=[];setTool('pan');drawOverlay()});
@@ -1340,6 +1391,21 @@
     return true;
   }
 
+  function centerFullscreenDrawing(){
+    const viewer=$("#viewerView"), viewport=$("#pdfViewport"), wrap=$("#canvasWrap");
+    if(!viewer||!viewport||!wrap||!viewer.classList.contains("fullscreen-ui"))return;
+    wrap.style.marginTop="18px"; wrap.style.marginBottom="18px";
+    requestAnimationFrame(()=>{
+      const cs=getComputedStyle(viewport);
+      const innerH=viewport.clientHeight-(parseFloat(cs.paddingTop)||0)-(parseFloat(cs.paddingBottom)||0);
+      const h=wrap.getBoundingClientRect().height;
+      if(h>0 && h<innerH){const gap=Math.max(18,(innerH-h)/2);wrap.style.marginTop=gap+"px";wrap.style.marginBottom=gap+"px";viewport.scrollTop=0;}
+      const innerW=viewport.clientWidth-(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0);
+      const w=wrap.getBoundingClientRect().width;
+      if(w>innerW) viewport.scrollLeft=Math.max(0,(viewport.scrollWidth-viewport.clientWidth)/2);
+    });
+  }
+
   async function toggleFullscreen(){
     const viewer=$("#viewerView");
     const isNative=!!(document.fullscreenElement||document.webkitFullscreenElement);
@@ -1349,10 +1415,11 @@
         if(document.exitFullscreen)await document.exitFullscreen();
         else if(document.webkitExitFullscreen)document.webkitExitFullscreen();
       }catch(e){}
-      viewer.classList.remove("fullscreen-ui"); return;
+      viewer.classList.remove("fullscreen-ui"); $("#canvasWrap").style.marginTop=""; $("#canvasWrap").style.marginBottom=""; return;
     }
     if(isPseudo){
       viewer.classList.remove("pseudo-fullscreen","fullscreen-ui");
+      $("#canvasWrap").style.marginTop=""; $("#canvasWrap").style.marginBottom="";
       $("#fullscreenBtn").textContent="⛶"; return;
     }
     try{
@@ -1363,6 +1430,7 @@
       viewer.classList.add("pseudo-fullscreen","fullscreen-ui");
     }
     $("#fullscreenBtn").textContent="⤢";
+    setTimeout(centerFullscreenDrawing,120);
   }
 
   function syncFullscreenUI(){
@@ -1421,8 +1489,19 @@
         const t=e.touches[0];
         state.touchState={
           mode:"single",startX:t.clientX,startY:t.clientY,lastX:t.clientX,lastY:t.clientY,
-          scrollLeft:viewport.scrollLeft,scrollTop:viewport.scrollTop,time:Date.now(),moved:false
+          scrollLeft:viewport.scrollLeft,scrollTop:viewport.scrollTop,time:Date.now(),moved:false,longPressTimer:null,markupDrag:null
         };
+        if(state.tool==="pan"){
+          const ts=state.touchState;
+          ts.longPressTimer=setTimeout(()=>{
+            if(!state.touchState||state.touchState!==ts||ts.moved)return;
+            const hit=nearestOverlayObject({clientX:ts.startX,clientY:ts.startY});
+            if(hit?.kind!=="annotation")return;
+            const a=hit.obj; ts.markupDrag={annotation:a,lastX:ts.startX,lastY:ts.startY};
+            state.selectedOverlay=hit; a.selected=true; $("#deleteSelectedBtn").classList.remove("hidden");
+            state.suppressClickUntil=Date.now()+700; drawOverlay(); toast("Flytta markeringen och släpp");
+          },480);
+        }
       }
     },{passive:false});
 
@@ -1450,7 +1529,13 @@
         e.preventDefault();
         const t=e.touches[0],dx=t.clientX-ts.startX,dy=t.clientY-ts.startY;
         ts.lastX=t.clientX;ts.lastY=t.clientY;
-        if(Math.abs(dx)>4||Math.abs(dy)>4)ts.moved=true;
+        if(ts.markupDrag){
+          const md=ts.markupDrag, sc=state.renderScale*state.viewZoom||1;
+          const ddx=(t.clientX-md.lastX)/sc, ddy=(t.clientY-md.lastY)/sc;
+          md.annotation.points=(md.annotation.points||[]).map(p=>({x:p.x+ddx,y:p.y+ddy}));
+          md.lastX=t.clientX;md.lastY=t.clientY;ts.moved=true;drawOverlay();return;
+        }
+        if(Math.abs(dx)>7||Math.abs(dy)>7){ts.moved=true;if(ts.longPressTimer){clearTimeout(ts.longPressTimer);ts.longPressTimer=null;}}
 
         // Inzoomad = panorera. Helt utzoomad = reservera horisontell gest för byte av ritning.
         if(!isFullyZoomedOut()){
@@ -1463,7 +1548,9 @@
     viewport.addEventListener("touchend",async e=>{
       const ts=state.touchState;if(!ts || e.touches.length>0)return;
       state.touchState=null;
+      if(ts.longPressTimer)clearTimeout(ts.longPressTimer);
       if(ts.mode!=="single")return;
+      if(ts.markupDrag){saveMeta();drawOverlay();state.suppressClickUntil=Date.now()+500;toast("Markeringen flyttad");return;}
       const dx=ts.lastX-ts.startX,dy=ts.lastY-ts.startY,dt=Date.now()-ts.time;
 
       if(state.riserMode && state.tool==='pan' && dt<1100 && Math.max(Math.abs(dx),Math.abs(dy))>85){
@@ -1617,6 +1704,8 @@
   };
   $("#backProjectsBtn").onclick=()=>{renderProjects();showView("projectsView")};
   $("#projectMenuBtn").onclick=()=>$("#projectMenu").classList.remove("hidden"); $("#menuCloseProject").onclick=()=>$("#projectMenu").classList.add("hidden");
+  $("#menuSearchProject").onclick=()=>{$("#projectMenu").classList.add("hidden");$("#projectSearchModal").classList.remove("hidden");setTimeout(()=>$("#projectSearch").focus(),40)};
+  $("#projectSearchClose").onclick=()=>$("#projectSearchModal").classList.add("hidden");
   $("#menuAddPdf").onclick=()=>{$("#projectMenu").classList.add("hidden");$("#pdfInput").click()}; $("#menuAddZip").onclick=()=>{$("#projectMenu").classList.add("hidden");$("#zipInput").click()}; $("#menuExportProject").onclick=()=>{$("#projectMenu").classList.add("hidden");$("#exportProjectBtn").click()};
   const renameCurrentProject=async()=>{const p=currentProject();if(!p)return;const n=await promptModal("Byt projektnamn","",p.name);if(n){p.name=n;saveMeta();renderProject()}};
   const deleteCurrentProject=async()=>{const p=currentProject();if(p)await deleteProjectById(p.id)};
