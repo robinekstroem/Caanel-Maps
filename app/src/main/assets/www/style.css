@@ -405,3 +405,28 @@ button.file-tag{cursor:pointer}
 .bottom-nav .nav-btn[data-view="ataView"] span{font-size:13px!important;line-height:19px!important;font-weight:900!important;letter-spacing:.03em}
 @media(max-width:430px){#ataView .ata-section-head{align-items:flex-start;flex-direction:column;padding:16px}#ataView .ata-new-btn{width:100%}#ataView .ata-summary{grid-template-columns:repeat(3,1fr)}#ataView .ata-summary>div{padding:10px 9px}#ataView .ata-summary b{font-size:18px}#ataView .ata-lead{font-size:11px}}
 :root[data-theme="light"] #ataView .ata-section-head{background:linear-gradient(145deg,#fff8f2 0%,#fff 48%,#f7f8fa 100%);box-shadow:0 8px 26px rgba(30,34,42,.045)}
+
+/* EKIS FIELD v4.0.20 — stable splash: one transparent bulb asset, everything else native */
+#ekisSplash{background:#000!important}
+#ekisSplash .splash-stage,#ekisSplash .splash-cable,#ekisSplash .splash-lightwash,#ekisSplash .splash-logo-wrap,#ekisSplash .splash-bulb-wrap{display:none!important}
+.s20-stage{position:relative;width:min(100vw,620px);height:min(64vh,610px);min-height:430px;background:#000;overflow:hidden;isolation:isolate}
+.s20-wire{position:absolute;left:0;top:33%;width:100%;height:48%;z-index:2;overflow:visible}
+.s20-wire-glow,.s20-wire-core{fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1;stroke-dashoffset:1;animation:s20Draw 1.08s cubic-bezier(.22,.82,.22,1) .14s forwards}
+.s20-wire-glow{stroke:#ff6500;stroke-width:8;opacity:.18;filter:blur(4px)}
+.s20-wire-core{stroke:#ff6a00;stroke-width:2.6;filter:drop-shadow(0 0 3px rgba(255,106,0,.42))}
+.s20-bulb{position:absolute;right:3.2%;top:48.5%;width:37%;height:auto;z-index:5;transform:translateY(-50%) scale(.995);opacity:0;filter:brightness(.08) saturate(.2) contrast(1.12);animation:s20Bulb 1.46s cubic-bezier(.18,.78,.15,1) .78s forwards;pointer-events:none}
+.s20-bulb-halo{position:absolute;right:-2%;top:48%;width:55%;aspect-ratio:1/1;z-index:1;transform:translateY(-50%) scale(.55);border-radius:50%;opacity:0;background:radial-gradient(circle,rgba(255,242,198,.24) 0%,rgba(255,174,72,.13) 25%,rgba(255,106,0,.06) 45%,rgba(0,0,0,0) 72%);filter:blur(14px);animation:s20Halo 1.12s ease 1.22s forwards}
+.s20-wordmark{position:absolute;left:6.4%;top:48.5%;width:58%;z-index:4;transform:translateY(-50%);text-align:center;opacity:0;filter:brightness(.12);clip-path:inset(0 100% 0 0);animation:s20Reveal .94s cubic-bezier(.2,.82,.2,1) 1.48s forwards,s20WordLight .94s ease 1.48s forwards}
+.s20-ekis{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-weight:550;font-size:clamp(54px,14vw,86px);letter-spacing:.16em;line-height:.92;color:#a9aaad;background:linear-gradient(180deg,#f1f1f0 2%,#bbbcbf 42%,#5e5f62 69%,#d5d5d4 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;text-shadow:0 1px 0 rgba(255,255,255,.12),0 7px 18px rgba(0,0,0,.55)}
+.s20-field{margin-top:11px;display:flex;align-items:center;justify-content:center;gap:14px;color:#ff6a00}
+.s20-field i{display:block;width:44px;height:1.5px;background:#ff6a00;box-shadow:0 0 5px rgba(255,106,0,.24)}
+.s20-field span{font-size:clamp(19px,5.3vw,29px);font-weight:550;letter-spacing:.38em;line-height:1;color:#ff6a00}
+.s20-tagline{margin-top:17px;font-size:clamp(8px,2.3vw,12px);font-weight:450;letter-spacing:.14em;color:#a6a6aa;white-space:nowrap}
+.s20-tagline b{color:#ff6a00;font-weight:500;padding:0 .42em}
+@keyframes s20Draw{to{stroke-dashoffset:0}}
+@keyframes s20Bulb{0%,19%{opacity:0;filter:brightness(.06) saturate(.15)}28%{opacity:.52;filter:brightness(.17) saturate(.35)}39%{opacity:1;filter:brightness(1.28) saturate(1.05)}48%{opacity:.48;filter:brightness(.42) saturate(.7)}58%{opacity:1;filter:brightness(1.08) saturate(1)}72%,100%{opacity:1;filter:brightness(1) saturate(1)}}
+@keyframes s20Halo{0%{opacity:0;transform:translateY(-50%) scale(.55)}45%{opacity:.72;transform:translateY(-50%) scale(1.04)}100%{opacity:.42;transform:translateY(-50%) scale(1)}}
+@keyframes s20Reveal{0%{clip-path:inset(0 100% 0 0)}100%{clip-path:inset(0 0 0 0)}}
+@keyframes s20WordLight{0%{opacity:0;filter:brightness(.08)}30%{opacity:.20;filter:brightness(.34)}70%{opacity:.78;filter:brightness(.88)}100%{opacity:1;filter:brightness(1)}}
+@media(max-width:390px){.s20-stage{height:min(60vh,540px);min-height:410px}.s20-bulb{right:-1%;width:40%}.s20-wordmark{left:4%;width:62%}.s20-wire{top:34%;height:46%}.s20-tagline{letter-spacing:.09em}}
+@media(prefers-reduced-motion:reduce){.s20-wire-glow,.s20-wire-core,.s20-bulb,.s20-bulb-halo,.s20-wordmark{animation-duration:.01ms!important;animation-delay:0s!important;animation-fill-mode:forwards!important}}

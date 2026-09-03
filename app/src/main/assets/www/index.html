@@ -13,16 +13,18 @@
 </head>
 <body>
   <div id="ekisSplash" class="ekis-splash" aria-hidden="true">
-    <div class="splash-stage">
-      <div class="splash-cable" aria-hidden="true"><span></span></div>
-      <div class="splash-lightwash" aria-hidden="true"></div>
-      <div class="splash-logo-wrap">
-        <img class="splash-logo-photo" src="splash-logo-cutout.png" alt="">
+    <div class="s20-stage">
+      <svg class="s20-wire" viewBox="0 0 1000 360" preserveAspectRatio="none" aria-hidden="true">
+        <path class="s20-wire-glow" pathLength="1" d="M -30 250 H 735 C 790 250 800 279 842 279"/>
+        <path class="s20-wire-core" pathLength="1" d="M -30 250 H 735 C 790 250 800 279 842 279"/>
+      </svg>
+      <div class="s20-wordmark">
+        <div class="s20-ekis">EKIS</div>
+        <div class="s20-field"><i></i><span>FIELD</span><i></i></div>
+        <div class="s20-tagline">RITNINGAR <b>•</b> ÄTA <b>•</b> DOKUMENTATION</div>
       </div>
-      <div class="splash-bulb-wrap">
-        <img class="splash-bulb splash-bulb-dark" src="splash-bulb-cutout.png" alt="">
-        <img class="splash-bulb splash-bulb-lit" src="splash-bulb-cutout.png" alt="">
-      </div>
+      <div class="s20-bulb-halo" aria-hidden="true"></div>
+      <img class="s20-bulb" src="splash-bulb-v20.png" alt="">
     </div>
   </div>
   <div id="app">
@@ -107,11 +109,12 @@
         <div class="settings-card about-card">
           <div class="about-head">
             <div class="about-mark"><span>EKIS</span><small>FIELD</small></div>
-            <div><h3>Om EKIS FIELD</h3><div class="version-badge">Version 4.0.19 · Build 25</div></div>
+            <div><h3>Om EKIS FIELD</h3><div class="version-badge">Version 4.0.20 · Build 26</div></div>
           </div>
           <div class="owner-card"><strong>Utvecklad för och ägs av Robin Ekström</strong><span>© 2026 Robin Ekström · Alla rättigheter förbehållna.</span></div>
           <div class="about-section-title">Versionshistorik</div>
-          <details class="release-note" open><summary><span><b>4.0.19</b> Splash Rebuild & ÄTA Polish</span><em>Senaste</em></summary><p><strong>Fixat</strong> Splashen är ombyggd med frilagd realistisk glaslampa utan bildrutor/dubbelbilder. EKIS FIELD visas först när lampan tänds. ÄTA / Avvikelser har fått en renare, mer sammanhållen layout.</p></details>
+          <details class="release-note" open><summary><span><b>4.0.20</b> Splash Stable</span><em>Senaste</em></summary><p><strong>Fixat</strong> Splashen använder endast ett transparent lampobjekt. Kabel, EKIS FIELD och undertitel ritas separat i appen för att eliminera rektangulära bildlager och dubbelrendering.</p></details>
+          <details class="release-note"><summary><span><b>4.0.19</b> Splash Rebuild & ÄTA Polish</span></summary><p>Tidigare splashförsök samt renare ÄTA / Avvikelser.</p></details>
           <details class="release-note"><summary><span><b>4.0.18</b> Splash Hotfix</span></summary><p>Tidigare splashförsök med realistisk lampreferens.</p></details>
           <details class="release-note"><summary><span><b>4.0.17</b> UI & Splash Polish</span></summary><p>Renare startsida och omarbetad Om-sida.</p></details>
           <details class="release-note"><summary><span><b>4.0.16</b> Stability Bugfix</span></summary><p>Helskärmscentrering · projektsök i ⋮ · jämnare ÄTA/Avvikelser · långtryck och dra för ritobjekt.</p></details>
