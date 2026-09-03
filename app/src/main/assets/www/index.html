@@ -14,12 +14,14 @@
 <body>
   <div id="ekisSplash" class="ekis-splash" aria-hidden="true">
     <div class="splash-stage">
-      <div class="splash-cable" aria-hidden="true"></div>
+      <div class="splash-cable" aria-hidden="true"><span></span></div>
       <div class="splash-lightwash" aria-hidden="true"></div>
-      <img class="splash-logo-photo" src="splash-logo-lit.png" alt="">
+      <div class="splash-logo-wrap">
+        <img class="splash-logo-photo" src="splash-logo-cutout.png" alt="">
+      </div>
       <div class="splash-bulb-wrap">
-        <img class="splash-bulb splash-bulb-off" src="splash-bulb-unlit.png" alt="">
-        <img class="splash-bulb splash-bulb-on" src="splash-bulb-lit.png" alt="">
+        <img class="splash-bulb splash-bulb-dark" src="splash-bulb-cutout.png" alt="">
+        <img class="splash-bulb splash-bulb-lit" src="splash-bulb-cutout.png" alt="">
       </div>
     </div>
   </div>
@@ -70,7 +72,7 @@
       </section>
 
       <section id="ataView" class="view">
-        <div class="section-head"><div><p class="eyebrow">EXTRAARBETE</p><h1>ÄTA / Avvikelser</h1></div><button id="newAtaBtn" class="btn primary">+ Ny ÄTA</button></div>
+        <div class="section-head ata-section-head"><div><p class="eyebrow">EXTRAARBETE</p><h1>ÄTA / Avvikelser</h1><p class="ata-lead">Dokumentera ändringar, foton, timmar och avvikelser samlat.</p></div><button id="newAtaBtn" class="btn primary ata-new-btn">+ Ny ÄTA</button></div>
         <div class="ata-summary" id="ataSummary"></div>
         <div class="todo-filters"><button class="todo-filter active" data-ata-filter="open">Öppna</button><button class="todo-filter" data-ata-filter="ongoing">Pågående</button><button class="todo-filter" data-ata-filter="done">Utförda</button><button class="todo-filter" data-ata-filter="all">Alla</button></div>
         <div class="ata-actions"><button id="selectAllAtaBtn" class="btn">Markera alla</button><button id="shareAtaBtn" class="btn primary">Dela valda <span id="ataSelectedCount">0</span></button></div>
@@ -105,11 +107,12 @@
         <div class="settings-card about-card">
           <div class="about-head">
             <div class="about-mark"><span>EKIS</span><small>FIELD</small></div>
-            <div><h3>Om EKIS FIELD</h3><div class="version-badge">Version 4.0.18 · Build 24</div></div>
+            <div><h3>Om EKIS FIELD</h3><div class="version-badge">Version 4.0.19 · Build 25</div></div>
           </div>
           <div class="owner-card"><strong>Utvecklad för och ägs av Robin Ekström</strong><span>© 2026 Robin Ekström · Alla rättigheter förbehållna.</span></div>
           <div class="about-section-title">Versionshistorik</div>
-          <details class="release-note" open><summary><span><b>4.0.18</b> Splash Hotfix</span><em>Senaste</em></summary><p><strong>Fixat</strong> Splashen använder nu den godkända realistiska glaslampan. EKIS FIELD är helt dolt tills lampan tänds och ljuset avslöjar logotypen ur mörkret.</p></details>
+          <details class="release-note" open><summary><span><b>4.0.19</b> Splash Rebuild & ÄTA Polish</span><em>Senaste</em></summary><p><strong>Fixat</strong> Splashen är ombyggd med frilagd realistisk glaslampa utan bildrutor/dubbelbilder. EKIS FIELD visas först när lampan tänds. ÄTA / Avvikelser har fått en renare, mer sammanhållen layout.</p></details>
+          <details class="release-note"><summary><span><b>4.0.18</b> Splash Hotfix</span></summary><p>Tidigare splashförsök med realistisk lampreferens.</p></details>
           <details class="release-note"><summary><span><b>4.0.17</b> UI & Splash Polish</span></summary><p>Renare startsida och omarbetad Om-sida.</p></details>
           <details class="release-note"><summary><span><b>4.0.16</b> Stability Bugfix</span></summary><p>Helskärmscentrering · projektsök i ⋮ · jämnare ÄTA/Avvikelser · långtryck och dra för ritobjekt.</p></details>
           <details class="release-note"><summary><span><b>4.0.15</b> Markup Fix</span></summary><p>Text, Penna, Pil, Ring och mätningar kan markeras och tas bort individuellt.</p></details>
@@ -292,7 +295,7 @@
       window.setTimeout(function(){
         splash.classList.add('ekis-splash-out');
         window.setTimeout(function(){ if(splash && splash.parentNode) splash.parentNode.removeChild(splash); }, 520);
-      }, 2850);
+      }, 3000);
     })();
   </script>
 </body>
