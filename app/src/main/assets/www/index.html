@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b0b0c">
+  <meta name="description" content="EKIS FIELD – personlig ritnings- och projektapp">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+  <title>EKIS FIELD</title>
+</head>
+<body>
+  <div id="ekisSplash" class="ekis-splash" aria-hidden="true">
+    <div class="launch-mark">
+      <svg class="launch-svg" viewBox="0 0 420 470" aria-hidden="true">
+        <defs>
+          <radialGradient id="bulbGlow"><stop offset="0" stop-color="#fffef5" stop-opacity="1"/><stop offset=".10" stop-color="#fff0b9" stop-opacity=".96"/><stop offset=".28" stop-color="#ffb24d" stop-opacity=".58"/><stop offset=".60" stop-color="#ff6a00" stop-opacity=".18"/><stop offset="1" stop-color="#ff6a00" stop-opacity="0"/></radialGradient>
+          <linearGradient id="glassStroke" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f5f5f5"/><stop offset=".28" stop-color="#7b7d80"/><stop offset=".52" stop-color="#fff7e8"/><stop offset=".78" stop-color="#636569"/><stop offset="1" stop-color="#f0f0f0"/></linearGradient>
+          <linearGradient id="metalBase" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#3c3d40"/><stop offset=".18" stop-color="#d8d8da"/><stop offset=".42" stop-color="#66686d"/><stop offset=".68" stop-color="#f2f2f2"/><stop offset="1" stop-color="#43454a"/></linearGradient>
+          <linearGradient id="lightCone" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff8d7" stop-opacity=".34"/><stop offset=".28" stop-color="#ffbd62" stop-opacity=".16"/><stop offset="1" stop-color="#ff6a00" stop-opacity="0"/></linearGradient>
+        </defs>
+        <path class="launch-wire" pathLength="1" d="M-20 78 H176 Q205 78 218 95 L232 114"/>
+        <path class="launch-drop" pathLength="1" d="M232 114 V138"/>
+        <g class="launch-bulb">
+          <circle class="bulb-aura" cx="232" cy="201" r="98" fill="url(#bulbGlow)"/>
+          <path class="bulb-cone" d="M196 225 L156 351 H308 L268 225 Z" fill="url(#lightCone)"/>
+          <path class="bulb-glass" d="M206 167 C206 142 225 126 232 126 C239 126 258 142 258 167 C258 187 249 198 243 206 C239 211 238 218 238 224 H226 C226 218 225 211 221 206 C215 198 206 187 206 167 Z"/>
+          <path class="bulb-highlight" d="M215 151 C210 161 211 177 216 186"/>
+          <path class="bulb-neck" d="M222 224 H242 M220 230 H244 M222 236 H242"/>
+          <path class="bulb-filament" d="M220 183 C224 170 228 170 232 183 C236 170 240 170 244 183 M232 183 V202"/>
+          <ellipse class="filament-core" cx="232" cy="183" rx="17" ry="19" fill="url(#bulbGlow)"/>
+          <path class="bulb-base-fill" d="M220 236 H244 L240 253 H224 Z" fill="url(#metalBase)"/>
+          <path class="bulb-base" d="M219 238 H245 M221 244 H243 M223 250 H241"/>
+          <path class="bulb-contact" d="M226 254 H238"/>
+        </g>
+        <path class="launch-floor" pathLength="1" d="M232 257 V345 M174 353 H290 M150 376 H314"/>
+      </svg>
+      <div class="launch-wordmark">
+        <div class="launch-ekis">EKIS</div>
+        <div class="launch-field"><span></span>FIELD<span></span></div>
+        <div class="launch-tagline">RITNINGAR. ÄTA. DOKUMENTATION.</div>
+      </div>
+    </div>
+  </div>
+  <div id="app">
+    <header class="topbar">
+      <button class="brand" id="brandBtn" aria-label="Gå till projekt">
+        <img src="logo-transparent.png" alt="EKIS FIELD">
+      </button>
+      <div class="top-actions">
+        <span id="storageBadge" class="badge">Lokalt</span>
+        <button id="installBtn" class="icon-btn hidden" aria-label="Installera appen">＋</button>
+      </div>
+    </header>
+
+    <main id="main">
+      <section id="projectsView" class="view active">
+        <div class="hero">
+          <div>
+            <p class="eyebrow">EKIS FIELD</p>
+            <h1>Mina projekt</h1>
+            <p class="hero-subtitle">Ritningar <span>·</span> ÄTA <span>·</span> Dokumentation</p>
+          </div>
+          <button id="newProjectBtn" class="btn primary">+ Nytt projekt</button>
+        </div>
+        <div id="projectGrid" class="project-grid"></div>
+      </section>
+
+      <section id="drawingsView" class="view">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">ALLA PROJEKT</p>
+            <h1>Ritningar</h1>
+          </div>
+          <input id="drawingSearch" class="search" type="search" placeholder="Sök ritning…">
+        </div>
+        <div id="allDrawings" class="file-list"></div>
+      </section>
+
+      <section id="todoView" class="view">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">PERSONLIGT</p>
+            <h1>Att göra</h1>
+          </div>
+          <button id="newTodoBtn" class="btn primary">+ Punkt</button>
+        </div>
+        <div class="todo-filters" id="todoFilters"><button class="todo-filter active" data-todo-filter="open">Öppna</button><button class="todo-filter" data-todo-filter="today">Idag</button><button class="todo-filter" data-todo-filter="all">Alla</button></div><div id="todoList" class="todo-list"></div>
+      </section>
+
+      <section id="ataView" class="view">
+        <div class="section-head"><div><p class="eyebrow">EXTRAARBETE</p><h1>ÄTA / Avvikelser</h1></div><button id="newAtaBtn" class="btn primary">+ Ny ÄTA</button></div>
+        <div class="ata-summary" id="ataSummary"></div>
+        <div class="todo-filters"><button class="todo-filter active" data-ata-filter="open">Öppna</button><button class="todo-filter" data-ata-filter="ongoing">Pågående</button><button class="todo-filter" data-ata-filter="done">Utförda</button><button class="todo-filter" data-ata-filter="all">Alla</button></div>
+        <div class="ata-actions"><button id="selectAllAtaBtn" class="btn">Markera alla</button><button id="shareAtaBtn" class="btn primary">Dela valda <span id="ataSelectedCount">0</span></button></div>
+        <div id="ataList" class="ata-list"></div>
+        <input id="ataPhotoInput" type="file" accept="image/*" multiple hidden>
+        <input id="ataCameraInput" type="file" accept="image/*" capture="environment" hidden>
+      </section>
+
+      <section id="settingsView" class="view">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">APP</p>
+            <h1>Inställningar</h1>
+          </div>
+        </div>
+        <div class="settings-card theme-settings">
+          <h3>Tema</h3>
+          <p class="muted">Välj hur EKIS FIELD ska se ut. Valet sparas på enheten.</p>
+          <div class="theme-picker" role="group" aria-label="Välj tema">
+            <button id="themeDarkBtn" class="theme-option" data-theme-choice="dark" type="button"><span class="theme-preview preview-dark"><i></i><i></i><i></i></span><strong>Svart</strong><small>Mörk standard</small></button>
+            <button id="themeLightBtn" class="theme-option" data-theme-choice="light" type="button"><span class="theme-preview preview-light"><i></i><i></i><i></i></span><strong>Vit</strong><small>Ljus klinisk</small></button>
+          </div>
+        </div>
+        <div class="settings-card">
+          <h3>Lokal lagring</h3>
+          <p class="muted">Projekt och PDF-filer sparas lokalt i den här webbläsaren på enheten.</p>
+          <button id="exportBackupBtn" class="btn">Exportera full backup</button>
+          <label class="btn file-label">Importera backup
+            <input id="backupInput" type="file" accept=".zip,application/zip" hidden>
+          </label>
+        </div>
+        <div class="settings-card about-card">
+          <div class="about-head">
+            <div class="about-mark"><span>EKIS</span><small>FIELD</small></div>
+            <div><h3>Om EKIS FIELD</h3><div class="version-badge">Version 4.0.17 · Build 23</div></div>
+          </div>
+          <div class="owner-card"><strong>Utvecklad för och ägs av Robin Ekström</strong><span>© 2026 Robin Ekström · Alla rättigheter förbehållna.</span></div>
+          <div class="about-section-title">Versionshistorik</div>
+          <details class="release-note" open><summary><span><b>4.0.17</b> UI & Splash Polish</span><em>Senaste</em></summary><p><strong>Förbättrat</strong> Ny klinisk splash där EKIS FIELD ligger dolt i mörkret och belyses när lampan tänds. Renare startsida och omarbetad Om-sida.</p></details>
+          <details class="release-note"><summary><span><b>4.0.16</b> Stability Bugfix</span></summary><p>Helskärmscentrering · projektsök i ⋮ · jämnare ÄTA/Avvikelser · långtryck och dra för ritobjekt.</p></details>
+          <details class="release-note"><summary><span><b>4.0.15</b> Markup Fix</span></summary><p>Text, Penna, Pil, Ring och mätningar kan markeras och tas bort individuellt.</p></details>
+          <details class="release-note"><summary><span><b>4.0.14</b> Themes & ÄTA</span></summary><p>Svart/vitt tema · ritningsmarkering sparas som bild till rätt ÄTA · stabilare retur.</p></details>
+          <details class="release-note"><summary><span><b>4.0.13</b> ÄTA & Viewer</span></summary><p>Redigering av ÄTA · PDF med kopplade foton · förstärkt viewer-nederkant.</p></details>
+          <details class="release-note"><summary><span><b>4.0.12</b> Camera & Import</span></summary><p>Native kamera · stabilare ZIP/PDF-analys · viewer-fix.</p></details>
+          <details class="release-note"><summary><span><b>4.0.10–4.0.7</b> Tidigare buggrättningar</span></summary><p>ZIP/ÄTA-hotfix · planidentifiering · Lås vy/Stigare · projektborttagning · Occhio- och splashförbättringar.</p></details>
+        </div>
+      </section>
+
+      <section id="projectView" class="view">
+        <div class="project-toolbar">
+          <button id="backProjectsBtn" class="icon-btn">←</button>
+          <div class="grow minw0">
+            <p class="eyebrow">PROJEKT</p>
+            <h1 id="projectName" class="truncate">Projekt</h1>
+            <p id="projectMeta" class="muted"></p>
+          </div>
+          <button id="projectMenuBtn" class="icon-btn" title="Projektmeny" aria-label="Projektmeny">⋮</button>
+        </div>
+
+        <div id="projectQuickActions" class="quick-actions">
+          <label class="action-card">
+            <span class="action-icon">PDF</span>
+            <strong>Lägg till PDF</strong>
+            <small>En eller flera filer</small>
+            <input id="pdfInput" type="file" accept=".pdf,application/pdf" multiple hidden>
+          </label>
+          <label class="action-card">
+            <span class="action-icon">ZIP</span>
+            <strong>Packa upp ZIP</strong>
+            <small>Flera ZIP samtidigt</small>
+            <input id="zipInput" type="file" accept=".zip,application/zip" multiple hidden>
+          </label>
+          <button id="exportProjectBtn" class="action-card">
+            <span class="action-icon">↥</span>
+            <strong>Exportera</strong>
+            <small>Projekt som ZIP</small>
+          </button>
+        </div>
+
+        <div class="subbar">
+          <select id="sortSelect" class="select grow">
+            <option value="plan" selected>Plan / kategori</option>
+            <option value="name">Namn A–Ö</option>
+            <option value="recent">Senast tillagd</option>
+          </select>
+        </div>
+        <div id="categoryTabs" class="category-tabs" aria-label="Ritningskategorier"></div>
+        <div id="projectStatus" class="statusline"></div>
+        <div id="smartDocs" class="smart-docs"></div>
+        <div id="projectFiles" class="file-list"></div>
+      </section>
+
+      <section id="viewerView" class="view viewer-view">
+        <div class="viewer-head">
+          <button id="backFilesBtn" class="icon-btn">←</button>
+          <button id="backToDrawingBtn" class="smart-back hidden" title="Tillbaka till ritningen">↩ Ritning</button>
+          <button id="prevDrawingBtn" class="icon-btn" title="Föregående ritning">‹</button>
+          <div class="grow minw0">
+            <h2 id="viewerTitle" class="truncate">Ritning</h2>
+            <p id="viewerSubtitle" class="muted truncate"></p>
+          </div>
+          <button id="nextDrawingBtn" class="icon-btn" title="Nästa ritning">›</button>
+          <button id="fullscreenBtn" class="icon-btn" title="Helskärm">⛶</button>
+          <button id="renameDrawingBtn" class="icon-btn" title="Byt namn">✎</button>
+        </div>
+
+        <div class="viewer-controls">
+          <div class="page-controls">
+            <button id="prevPageBtn" class="mini-btn">‹</button>
+            <span id="pageLabel">1 / 1</span>
+            <button id="nextPageBtn" class="mini-btn">›</button>
+          </div>
+          <label class="scale-control">Skala
+            <select id="scalePreset" class="select compact">
+              <option value="20">1:20</option>
+              <option value="50">1:50</option>
+              <option value="100" selected>1:100</option>
+              <option value="200">1:200</option>
+              <option value="500">1:500</option>
+              <option value="custom">Egen</option>
+            </select>
+          </label>
+          <button id="calibrateBtn" class="mini-btn">Kalibrera</button>
+          <button id="zoomResetBtn" class="mini-btn" title="Passa hela ritningen">Passa</button>
+          <label class="floor-switch-label">Våning
+            <select id="floorDrawingSelect" class="floor-select" title="Byt ritning och behåll samma vy"></select>
+          </label>
+          <button id="lockViewBtn" class="mini-btn active" title="Behåll samma område när du byter våning">🔒 Vy</button>
+          <button id="syncFloorBtn" class="mini-btn" title="Synka våningsritningar med två gemensamma referenspunkter">⌖ Synka plan</button>
+          <button id="riserBtn" class="mini-btn" title="Stigare: byt våning och behåll samma plats/zoom">⇅ Stigare</button>
+          <span id="riserNav" class="riser-nav hidden" aria-label="Stigare våningsbyte">
+            <button id="riserUpBtn" class="mini-btn riser-arrow" title="Nästa våning">▲</button>
+            <button id="riserDownBtn" class="mini-btn riser-arrow" title="Våningen under">▼</button>
+          </span>
+        </div>
+
+        <div class="toolstrip" role="toolbar" aria-label="Ritningsverktyg">
+          <button class="tool active" data-tool="pan">✋ <span>Flytta</span></button>
+          <button class="tool" data-tool="distance">📏 <span>Avstånd</span></button>
+          <button class="tool" data-tool="route">⌁ <span>Sträcka</span></button>
+          <button class="tool" data-tool="area">▱ <span>Area</span></button>
+          <button class="tool" data-tool="pen">✎ <span>Penna</span></button>
+          <button class="tool" data-tool="text">T <span>Text</span></button>
+          <button class="tool" data-tool="arrow">➜ <span>Pil</span></button>
+          <button class="tool" data-tool="circle">◯ <span>Ring</span></button>
+          <button id="deleteSelectedBtn" class="tool hidden">✕ <span>Ta bort</span></button>
+          <button id="finishMeasureBtn" class="tool hidden">✓ <span>Slutför</span></button>
+          <button id="clearMeasuresBtn" class="tool">⌫ <span>Rensa</span></button>
+        </div>
+
+        <div id="measureHint" class="hidden"></div>
+        <canvas id="measureMagnifier" width="180" height="180" class="measure-magnifier hidden" aria-hidden="true"></canvas>
+        <div id="pdfViewport" class="pdf-viewport">
+          <div id="canvasWrap" class="canvas-wrap">
+            <canvas id="pdfCanvas"></canvas>
+            <canvas id="overlayCanvas"></canvas>
+          </div>
+          <div id="pdfBottomGutter" class="pdf-bottom-gutter" aria-hidden="true"></div>
+        </div>
+
+        <div class="measure-summary">
+          <span id="scaleLabel">Skala 1:100</span>
+          <strong id="measureResult"></strong>
+        </div>
+      </section>
+    <div id="projectMenu" class="modal hidden"><div class="modal-card"><h3>Projekt</h3><div class="modal-actions project-menu-actions"><button id="menuSearchProject" class="btn">Sök i projektet</button><button id="menuAddPdf" class="btn">Lägg till PDF</button><button id="menuAddZip" class="btn">Lägg till ZIP</button><button id="menuExportProject" class="btn">Exportera</button><button id="menuRenameProject" class="btn">Byt namn</button><button id="menuDeleteProject" class="btn">Ta bort projekt</button><button id="menuCloseProject" class="btn primary">Stäng</button></div></div></div>
+<div id="projectSearchModal" class="modal hidden"><div class="modal-card"><h3>Sök i projektet</h3><input id="projectSearch" class="search" type="search" placeholder="Sök bland ritningar…" autocomplete="off"><div class="modal-actions"><button id="projectSearchClose" class="btn primary">Klar</button></div></div></div>
+</main>
+
+    <nav class="bottom-nav" id="bottomNav">
+      <button class="nav-btn active" data-view="projectsView"><span>▦</span>Projekt</button>
+      <button class="nav-btn" data-view="drawingsView"><span>▤</span>Ritningar</button>
+      <button class="nav-btn" data-view="todoView"><span>✓</span>Att göra</button>
+      <button class="nav-btn" data-view="ataView"><span>ÄTA</span>Avvikelser</button>
+      <button class="nav-btn" data-view="settingsView"><span>⚙</span>Mer</button>
+    </nav>
+
+    <div id="armatureSheet" class="smart-sheet hidden" role="dialog" aria-modal="true">
+      <div class="smart-sheet-card">
+        <div class="smart-sheet-head">
+          <div>
+            <p class="eyebrow">ARMATUR</p>
+            <h2 id="armatureTitle">L13</h2>
+          </div>
+          <button id="closeArmatureSheet" class="icon-btn">×</button>
+        </div>
+        <div id="armatureDetails" class="armature-details"></div>
+        <div class="smart-sheet-actions">
+          <button id="showArmaturePdfBtn" class="btn primary">Visa i armaturförteckning</button>
+          <button id="linkOcchioBtn" class="btn">Koppla Occhio</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <h3 id="modalTitle">Rubrik</h3>
+        <p id="modalText" class="muted"></p>
+        <input id="modalInput" class="text-input" autocomplete="off">
+        <div class="modal-actions">
+          <button id="modalCancel" class="btn">Avbryt</button>
+          <button id="modalOk" class="btn primary">Spara</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.0/jspdf.umd.min.js"></script>
+  <script src="app.js"></script>
+  <script>
+    (function(){
+      var splash=document.getElementById('ekisSplash');
+      if(!splash)return;
+      window.setTimeout(function(){
+        splash.classList.add('ekis-splash-out');
+        window.setTimeout(function(){ if(splash && splash.parentNode) splash.parentNode.removeChild(splash); }, 520);
+      }, 2850);
+    })();
+  </script>
+</body>
+</html>
