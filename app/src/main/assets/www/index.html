@@ -13,18 +13,38 @@
 </head>
 <body>
   <div id="ekisSplash" class="ekis-splash" aria-hidden="true">
-    <div class="s20-stage">
-      <svg class="s20-wire" viewBox="0 0 1000 360" preserveAspectRatio="none" aria-hidden="true">
-        <path class="s20-wire-glow" pathLength="1" d="M -30 250 H 735 C 790 250 800 279 842 279"/>
-        <path class="s20-wire-core" pathLength="1" d="M -30 250 H 735 C 790 250 800 279 842 279"/>
+    <div class="s21-stage">
+      <svg class="s21-line s21-line-top" viewBox="0 0 1000 180" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="s21TopFade" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#ff6a00" stop-opacity="0"/>
+            <stop offset="0.18" stop-color="#ff6a00" stop-opacity="1"/>
+            <stop offset="0.72" stop-color="#ff6a00" stop-opacity="1"/>
+            <stop offset="1" stop-color="#ff6a00" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path class="s21-glow" pathLength="1" d="M -80 92 H 320 L 380 145 H 890" stroke="url(#s21TopFade)"/>
+        <path class="s21-core" pathLength="1" d="M -80 92 H 320 L 380 145 H 890" stroke="url(#s21TopFade)"/>
       </svg>
-      <div class="s20-wordmark">
-        <div class="s20-ekis">EKIS</div>
-        <div class="s20-field"><i></i><span>FIELD</span><i></i></div>
-        <div class="s20-tagline">RITNINGAR <b>•</b> ÄTA <b>•</b> DOKUMENTATION</div>
+
+      <div class="s21-wordmark">
+        <div class="s21-ekis">EKIS</div>
+        <div class="s21-field"><i></i><span>FIELD</span><i></i></div>
+        <div class="s21-tagline">RITNINGAR <b>•</b> ÄTA <b>•</b> DOKUMENTATION</div>
       </div>
-      <div class="s20-bulb-halo" aria-hidden="true"></div>
-      <img class="s20-bulb" src="splash-bulb-v20.png" alt="">
+
+      <svg class="s21-line s21-line-bottom" viewBox="0 0 1000 180" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="s21BottomFade" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#ff6a00" stop-opacity="0"/>
+            <stop offset="0.28" stop-color="#ff6a00" stop-opacity="1"/>
+            <stop offset="0.82" stop-color="#ff6a00" stop-opacity="1"/>
+            <stop offset="1" stop-color="#ff6a00" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path class="s21-glow" pathLength="1" d="M 115 70 H 650 L 705 118 H 1080" stroke="url(#s21BottomFade)"/>
+        <path class="s21-core" pathLength="1" d="M 115 70 H 650 L 705 118 H 1080" stroke="url(#s21BottomFade)"/>
+      </svg>
     </div>
   </div>
   <div id="app">
@@ -109,11 +129,12 @@
         <div class="settings-card about-card">
           <div class="about-head">
             <div class="about-mark"><span>EKIS</span><small>FIELD</small></div>
-            <div><h3>Om EKIS FIELD</h3><div class="version-badge">Version 4.0.20 · Build 26</div></div>
+            <div><h3>Om EKIS FIELD</h3><div class="version-badge">Version 4.0.21 · Build 27</div></div>
           </div>
           <div class="owner-card"><strong>Utvecklad för och ägs av Robin Ekström</strong><span>© 2026 Robin Ekström · Alla rättigheter förbehållna.</span></div>
           <div class="about-section-title">Versionshistorik</div>
-          <details class="release-note" open><summary><span><b>4.0.20</b> Splash Stable</span><em>Senaste</em></summary><p><strong>Fixat</strong> Splashen använder endast ett transparent lampobjekt. Kabel, EKIS FIELD och undertitel ritas separat i appen för att eliminera rektangulära bildlager och dubbelrendering.</p></details>
+          <details class="release-note" open><summary><span><b>4.0.21</b> Line Splash Stable</span><em>Senaste</em></summary><p><strong>Fixat</strong> Lampan är helt borttagen. Splashen använder endast två animerade ritningsledningar med mjuk fade, samt native EKIS FIELD och undertiteln RITNINGAR • ÄTA • DOKUMENTATION. Inga bildlager används.</p></details>
+          <details class="release-note"><summary><span><b>4.0.20</b> Splash Stable</span></summary><p>Tidigare lampbaserad splash med transparent objekt.</p></details>
           <details class="release-note"><summary><span><b>4.0.19</b> Splash Rebuild & ÄTA Polish</span></summary><p>Tidigare splashförsök samt renare ÄTA / Avvikelser.</p></details>
           <details class="release-note"><summary><span><b>4.0.18</b> Splash Hotfix</span></summary><p>Tidigare splashförsök med realistisk lampreferens.</p></details>
           <details class="release-note"><summary><span><b>4.0.17</b> UI & Splash Polish</span></summary><p>Renare startsida och omarbetad Om-sida.</p></details>
