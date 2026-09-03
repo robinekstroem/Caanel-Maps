@@ -47,11 +47,11 @@
     distanceDraft: null,
     pageTextItems: [],
     calibrationMode: null,
-    ataFilter: "open", ataSelected: new Set(), ataPhotoTarget: null, activeAtaMark:null, ataMarkAnnotationId:null, riserMode:false, selectedOverlay:null, drawDraft:null
+    ataFilter: "open", ataSelected: new Set(), ataPhotoTarget: null, activeAtaMark:null, ataMarkAnnotationId:null, ataMarkBaseIds:null, riserMode:false, selectedOverlay:null, drawDraft:null
   };
 
   function defaultMeta() {
-    return { projects: [], todos: [], atas: [], fileMeta: {}, measurements: {}, annotations: {}, version: 5 };
+    return { projects: [], todos: [], atas: [], fileMeta: {}, measurements: {}, annotations: {}, theme: "dark", version: 6 };
   }
   function loadMeta() {
     try { return {...defaultMeta(), ...JSON.parse(localStorage.getItem(META_KEY) || "{}")}; }
@@ -59,6 +59,15 @@
   }
   function saveMeta() {
     localStorage.setItem(META_KEY, JSON.stringify(state.meta));
+  }
+  function applyTheme(theme, persist=false){
+    const next=theme==="light"?"light":"dark";
+    state.meta.theme=next;
+    document.documentElement.dataset.theme=next;
+    const metaTheme=document.querySelector('meta[name="theme-color"]');
+    if(metaTheme)metaTheme.setAttribute("content",next==="light"?"#f3f4f6":"#0b0b0c");
+    document.querySelectorAll('[data-theme-choice]').forEach(b=>b.classList.toggle('active',b.dataset.themeChoice===next));
+    if(persist)saveMeta();
   }
   const $ = s => document.querySelector(s);
   const $$ = s => [...document.querySelectorAll(s)];
@@ -673,11 +682,56 @@
     $('#ataSummary').innerHTML=`<div><small>Öppna</small><b>${open}</b></div><div><small>Utförda</small><b>${done}</b></div><div><small>Extra timmar</small><b>${total.toFixed(1)} h</b></div>`;
     $('#ataSelectedCount').textContent=state.ataSelected.size;
     if(!items.length){list.innerHTML='<div class="empty">Inga avvikelser här.</div>';return}
-    list.innerHTML=items.map(a=>{const p=projectById(a.projectId);return `<div class="ata-card ${a.status==='Utförd'?'done':''}" data-ata="${a.id}"><div class="ata-top"><input class="ata-select" type="checkbox" ${state.ataSelected.has(a.id)?'checked':''}><div class="ata-main"><div class="ata-num">${esc(a.number)}</div><strong>${esc(a.title)}</strong><div class="ata-meta"><span class="ata-status ${a.status==='Utförd'?'done':''}">${esc(a.status)}</span><span>📅 ${esc(a.date||'')}</span><span>⏱ ${ataHours(a).toFixed(1)} h${a.estimate?` / est. ${Number(a.estimate).toFixed(1)} h`:''}</span>${p?`<span>▦ ${esc(p.name)}</span>`:''}</div>${a.description?`<p class="muted" style="margin-top:7px">${esc(a.description)}</p>`:''}${a.drawingNote?`<p class="muted" style="margin-top:5px">📍 ${esc(a.drawingNote)}</p>`:''}<div class="ata-photos">${(a.photos||[]).map(x=>`<img src="${x}" alt="ÄTA-bild">`).join('')}</div></div></div><div class="ata-card-actions"><button class="mini-btn ata-status-btn">${a.status==='Utförd'?'↺ Öppna':'✓ Utförd'}</button><button class="mini-btn ata-hours-btn">+ Timmar</button><button class="mini-btn ata-camera-btn">📷 Ta foto</button><button class="mini-btn ata-photo-btn">🖼 Galleri</button><button class="mini-btn ata-mark-btn">⌖ Markera på ritning</button><button class="mini-btn ata-delete-btn">✕</button></div></div>`}).join('');
-    list.querySelectorAll('[data-ata]').forEach(row=>{const a=all.find(x=>x.id===row.dataset.ata); row.querySelector('.ata-select').onchange=e=>{e.target.checked?state.ataSelected.add(a.id):state.ataSelected.delete(a.id);renderAtas()}; row.querySelector('.ata-status-btn').onclick=()=>{a.status=a.status==='Utförd'?'Pågående':'Utförd';if(a.status==='Utförd')a.completed=new Date().toISOString().slice(0,10);saveMeta();renderAtas()}; row.querySelector('.ata-hours-btn').onclick=async()=>{const h=Number(String(await promptModal('Lägg till timmar','Arbetade timmar för detta pass.','1.0','number')||'').replace(',','.'));if(h>0){a.sessions=a.sessions||[];a.sessions.push({date:new Date().toISOString().slice(0,10),hours:h});a.status='Pågående';saveMeta();renderAtas()}}; row.querySelector('.ata-camera-btn').onclick=()=>{state.ataPhotoTarget=a.id;if(window.Android?.capturePhoto){Android.capturePhoto()}else{$('#ataCameraInput').click()}}; row.querySelector('.ata-photo-btn').onclick=()=>{state.ataPhotoTarget=a.id;$('#ataPhotoInput').click()}; row.querySelector('.ata-mark-btn').onclick=async()=>{state.currentProjectId=a.projectId||state.currentProjectId; const p=projectById(state.currentProjectId); const id=a.drawing?.fileId || p?.files?.[0]; if(!id){toast('Lägg först in en ritning i projektet');return} state.activeAtaMark=a.id; state.ataMarkAnnotationId=null; await openPdf(id); setTool('circle'); updateAtaMarkBar(); toast('Ringa in avvikelsen och tryck Spara ÄTA-markering')}; row.querySelector('.ata-delete-btn').onclick=async()=>{if(!await confirmDelete('Ta bort ÄTA?',`Vill du verkligen ta bort ${a.number} – ${a.title}?`))return;state.meta.atas=all.filter(x=>x.id!==a.id);state.ataSelected.delete(a.id);saveMeta();renderAtas()};});
+    list.innerHTML=items.map(a=>{const p=projectById(a.projectId);return `<div class="ata-card ${a.status==='Utförd'?'done':''}" data-ata="${a.id}"><div class="ata-top"><input class="ata-select" type="checkbox" ${state.ataSelected.has(a.id)?'checked':''}><div class="ata-main"><div class="ata-num">${esc(a.number)}</div><strong>${esc(a.title)}</strong><div class="ata-meta"><span class="ata-status ${a.status==='Utförd'?'done':''}">${esc(a.status)}</span><span>📅 ${esc(a.date||'')}</span><span>⏱ ${ataHours(a).toFixed(1)} h${a.estimate?` / est. ${Number(a.estimate).toFixed(1)} h`:''}</span>${p?`<span>▦ ${esc(p.name)}</span>`:''}</div>${a.description?`<p class="muted" style="margin-top:7px">${esc(a.description)}</p>`:''}${a.drawingNote?`<p class="muted" style="margin-top:5px">📍 ${esc(a.drawingNote)}</p>`:''}${(a.drawingSnapshots||[]).length?`<div class="ata-mark-snapshots"><div class="ata-mark-snapshots-label">Markering på ritning</div><div class="ata-mark-snapshots-grid">${(a.drawingSnapshots||[]).map(x=>`<img src="${x.dataUrl||x}" alt="ÄTA-markering på ritning">`).join('')}</div></div>`:''}<div class="ata-photos">${(a.photos||[]).map(x=>`<img src="${x}" alt="ÄTA-bild">`).join('')}</div></div></div><div class="ata-card-actions"><button class="mini-btn ata-edit-btn">✏️ Redigera</button><button class="mini-btn ata-status-btn">${a.status==='Utförd'?'↺ Öppna':'✓ Utförd'}</button><button class="mini-btn ata-hours-btn">+ Timmar</button><button class="mini-btn ata-camera-btn">📷 Ta foto</button><button class="mini-btn ata-photo-btn">🖼 Galleri</button><button class="mini-btn ata-mark-btn">⌖ Markera på ritning</button><button class="mini-btn ata-delete-btn">✕</button></div></div>`}).join('');
+    list.querySelectorAll('[data-ata]').forEach(row=>{const a=all.find(x=>x.id===row.dataset.ata); row.querySelector('.ata-edit-btn').onclick=()=>editAta(a); row.querySelector('.ata-select').onchange=e=>{e.target.checked?state.ataSelected.add(a.id):state.ataSelected.delete(a.id);renderAtas()}; row.querySelector('.ata-status-btn').onclick=()=>{a.status=a.status==='Utförd'?'Pågående':'Utförd';if(a.status==='Utförd')a.completed=new Date().toISOString().slice(0,10);saveMeta();renderAtas()}; row.querySelector('.ata-hours-btn').onclick=async()=>{const h=Number(String(await promptModal('Lägg till timmar','Arbetade timmar för detta pass.','1.0','number')||'').replace(',','.'));if(h>0){a.sessions=a.sessions||[];a.sessions.push({date:new Date().toISOString().slice(0,10),hours:h});a.status='Pågående';saveMeta();renderAtas()}}; row.querySelector('.ata-camera-btn').onclick=()=>{state.ataPhotoTarget=a.id;if(window.Android?.capturePhoto){Android.capturePhoto()}else{$('#ataCameraInput').click()}}; row.querySelector('.ata-photo-btn').onclick=()=>{state.ataPhotoTarget=a.id;$('#ataPhotoInput').click()}; row.querySelector('.ata-mark-btn').onclick=async()=>{state.currentProjectId=a.projectId||state.currentProjectId; const p=projectById(state.currentProjectId); const id=a.drawing?.fileId || p?.files?.[0]; if(!id){toast('Lägg först in en ritning i projektet');return} state.activeAtaMark=a.id; state.ataMarkAnnotationId=null; await openPdf(id,{page:a.drawing?.page||1,viewState:a.drawing?.view||null}); state.ataMarkBaseIds=new Set(getAnnotations().map(x=>x.id)); setTool('pen'); updateAtaMarkBar(); toast('Rita, skriv, använd pil eller ring. Tryck sedan Spara till ÄTA')}; row.querySelector('.ata-delete-btn').onclick=async()=>{if(!await confirmDelete('Ta bort ÄTA?',`Vill du verkligen ta bort ${a.number} – ${a.title}?`))return;state.meta.atas=all.filter(x=>x.id!==a.id);state.ataSelected.delete(a.id);saveMeta();renderAtas()};});
   }
   async function createAta(){ const title=await promptModal('Ny ÄTA / Avvikelse','Beskriv extraarbetet kort.','');if(!title)return; const desc=await promptModal('Beskrivning','Orsak / vad som ska göras.',''); const est=Number(String(await promptModal('Beräknade timmar','Kan lämnas 0 om okänt.','0','number')||0).replace(',','.'))||0; const projectId=state.currentProjectId||state.meta.projects[0]?.id||null; state.meta.atas.unshift({id:uid(),number:ataNumber(),title,description:desc||'',date:new Date().toISOString().slice(0,10),status:'Ej påbörjad',estimate:est,sessions:[],photos:[],projectId});saveMeta();renderAtas(); }
-  async function shareSelectedAtas(){ const items=(state.meta.atas||[]).filter(a=>state.ataSelected.has(a.id));if(!items.length){toast('Välj minst en ÄTA');return} if(!window.jspdf?.jsPDF){toast('PDF-modulen saknas');return} const {jsPDF}=window.jspdf, doc=new jsPDF();let y=18;doc.setFontSize(18);doc.text('EKIS FIELD – ÄTA / Avvikelser',14,y);y+=10;doc.setFontSize(10); for(const a of items){if(y>270){doc.addPage();y=18}doc.setFont(undefined,'bold');doc.text(`${a.number} – ${a.title}`,14,y);y+=6;doc.setFont(undefined,'normal');doc.text(`Status: ${a.status}   Datum: ${a.date}   Timmar: ${ataHours(a).toFixed(1)} h`,14,y);y+=5;if(a.description){const lines=doc.splitTextToSize(a.description,180);doc.text(lines,14,y);y+=lines.length*5}if(a.drawingNote){doc.text(`Ritning: ${a.drawingNote}`,14,y);y+=5}y+=5} const data=doc.output('datauristring'); const name=`EKIS_FIELD_ATA_${new Date().toISOString().slice(0,10)}.pdf`; if(window.Android?.shareBase64)Android.shareBase64(name,data,'application/pdf'); else downloadBlob(doc.output('blob'),name); }
+  async function editAta(a){
+    if(!a)return;
+    const title=await promptModal(`Redigera ${a.number}`,'Titel / kort beskrivning.',a.title||''); if(!title)return;
+    const desc=await promptModal('Beskrivning','Orsak / vad som ska göras.',a.description||'');
+    const date=await promptModal('Datum','YYYY-MM-DD',a.date||new Date().toISOString().slice(0,10));
+    const statusRaw=await promptModal('Status','Ej påbörjad, Pågående eller Utförd.',a.status||'Ej påbörjad');
+    const est=Number(String(await promptModal('Beräknade timmar','Kan lämnas 0 om okänt.',String(a.estimate||0),'number')||0).replace(',','.'))||0;
+    const statuses=['Ej påbörjad','Pågående','Utförd']; const status=statuses.find(x=>x.toLowerCase()===String(statusRaw||'').trim().toLowerCase())||a.status||'Ej påbörjad';
+    a.title=title;a.description=desc||'';a.date=/^\d{4}-\d{2}-\d{2}$/.test(date||'')?date:a.date;a.status=status;a.estimate=est;
+    if(status==='Utförd'&&!a.completed)a.completed=new Date().toISOString().slice(0,10); if(status!=='Utförd')a.completed='';
+    saveMeta();renderAtas();toast(`${a.number} uppdaterad`);
+  }
+  function imageSize(dataUrl){return new Promise(resolve=>{const im=new Image();im.onload=()=>resolve({w:im.naturalWidth||im.width,h:im.naturalHeight||im.height});im.onerror=()=>resolve(null);im.src=dataUrl})}
+  async function shareSelectedAtas(){
+    const items=(state.meta.atas||[]).filter(a=>state.ataSelected.has(a.id));if(!items.length){toast('Välj minst en ÄTA');return} if(!window.jspdf?.jsPDF){toast('PDF-modulen saknas');return}
+    const {jsPDF}=window.jspdf, doc=new jsPDF(); const pageH=297, margin=14, contentW=182; let y=18;
+    const newPage=()=>{doc.addPage();y=18}; const ensure=h=>{if(y+h>pageH-18)newPage()};
+    doc.setFontSize(18);doc.setFont(undefined,'bold');doc.text('EKIS FIELD – ÄTA / Avvikelser',margin,y);y+=7;doc.setFontSize(8);doc.setFont(undefined,'normal');doc.text('© 2026 Robin Ekström. Alla rättigheter förbehållna.',margin,y);y+=10;
+    for(let ai=0;ai<items.length;ai++){
+      const a=items[ai]; if(ai>0){newPage()}
+      doc.setFontSize(14);doc.setFont(undefined,'bold');doc.text(`${a.number} – ${a.title}`,margin,y);y+=7;
+      doc.setFontSize(9);doc.setFont(undefined,'normal');doc.text(`Status: ${a.status}   Datum: ${a.date||'-'}   Timmar: ${ataHours(a).toFixed(1)} h   Est: ${Number(a.estimate||0).toFixed(1)} h`,margin,y);y+=6;
+      const p=projectById(a.projectId); if(p){doc.text(`Projekt: ${p.name}`,margin,y);y+=5}
+      if(a.description){const lines=doc.splitTextToSize(a.description,contentW);ensure(lines.length*4.5+3);doc.text(lines,margin,y);y+=lines.length*4.5+3}
+      if(a.drawingNote){ensure(7);doc.text(`Placering: ${a.drawingNote}`,margin,y);y+=7}
+      const snapshots=(a.drawingSnapshots||[]).map(x=>x?.dataUrl||x).filter(Boolean);
+      if(snapshots.length){ensure(10);doc.setFont(undefined,'bold');doc.text(`Markering på ritning (${snapshots.length})`,margin,y);doc.setFont(undefined,'normal');y+=6;
+        for(const dataUrl of snapshots){
+          const size=await imageSize(dataUrl); if(!size)continue;
+          const maxW=contentW,maxH=118,ratio=Math.min(maxW/size.w,maxH/size.h),w=size.w*ratio,h=size.h*ratio;ensure(h+8);
+          try{doc.addImage(dataUrl,'JPEG',margin,y,w,h,undefined,'FAST')}catch(e){try{doc.addImage(dataUrl,'PNG',margin,y,w,h,undefined,'FAST')}catch(_){}}
+          y+=h+7;
+        }
+      }
+      const photos=a.photos||[];
+      if(photos.length){ensure(10);doc.setFont(undefined,'bold');doc.text(`Fotodokumentation (${photos.length})`,margin,y);doc.setFont(undefined,'normal');y+=6;
+        for(const dataUrl of photos){
+          const size=await imageSize(dataUrl); if(!size)continue;
+          const maxW=contentW, maxH=105; const ratio=Math.min(maxW/size.w,maxH/size.h); const w=size.w*ratio,h=size.h*ratio; ensure(h+8);
+          try{doc.addImage(dataUrl,'JPEG',margin,y,w,h,undefined,'FAST')}catch(e){try{doc.addImage(dataUrl,'PNG',margin,y,w,h,undefined,'FAST')}catch(_){} }
+          y+=h+7;
+        }
+      }
+    }
+    const data=doc.output('datauristring'); const name=`EKIS_FIELD_ATA_${new Date().toISOString().slice(0,10)}.pdf`; if(window.Android?.shareBase64)Android.shareBase64(name,data,'application/pdf'); else downloadBlob(doc.output('blob'),name);
+  }
 
   async function openPdf(id, opts={}){
     const f=fileMeta(id); if(!f) return;
@@ -758,6 +812,7 @@
   function setTool(tool){
     state.tool=tool; state.tempPoints=[]; state.distanceDraft=null;
     $$(".tool[data-tool]").forEach(b=>b.classList.toggle("active",b.dataset.tool===tool));
+    $$('[data-ata-tool]').forEach(b=>b.classList.toggle('active',b.dataset.ataTool===tool));
     $("#finishMeasureBtn").classList.toggle("hidden",!(tool==="route"||tool==="area"));
     $("#overlayCanvas").style.pointerEvents=tool==="pan"?"none":"auto";
     updateHint(); drawOverlay();
@@ -1494,18 +1549,67 @@
 
   // Navigation & UI wiring
   // Keep startup wiring resilient: removed/renamed controls must never abort the rest of the app.
-  function updateAtaMarkBar(){
-    let bar=$("#ataMarkBar");
-    if(!bar){bar=document.createElement("div");bar.id="ataMarkBar";bar.className="ata-actions hidden";bar.innerHTML='<strong>ÄTA-markering</strong><button id="saveAtaMarkBtn" class="btn primary">Spara markering</button><button id="cancelAtaMarkBtn" class="btn">Avbryt</button>';$("#viewerView .viewer-head").after(bar);
-      $("#saveAtaMarkBtn").onclick=saveAtaMark; $("#cancelAtaMarkBtn").onclick=cancelAtaMark;}
-    bar.classList.toggle("hidden",!state.activeAtaMark);
+  function ataNewAnnotations(){
+    const base=state.ataMarkBaseIds instanceof Set?state.ataMarkBaseIds:new Set();
+    return getAnnotations().filter(a=>!base.has(a.id));
   }
-  function returnToAta(){showView("ataView",false);renderAtas();setTimeout(()=>document.querySelector(`[data-ata="${state.activeAtaMark}"]`)?.scrollIntoView({block:"center"}),50)}
-  function saveAtaMark(){const id=state.activeAtaMark,a=(state.meta.atas||[]).find(x=>x.id===id);if(!a||!state.ataMarkAnnotationId){toast("Ringa först in området på ritningen");return}a.drawing={fileId:state.currentFileId,page:state.pageNum,view:captureViewState(),annotationId:state.ataMarkAnnotationId};a.drawingNote=`${displayLabel(fileMeta(state.currentFileId))}, sida ${state.pageNum}`;saveMeta();returnToAta();state.activeAtaMark=null;state.ataMarkAnnotationId=null;updateAtaMarkBar();toast("ÄTA-markeringen sparades")}
-  function cancelAtaMark(){const id=state.activeAtaMark;if(state.ataMarkAnnotationId){const arr=getAnnotations(),i=arr.findIndex(x=>x.id===state.ataMarkAnnotationId);if(i>=0)arr.splice(i,1);saveMeta()}returnToAta();state.activeAtaMark=null;state.ataMarkAnnotationId=null;updateAtaMarkBar()}
+  function drawAtaAnnotationSnapshot(ctx,a,scale){
+    const px=p=>({x:p.x*scale,y:p.y*scale});
+    ctx.save();ctx.strokeStyle='#ff6a00';ctx.fillStyle='#ff6a00';ctx.lineWidth=3;ctx.lineCap='round';ctx.lineJoin='round';
+    if(a.type==='pen'&&a.points?.length){ctx.beginPath();a.points.forEach((p,i)=>{const q=px(p);i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y)});ctx.stroke()}
+    if(a.type==='arrow'&&a.points?.length>=2){const p=px(a.points[0]),q=px(a.points[1]);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();const an=Math.atan2(q.y-p.y,q.x-p.x);ctx.beginPath();ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-18*Math.cos(an-.5),q.y-18*Math.sin(an-.5));ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-18*Math.cos(an+.5),q.y-18*Math.sin(an+.5));ctx.stroke()}
+    if(a.type==='circle'&&a.points?.length>=2){const p=px(a.points[0]),q=px(a.points[1]);ctx.beginPath();ctx.ellipse((p.x+q.x)/2,(p.y+q.y)/2,Math.max(3,Math.abs(q.x-p.x)/2),Math.max(3,Math.abs(q.y-p.y)/2),0,0,Math.PI*2);ctx.stroke()}
+    if(a.type==='text'&&a.points?.length){const p=px(a.points[0]);ctx.font='bold 18px Arial,sans-serif';ctx.lineWidth=4;ctx.strokeStyle='rgba(255,255,255,.92)';ctx.strokeText(a.text||'',p.x,p.y);ctx.fillStyle='#ff6a00';ctx.fillText(a.text||'',p.x,p.y)}
+    ctx.restore();
+  }
+  function captureAtaMarkSnapshot(annotations){
+    const base=$('#pdfCanvas');if(!base||!annotations?.length)return null;
+    const pts=annotations.flatMap(a=>a.points||[]);if(!pts.length)return null;
+    const scale=state.renderScale;
+    let minX=Math.min(...pts.map(p=>p.x*scale)),maxX=Math.max(...pts.map(p=>p.x*scale));
+    let minY=Math.min(...pts.map(p=>p.y*scale)),maxY=Math.max(...pts.map(p=>p.y*scale));
+    const pad=95;minX-=pad;maxX+=pad;minY-=pad;maxY+=pad;
+    const minW=Math.min(620,state.baseCanvasWidth),minH=Math.min(430,state.baseCanvasHeight);
+    if(maxX-minX<minW){const c=(minX+maxX)/2;minX=c-minW/2;maxX=c+minW/2}
+    if(maxY-minY<minH){const c=(minY+maxY)/2;minY=c-minH/2;maxY=c+minH/2}
+    minX=Math.max(0,minX);minY=Math.max(0,minY);maxX=Math.min(state.baseCanvasWidth,maxX);maxY=Math.min(state.baseCanvasHeight,maxY);
+    if(maxX-minX<minW&&state.baseCanvasWidth>=minW){minX=Math.max(0,Math.min(minX,state.baseCanvasWidth-minW));maxX=minX+minW}
+    if(maxY-minY<minH&&state.baseCanvasHeight>=minH){minY=Math.max(0,Math.min(minY,state.baseCanvasHeight-minH));maxY=minY+minH}
+    const cropW=Math.max(1,maxX-minX),cropH=Math.max(1,maxY-minY);
+    const outScale=Math.max(1,Math.min(2,1600/Math.max(cropW,cropH)));
+    const out=document.createElement('canvas');out.width=Math.round(cropW*outScale);out.height=Math.round(cropH*outScale);
+    const ctx=out.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,out.width,out.height);
+    const srcScale=base.width/state.baseCanvasWidth;
+    ctx.drawImage(base,minX*srcScale,minY*srcScale,cropW*srcScale,cropH*srcScale,0,0,out.width,out.height);
+    ctx.setTransform(outScale,0,0,outScale,-minX*outScale,-minY*outScale);
+    annotations.forEach(a=>drawAtaAnnotationSnapshot(ctx,a,scale));
+    ctx.setTransform(1,0,0,1,0,0);
+    return out.toDataURL('image/jpeg',.9);
+  }
+  function updateAtaMarkBar(){
+    let bar=$('#ataMarkBar');
+    if(!bar){bar=document.createElement('div');bar.id='ataMarkBar';bar.className='ata-actions hidden';bar.innerHTML='<strong>ÄTA-markering</strong><div class="ata-mark-tools"><button class="mini-btn" data-ata-tool="pen">✎ Penna</button><button class="mini-btn" data-ata-tool="text">T Text</button><button class="mini-btn" data-ata-tool="arrow">➜ Pil</button><button class="mini-btn" data-ata-tool="circle">◯ Ring</button></div><button id="saveAtaMarkBtn" class="btn primary">Spara till ÄTA</button><button id="cancelAtaMarkBtn" class="btn">Avbryt</button>';$('#viewerView .viewer-head').after(bar);
+      $('#saveAtaMarkBtn').onclick=saveAtaMark;$('#cancelAtaMarkBtn').onclick=cancelAtaMark;$$('[data-ata-tool]').forEach(b=>b.onclick=()=>setTool(b.dataset.ataTool));}
+    bar.classList.toggle('hidden',!state.activeAtaMark);$$('[data-ata-tool]').forEach(b=>b.classList.toggle('active',b.dataset.ataTool===state.tool));
+  }
+  function returnToAta(id){showView('ataView',false);renderAtas();setTimeout(()=>document.querySelector(`[data-ata="${id}"]`)?.scrollIntoView({block:'center'}),70)}
+  async function saveAtaMark(){
+    const id=state.activeAtaMark,a=(state.meta.atas||[]).find(x=>x.id===id);if(!a)return;
+    const annotations=ataNewAnnotations();if(!annotations.length){toast('Rita, skriv, använd pil eller ring först');return}
+    const snapshot=captureAtaMarkSnapshot(annotations);if(!snapshot){toast('Kunde inte skapa ritningsbilden');return}
+    a.drawing={fileId:state.currentFileId,page:state.pageNum,view:captureViewState(),annotationIds:annotations.map(x=>x.id)};
+    a.drawingNote=`${displayLabel(fileMeta(state.currentFileId))}, sida ${state.pageNum}`;
+    a.drawingSnapshots=a.drawingSnapshots||[];a.drawingSnapshots.push({id:uid(),dataUrl:snapshot,fileId:state.currentFileId,page:state.pageNum,createdAt:new Date().toISOString(),annotationIds:annotations.map(x=>x.id)});
+    saveMeta();returnToAta(id);state.activeAtaMark=null;state.ataMarkAnnotationId=null;state.ataMarkBaseIds=null;updateAtaMarkBar();toast('Ritningsmarkeringen sparades som bild i ÄTA');
+  }
+  function cancelAtaMark(){
+    const id=state.activeAtaMark,base=state.ataMarkBaseIds instanceof Set?state.ataMarkBaseIds:new Set();
+    state.meta.annotations[pageKey()]=getAnnotations().filter(a=>base.has(a.id));saveMeta();returnToAta(id);state.activeAtaMark=null;state.ataMarkAnnotationId=null;state.ataMarkBaseIds=null;updateAtaMarkBar();
+  }
   function showMeasureMagnifier(e){if(state.tool!=="distance")return;const mag=$("#measureMagnifier"),base=$("#pdfCanvas"),over=$("#overlayCanvas"),vp=$("#pdfViewport");if(!mag||!base)return;mag.classList.remove("hidden");const vr=vp.getBoundingClientRect();mag.style.left=Math.max(8,Math.min(vp.clientWidth-160,e.clientX-vr.left-75))+"px";mag.style.top=Math.max(8,e.clientY-vr.top-190)+"px";const ctx=mag.getContext("2d"),r=over.getBoundingClientRect(),sx=(e.clientX-r.left)*(over.width/r.width),sy=(e.clientY-r.top)*(over.height/r.height),crop=45;ctx.clearRect(0,0,180,180);ctx.drawImage(base,sx-crop,sy-crop,crop*2,crop*2,0,0,180,180);ctx.strokeStyle="#ff6a00";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(90,68);ctx.lineTo(90,112);ctx.moveTo(68,90);ctx.lineTo(112,90);ctx.stroke();}
   function hideMeasureMagnifier(){$("#measureMagnifier")?.classList.add("hidden")}
   $$(".nav-btn").forEach(b=>b.onclick=()=>{showView(b.dataset.view); if(b.dataset.view==="projectsView")renderProjects(); if(b.dataset.view==="drawingsView")renderAllDrawings(); if(b.dataset.view==="todoView")renderTodos(); if(b.dataset.view==="ataView")renderAtas()});
+  $$('[data-theme-choice]').forEach(b=>b.onclick=()=>{applyTheme(b.dataset.themeChoice,true);toast(b.dataset.themeChoice==='light'?'Ljust tema aktiverat':'Mörkt tema aktiverat')});
   $("#brandBtn").onclick=()=>{renderProjects();showView("projectsView")};
   $("#newProjectBtn").onclick=async()=>{
     const name=await promptModal("Nytt projekt","Ge projektet ett namn.","Nytt projekt");
@@ -1583,6 +1687,7 @@
 
   if("serviceWorker" in navigator && location.protocol!=="file:") navigator.serviceWorker.register("sw.js").catch(()=>{});
 
+  applyTheme(state.meta.theme||'dark',false);
   installViewerGestures();
   renderProjects(); renderAllDrawings(); renderTodos();
 })();
