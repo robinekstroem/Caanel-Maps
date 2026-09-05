@@ -867,7 +867,7 @@
       if(a.type==='pen'){ctx.beginPath();a.points.forEach((p,i)=>{const q=toPx(p);i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y)});ctx.stroke()}
       if(a.type==='arrow'){const p=toPx(a.points[0]),q=toPx(a.points[1]);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();const an=Math.atan2(q.y-p.y,q.x-p.x);ctx.beginPath();ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-16*Math.cos(an-.5),q.y-16*Math.sin(an-.5));ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-16*Math.cos(an+.5),q.y-16*Math.sin(an+.5));ctx.stroke()}
       if(a.type==='circle'){const p=toPx(a.points[0]),q=toPx(a.points[1]);ctx.beginPath();ctx.ellipse((p.x+q.x)/2,(p.y+q.y)/2,Math.abs(q.x-p.x)/2,Math.abs(q.y-p.y)/2,0,0,Math.PI*2);ctx.stroke()}
-      if(a.type==='text'){const p=toPx(a.points[0]);ctx.font='bold 16px sans-serif';ctx.fillText(a.text,p.x,p.y)}ctx.restore();
+      if(a.type==='text'){const p=toPx(a.points[0]);const fs=Math.max(10,Math.min(48,Number(a.fontSize)||16));ctx.font=`bold ${fs}px sans-serif`;ctx.fillText(a.text,p.x,p.y);if(a.selected){const w=Math.max(44,String(a.text||'').length*fs*.62);ctx.save();ctx.strokeStyle='#ff4d4f';ctx.setLineDash([5,4]);ctx.strokeRect(p.x-5,p.y-fs-5,w+10,fs+12);ctx.restore()}}ctx.restore();
     }
     const review=state.scannerReview;
     if(review?.pageHits?.length){
@@ -929,7 +929,8 @@
       const pts=(a.points||[]).map(sp);
       if(a.type==='text'&&pts[0]){
         const q=pts[0], text=String(a.text||'');
-        const w=Math.max(44,text.length*10), h=30;
+        const fs=Math.max(10,Math.min(48,Number(a.fontSize)||16));
+        const w=Math.max(44,text.length*fs*.62), h=fs+16;
         const left=q.x-8,right=q.x+w+8,top=q.y-h,bottom=q.y+10;
         const nx=Math.max(left,Math.min(x,right)),ny=Math.max(top,Math.min(y,bottom));
         take('annotation',a,Math.hypot(x-nx,y-ny));
@@ -954,7 +955,17 @@
   $('#overlayCanvas').addEventListener('pointerdown',e=>{if(!['pen','arrow','circle'].includes(state.tool))return;const p=pdfPointFromEvent(e);state.drawDraft={type:state.tool,points:[p],pointerId:e.pointerId};try{e.target.setPointerCapture(e.pointerId)}catch{}e.preventDefault()});
   $('#overlayCanvas').addEventListener('pointermove',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;const p=pdfPointFromEvent(e);if(d.type==='pen')d.points.push(p);else d.points[1]=p;state.tempPoints=d.points;drawOverlay()});
   $('#overlayCanvas').addEventListener('pointerup',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;const p=pdfPointFromEvent(e);if(d.type!=='pen')d.points[1]=p;if(d.points.length>1){const a={id:uid(),type:d.type,points:d.points};getAnnotations().push(a);if(state.activeAtaMark){state.ataMarkAnnotationId=a.id; updateAtaMarkBar();}saveMeta()}state.drawDraft=null;state.tempPoints=[];setTool('pan');drawOverlay()});
-  $('#overlayCanvas').addEventListener('click',async e=>{if(state.tool==='text'){const text=await promptModal('Text på ritning','Skriv texten som ska sparas på ritningen.','');if(text){getAnnotations().push({id:uid(),type:'text',points:[pdfPointFromEvent(e)],text});saveMeta();setTool('pan');drawOverlay()}return}});
+  function openDirectTextEditor(clientX,clientY,pdfPoint,existing=null){
+    const old=document.querySelector('.drawing-text-editor');if(old)old.remove();
+    const input=document.createElement('input');input.type='text';input.className='drawing-text-editor';
+    input.value=existing?.text||'';input.placeholder='Skriv text…';
+    Object.assign(input.style,{position:'fixed',left:`${Math.max(8,Math.min(clientX,window.innerWidth-250))}px`,top:`${Math.max(8,clientY-24)}px`,zIndex:'9999',width:'230px',padding:'10px 12px',border:'2px solid #ff6a00',borderRadius:'10px',background:'#111',color:'#fff',font:'700 16px system-ui',outline:'none'});
+    document.body.appendChild(input);let done=false;
+    const commit=()=>{if(done)return;done=true;const text=input.value.trim();input.remove();if(text){if(existing){existing.text=text}else{getAnnotations().push({id:uid(),type:'text',points:[pdfPoint],text,fontSize:16})}saveMeta();}setTool('pan');drawOverlay();};
+    input.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();commit()}else if(ev.key==='Escape'){done=true;input.remove();setTool('pan');drawOverlay()}});
+    input.addEventListener('blur',()=>setTimeout(commit,40));setTimeout(()=>{input.focus();input.select()},30);
+  }
+  $('#overlayCanvas').addEventListener('click',e=>{if(state.tool!=='text')return;e.preventDefault();e.stopImmediatePropagation();openDirectTextEditor(e.clientX,e.clientY,pdfPointFromEvent(e));});
 
   // Distance: first tap fixes A. Second press starts B; drag and release commits a straight A–B distance.
   $("#overlayCanvas").addEventListener("pointerdown",e=>{
@@ -989,7 +1000,7 @@
     }
   });
   $("#overlayCanvas").addEventListener("pointercancel",()=>{if(state.editMeasure){state.editMeasure=null;}if(state.distanceDraft){state.distanceDraft=null;}drawOverlay();});
-  $("#overlayCanvas").addEventListener("click",e=>{if(Date.now()<state.suppressClickUntil||state.tool==="pan"||state.tool==="distance")return;state.tempPoints.push(pdfPointFromEvent(e));drawOverlay();});
+  $("#overlayCanvas").addEventListener("click",e=>{if(Date.now()<state.suppressClickUntil||["pan","distance","text","pen","arrow","circle"].includes(state.tool))return;state.tempPoints.push(pdfPointFromEvent(e));drawOverlay();});
 
   function screenMeasureHandles(m){
     if(!m||m.type!=="distance"||m.points?.length!==2)return [];const sc=state.renderScale*state.viewZoom,r=$("#overlayCanvas").getBoundingClientRect();return [{kind:"a",p:m.points[0]},{kind:"b",p:m.points[1]}].map(h=>({...h,cx:r.left+h.p.x*sc,cy:r.top+h.p.y*sc}));
@@ -1065,6 +1076,8 @@
     state.selectedOverlay=hit;
     for(const a of getAnnotations())a.selected=hit?.kind==='annotation'&&hit.obj.id===a.id;
     $("#deleteSelectedBtn").classList.toggle("hidden",!hit);
+    const isText=hit?.kind==='annotation'&&hit.obj.type==='text';
+    $("#textSmallerBtn").classList.toggle("hidden",!isText);$("#textLargerBtn").classList.toggle("hidden",!isText);$("#editSelectedTextBtn").classList.toggle("hidden",!isText);
     if(hit){drawOverlay();state.suppressClickUntil=Date.now()+250;return;}
     drawOverlay();
     if(await handleSmartDoubleTap(e.clientX,e.clientY)){state.suppressClickUntil=Date.now()+350;}
@@ -1831,7 +1844,7 @@
 
   function scannerAddHit(map,hit,f,pageNo){
     const label=hit.area?.name||'Ej områdesbestämt', bucket=scannerBucket(map,label,hit.area?.kind||'unknown',hit.area?.confidence||.60);
-    let key=hit.type==='light'?hit.subtype:(hit.type==='outlet'?'Uttag':'Brytare');bucket.counts.set(key,(bucket.counts.get(key)||0)+1);const ck=`${key}@@${f.category||'Övrigt'}`;bucket.categoryCounts.set(ck,(bucket.categoryCounts.get(ck)||0)+1);bucket.sources.add(`${displayLabel(f)} · s${pageNo}`);bucket.hits++;bucket.scoreSum+=hit.score||.6;
+    let key=hit.type==='light'?hit.subtype:(hit.type==='outlet'?'Uttag':'Strömställare');bucket.counts.set(key,(bucket.counts.get(key)||0)+1);const ck=`${key}@@${f.category||'Övrigt'}`;bucket.categoryCounts.set(ck,(bucket.categoryCounts.get(ck)||0)+1);bucket.sources.add(`${displayLabel(f)} · s${pageNo}`);bucket.hits++;bucket.scoreSum+=hit.score||.6;
   }
 
   function scannerAreaSort(a,b){
@@ -1872,7 +1885,7 @@
           const hits=[];
           if(types.lights)hits.push(...scannerArmatureCandidates(tc,baseVp,vpAreas));
           try{hits.push(...await scannerVisualSymbols(page,tc,areas,types))}catch(e){console.warn('Visual scanner page failed',e)}
-          for(const hit of hits){const key=hit.type==='light'?hit.subtype:(hit.type==='outlet'?'Uttag':'Brytare');const areaName=hit.area?.name||'Ej områdesbestämt';const rec={...hit,fileId:f.id||id,page:pg,symbol:key,areaName,display:displayLabel(f),category:f.category||'Övrigt'};state.scannerSession.hits.push(rec);scannerAddHit(buckets,hit,f,pg);totalCounts.set(key,(totalCounts.get(key)||0)+1)}
+          for(const hit of hits){const key=hit.type==='light'?hit.subtype:(hit.type==='outlet'?'Uttag':'Strömställare');const areaName=hit.area?.name||'Ej områdesbestämt';const rec={...hit,fileId:f.id||id,page:pg,symbol:key,areaName,display:displayLabel(f),category:f.category||'Övrigt'};state.scannerSession.hits.push(rec);scannerAddHit(buckets,hit,f,pg);totalCounts.set(key,(totalCounts.get(key)||0)+1)}
           await new Promise(r=>setTimeout(r,0));
         }
         try{await doc.destroy()}catch(_e){}
@@ -2079,7 +2092,11 @@
 
   $('#ataCameraInput').onchange=e=>{const a=(state.meta.atas||[]).find(x=>x.id===state.ataPhotoTarget);if(!a)return;const f=e.target.files?.[0];if(f){const r=new FileReader();r.onload=()=>{a.photos=a.photos||[];a.photos.push(r.result);saveMeta();renderAtas();toast('Fotot lades till i ÄTA')};r.readAsDataURL(f)}e.target.value=''};
   $('#ataPhotoInput').onchange=e=>{const a=(state.meta.atas||[]).find(x=>x.id===state.ataPhotoTarget);if(!a)return;for(const f of [...e.target.files].slice(0,5)){const r=new FileReader();r.onload=()=>{a.photos=a.photos||[];a.photos.push(r.result);saveMeta();renderAtas()};r.readAsDataURL(f)}e.target.value=''};
-  $('#deleteSelectedBtn').onclick=async()=>{const h=state.selectedOverlay;if(!h)return;if(!await confirmDelete('Ta bort från ritning?','Vill du verkligen ta bort den markerade mätningen/markeringen?'))return;if(h.kind==='measure'){const arr=getMeasurements(),i=arr.findIndex(x=>x.id===h.obj.id);if(i>=0)arr.splice(i,1)}else{const arr=getAnnotations(),i=arr.findIndex(x=>x.id===h.obj.id);if(i>=0)arr.splice(i,1)}state.selectedOverlay=null;$('#deleteSelectedBtn').classList.add('hidden');saveMeta();drawOverlay()};
+  function selectedText(){const h=state.selectedOverlay;return h?.kind==='annotation'&&h.obj.type==='text'?h.obj:null}
+  $('#textSmallerBtn').onclick=()=>{const a=selectedText();if(!a)return;a.fontSize=Math.max(10,(Number(a.fontSize)||16)-2);saveMeta();drawOverlay()};
+  $('#textLargerBtn').onclick=()=>{const a=selectedText();if(!a)return;a.fontSize=Math.min(48,(Number(a.fontSize)||16)+2);saveMeta();drawOverlay()};
+  $('#editSelectedTextBtn').onclick=()=>{const a=selectedText();if(!a)return;const r=$('#overlayCanvas').getBoundingClientRect(),sc=state.renderScale*state.viewZoom,p=a.points[0];openDirectTextEditor(r.left+p.x*sc,r.top+p.y*sc,p,a)};
+  $('#deleteSelectedBtn').onclick=async()=>{const h=state.selectedOverlay;if(!h)return;if(!await confirmDelete('Ta bort från ritning?','Vill du verkligen ta bort den markerade mätningen/markeringen?'))return;if(h.kind==='measure'){const arr=getMeasurements(),i=arr.findIndex(x=>x.id===h.obj.id);if(i>=0)arr.splice(i,1)}else{const arr=getAnnotations(),i=arr.findIndex(x=>x.id===h.obj.id);if(i>=0)arr.splice(i,1)}state.selectedOverlay=null;$('#deleteSelectedBtn').classList.add('hidden');$('#textSmallerBtn').classList.add('hidden');$('#textLargerBtn').classList.add('hidden');$('#editSelectedTextBtn').classList.add('hidden');saveMeta();drawOverlay()};
   $('#riserBtn').onclick=()=>setRiserMode(!state.riserMode);
   $('#riserUpBtn').onclick=()=>openAdjacentFloor(1);
   $('#riserDownBtn').onclick=()=>openAdjacentFloor(-1);

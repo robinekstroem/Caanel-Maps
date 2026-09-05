@@ -536,3 +536,9 @@ button.file-tag{cursor:pointer}
 .counter-source-chips{display:flex;gap:8px;flex-wrap:wrap;padding:0 12px 12px}
 .counter-source-chip{appearance:none;border:1px solid rgba(255,255,255,.12);background:#1a1a1d;color:#eee;border-radius:999px;padding:7px 11px;font:700 12px/1 system-ui;cursor:pointer}
 .counter-source-chip:active{border-color:#ff6a00;color:#ff7a1a}
+
+/* v5.0.7 markup UX */
+.viewer-view.fullscreen-ui .drawing-edge-arrow{top:76%!important}
+.viewer-view.fullscreen-ui .drawing-edge-left{left:5px!important}
+.viewer-view.fullscreen-ui .drawing-edge-right{right:62px!important}
+.drawing-text-editor{box-shadow:0 10px 32px rgba(0,0,0,.45)}
