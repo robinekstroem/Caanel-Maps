@@ -10,8 +10,8 @@ android {
         applicationId "se.caanel.field"
         minSdk 26
         targetSdk 35
-        versionCode 34
-        versionName "5.0.3-build34"
+        versionCode 35
+        versionName "5.0.4-build35"
     }
 
     buildTypes {

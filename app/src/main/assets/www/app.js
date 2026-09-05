@@ -1162,8 +1162,9 @@
       requestAnimationFrame(()=>{
         viewport.scrollLeft=Math.max(0,fx*w-viewport.clientWidth/2);
         viewport.scrollTop=Math.max(0,fy*h-viewport.clientHeight/2);
+        centerFullscreenDrawing();
       });
-    }
+    }else requestAnimationFrame(centerFullscreenDrawing);
   }
 
   function fitDrawing(){
@@ -1400,15 +1401,22 @@
   function centerFullscreenDrawing(){
     const viewer=$("#viewerView"), viewport=$("#pdfViewport"), wrap=$("#canvasWrap");
     if(!viewer||!viewport||!wrap||!viewer.classList.contains("fullscreen-ui"))return;
-    // Explicit numeric centering. CSS margins/padding had conflicting historical overrides.
-    wrap.style.margin="0"; wrap.style.position="relative"; wrap.style.top="0px"; wrap.style.left="0px";
-    const rail=64, topSafe=58, bottomSafe=12;
-    const availW=Math.max(0,viewport.clientWidth-rail), availH=Math.max(0,viewport.clientHeight-topSafe-bottomSafe);
-    const rect=wrap.getBoundingClientRect(), w=rect.width, h=rect.height;
-    const x=w<availW?Math.max(0,(availW-w)/2):0;
-    const y=h<availH?Math.max(0,topSafe+(availH-h)/2):0;
-    wrap.style.left=x+"px"; wrap.style.top=y+"px";
-    if(w<availW)viewport.scrollLeft=0;if(h<availH)viewport.scrollTop=0;
+    const rail=64, topSafe=56, bottomSafe=10;
+    const w=parseFloat(wrap.style.width)||wrap.getBoundingClientRect().width, h=parseFloat(wrap.style.height)||wrap.getBoundingClientRect().height;
+    const availW=Math.max(80,viewport.clientWidth-rail), availH=Math.max(80,viewport.clientHeight-topSafe-bottomSafe);
+    const fits=w<=availW+1&&h<=availH+1;
+    wrap.style.margin="0";wrap.style.transform="none";
+    if(fits){
+      // When the whole sheet fits, take it out of normal document flow and place its centre
+      // in the actual usable fullscreen rectangle. This avoids historical margin/flex conflicts.
+      const x=Math.max(0,(availW-w)/2), y=Math.max(topSafe,topSafe+(availH-h)/2);
+      wrap.style.position="absolute";wrap.style.left=x+"px";wrap.style.top=y+"px";
+      viewport.style.overflow="hidden";viewport.scrollLeft=0;viewport.scrollTop=0;
+    }else{
+      // Zoomed drawings stay in normal scroll flow so every edge remains reachable.
+      wrap.style.position="relative";wrap.style.left="0px";wrap.style.top="0px";
+      viewport.style.overflow="auto";
+    }
   }
 
   async function toggleFullscreen(){
@@ -1606,56 +1614,227 @@
   function renderCounter(){
     const list=$("#counterDrawingList"); if(!list)return;
     const cat=state.counterCategory||'Belysning';
-    $$("[data-counter-category]").forEach(b=>b.classList.toggle('active',b.dataset.counterCategory===cat));
+    $$('[data-counter-category]').forEach(b=>b.classList.toggle('active',b.dataset.counterCategory===cat));
     const files=(state.meta.projects||[]).flatMap(p=>(p.files||[]).map(id=>fileMeta(id))).filter(f=>f&&f.documentType!=="armatureSchedule"&&f.documentType!=="occhioSchedule"&&f.category===cat).sort(smartSortFiles);
     list.innerHTML=files.length?files.map(f=>`<label class="counter-drawing"><input type="checkbox" data-counter-file="${f.id}" ${state.counterSelected.has(f.id)?'checked':''}><span><strong>${esc(displayLabel(f))}</strong><small class="muted">${esc(projectById(f.projectId)?.name||'')} · ${f.pageCount||1} sida${(f.pageCount||1)===1?'':'or'}</small></span></label>`).join(''):`<div class="empty">Inga ${esc(cat.toLowerCase())}-ritningar.</div>`;
-    list.querySelectorAll('[data-counter-file]').forEach(cb=>cb.onchange=e=>{e.target.checked?state.counterSelected.add(e.target.dataset.counterFile):state.counterSelected.delete(e.target.dataset.counterFile)});
+    list.querySelectorAll('[data-counter-file]').forEach(cb=>cb.onchange=e=>{e.target.checked?state.counterSelected.add(e.target.dataset.counterFile):state.counterSelected.delete(e.target.dataset.counterFile);renderCounterSelectionBadge()});
+    renderCounterSelectionBadge();
   }
+
+  function renderCounterSelectionBadge(){
+    const status=$("#counterStatus"); if(!status)return;
+    const groups=counterSelectedSummary();
+    const n=[...state.counterSelected].length;
+    if(!n){status.textContent='Inga ritningar markerade.';return}
+    status.innerHTML=`${n} ritningar valda · `+Object.entries(groups).map(([c,fs])=>`${esc(c)} ${fs.length}`).join(' · ');
+  }
+
+  function scannerTextNodes(tc){
+    return (tc.items||[]).map((it,i)=>({
+      i,text:String(it.str||'').replace(/\s+/g,' ').trim(),
+      x:+(it.transform?.[4]||0),y:+(it.transform?.[5]||0),
+      w:Math.max(1,+it.width||0),h:Math.max(5,Math.abs(+(it.height||it.transform?.[0]||8)))
+    })).filter(n=>n.text);
+  }
+
+  function scannerNormalizeApartment(text){
+    const t=String(text||'').toUpperCase().replace(/[‐‑–—]/g,'-').replace(/\s+/g,' ');
+    let m=t.match(/\bB\s*[- ]?\s*(\d{3,5})\b/); return m?`B${m[1]}`:'';
+  }
+
   function counterLocationBlocks(tc){
-    const items=(tc.items||[]).map((x,i)=>({i,text:String(x.str||'').trim(),x:+(x.transform?.[4]||0),y:+(x.transform?.[5]||0),w:+(x.width||0),h:Math.abs(+(x.height||x.transform?.[0]||8))})).filter(x=>x.text);
-    const found=[];
-    // Apartment IDs are strong identifiers on their own.
-    for(const a of items){for(const m of a.text.toUpperCase().matchAll(/\bB\d{3,5}\b/g))found.push({name:m[0],x:a.x,y:a.y,confidence:1})}
-    // Room number must be spatially tied to the word RUM/ROOM. Never accept loose numbers.
-    for(const a of items){if(!/^(RUM|ROOM)\b/i.test(a.text))continue;
-      let m=a.text.match(/^(?:RUM|ROOM)\s*([A-Z]?\d{2,5})\b/i);
-      if(m){found.push({name:'Rum '+m[1].toUpperCase(),x:a.x,y:a.y,confidence:.98});continue}
-      const near=items.filter(b=>b!==a && /^[A-Z]?\d{2,5}$/i.test(b.text) && Math.abs(b.y-a.y)<Math.max(16,a.h*2.4) && b.x>=a.x-8 && b.x<a.x+120).sort((u,v)=>Math.hypot(u.x-a.x,u.y-a.y)-Math.hypot(v.x-a.x,v.y-a.y))[0];
-      if(near){const area=items.some(c=>/m²|m2/i.test(c.text)&&Math.abs(c.y-a.y)<45&&Math.abs(c.x-a.x)<170);found.push({name:'Rum '+near.text.toUpperCase(),x:a.x,y:a.y,confidence:area?.99:.9})}
+    const items=scannerTextNodes(tc), found=[];
+    // 1) Bxxxx is strongest. Handle both one text item and split "B" + "1701".
+    for(const a of items){
+      const id=scannerNormalizeApartment(a.text); if(id)found.push({name:id,kind:'apartment',x:a.x+a.w/2,y:a.y,confidence:.995});
     }
-    const uniq=new Map();for(const x of found){const k=x.name.toUpperCase();if(!uniq.has(k)||uniq.get(k).confidence<x.confidence)uniq.set(k,x)}return [...uniq.values()];
+    for(const a of items){
+      if(!/^B[.:\-]?$/i.test(a.text))continue;
+      const near=items.filter(b=>/^\d{3,5}$/.test(b.text)&&Math.abs(b.y-a.y)<Math.max(18,a.h*2.2)&&b.x>a.x-5&&b.x<a.x+110)
+        .sort((u,v)=>Math.hypot(u.x-a.x,u.y-a.y)-Math.hypot(v.x-a.x,v.y-a.y))[0];
+      if(near)found.push({name:`B${near.text}`,kind:'apartment',x:(a.x+near.x)/2,y:(a.y+near.y)/2,confidence:.985});
+    }
+    // 2) Room needs spatial evidence: RUM/ROOM + nearby number. An m² line raises confidence.
+    for(const a of items){
+      if(!/^(RUM|ROOM)\b/i.test(a.text))continue;
+      let m=a.text.match(/^(?:RUM|ROOM)\s*[:.-]?\s*([A-Z]?\d{1,5}[A-Z]?)\b/i);
+      let numNode=null, num='';
+      if(m)num=m[1].toUpperCase();
+      else{
+        numNode=items.filter(b=>b!==a&&/^[A-Z]?\d{1,5}[A-Z]?$/i.test(b.text)&&Math.abs(b.y-a.y)<Math.max(24,a.h*3.1)&&Math.abs(b.x-a.x)<150)
+          .sort((u,v)=>Math.hypot(u.x-(a.x+a.w),u.y-a.y)-Math.hypot(v.x-(a.x+a.w),v.y-a.y))[0];
+        if(numNode)num=numNode.text.toUpperCase();
+      }
+      if(!num)continue;
+      const cx=numNode?(a.x+numNode.x)/2:a.x+a.w/2, cy=numNode?(a.y+numNode.y)/2:a.y;
+      const areaEvidence=items.some(c=>/(?:\d+[,.]\d+|\d+)\s*m(?:²|2)\b/i.test(c.text)&&Math.abs(c.y-cy)<65&&Math.abs(c.x-cx)<210);
+      const roomNameEvidence=items.some(c=>/^(KÖK|KOK|SOV|SOVRUM|VARDAGSRUM|BAD|BADRUM|WC|HALL|ENTR[EÉ]|TEKNIK|FÖRRÅD|FORRAD|KONTOR|MÖTE|MOTE)$/i.test(c.text)&&Math.abs(c.y-cy)<90&&Math.abs(c.x-cx)<230);
+      found.push({name:`Rum ${num}`,kind:'room',x:cx,y:cy,confidence:areaEvidence ? .985 : (roomNameEvidence ? .95 : .88)});
+    }
+    // Remove duplicates within the same label. Prefer the strongest observation.
+    const uniq=new Map(); for(const x of found){const k=x.name.toUpperCase();if(!uniq.has(k)||uniq.get(k).confidence<x.confidence)uniq.set(k,x)}
+    const all=[...uniq.values()];
+    // If apartment IDs exist, they are the primary grouping on that page. Rooms remain as fallback metadata only.
+    const apartments=all.filter(x=>x.kind==='apartment'); return apartments.length?apartments:all.filter(x=>x.kind==='room');
   }
+
   function counterSelectedSummary(){
     const m={};for(const id of state.counterSelected){const f=fileMeta(id);if(!f)continue;(m[f.category]||(m[f.category]=[])).push(f)}return m;
   }
+
+  function counterRequestedTypes(){
+    const on=t=>!!document.querySelector(`[data-count-type="${t}"]`)?.checked;
+    return {lights:on('lights'),switches:on('switches'),outlets:on('outlets')};
+  }
+
+  function scannerToViewportAreas(blocks,viewport){
+    return blocks.map(b=>{const pt=viewport.convertToViewportPoint(b.x,b.y);return {...b,px:pt[0],py:pt[1]}});
+  }
+
+  function scannerTextBoxes(tc,viewport){
+    const scale=Math.hypot(viewport.transform?.[0]||1,viewport.transform?.[1]||0)||1;
+    return scannerTextNodes(tc).map(n=>{const p=viewport.convertToViewportPoint(n.x,n.y);const w=Math.max(3,n.w*scale),h=Math.max(4,n.h*scale);return {x:p[0]-2,y:p[1]-h-2,w:w+4,h:h+5,text:n.text}});
+  }
+
+  function scannerPointInText(x,y,boxes){
+    for(const b of boxes){if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h)return true}return false;
+  }
+
+  function scannerNearestArea(x,y,areas,w,h){
+    if(!areas.length)return null;
+    let best=null,bd=Infinity; for(const a of areas){const dx=x-a.px,dy=y-a.py,d=Math.hypot(dx,dy);if(d<bd){bd=d;best=a}}
+    const max=Math.hypot(w,h)*.48; return bd<=max?{area:best,distance:bd,confidence:Math.max(.55,1-bd/max)}:null;
+  }
+
+  function scannerArmatureCandidates(tc,viewport,areas){
+    const scale=Math.hypot(viewport.transform?.[0]||1,viewport.transform?.[1]||0)||1, out=[];
+    const seen=new Set();
+    for(const n of scannerTextNodes(tc)){
+      const raw=splitArmatureTag(n.text)?.tag; if(!raw||!/^(?:ARM\s*\d+|L\d+[A-Z]?|N\d+[A-Z]?|K\d+[A-Z]?|BL)$/i.test(raw))continue;
+      const p=viewport.convertToViewportPoint(n.x,n.y),x=p[0],y=p[1];
+      // Legend/title block is the biggest source of false armature counts. Keep the drawing field only.
+      if((x>viewport.width*.80)||(x>viewport.width*.70&&y>viewport.height*.70)||(y>viewport.height*.94))continue;
+      const key=`${raw.toUpperCase().replace(/\s+/g,'')}:${Math.round(x/4)}:${Math.round(y/4)}`;if(seen.has(key))continue;seen.add(key);
+      const near=scannerNearestArea(x,y,areas,viewport.width,viewport.height);
+      out.push({type:'light',subtype:raw.toUpperCase().replace(/\s+/g,''),x,y,score:near?.area?Math.min(.97,.78+(near.confidence*.18)):.72,area:near?.area||null});
+    }
+    return out;
+  }
+
+  function scannerRegionDensity(mask,w,h,cx,cy,x0,y0,x1,y1,s=1){
+    let hit=0,total=0; const ax=Math.round(cx+x0*s),ay=Math.round(cy+y0*s),bx=Math.round(cx+x1*s),by=Math.round(cy+y1*s);
+    for(let y=Math.max(0,ay);y<=Math.min(h-1,by);y++)for(let x=Math.max(0,ax);x<=Math.min(w-1,bx);x++){total++;if(mask[y*w+x])hit++}
+    return total?hit/total:0;
+  }
+
+  function scannerRotatedDensity(mask,w,h,cx,cy,rect,rot,s=1){
+    const [x0,y0,x1,y1]=rect;let hit=0,total=0;const c=Math.cos(rot),sn=Math.sin(rot);
+    for(let v=y0;v<=y1;v++)for(let u=x0;u<=x1;u++){
+      const xx=Math.round(cx+(u*c-v*sn)*s), yy=Math.round(cy+(u*sn+v*c)*s); if(xx<0||yy<0||xx>=w||yy>=h)continue;total++;if(mask[yy*w+xx])hit++;
+    }return total?hit/total:0;
+  }
+
+  function scannerClassifyAnchor(mask,w,h,cx,cy){
+    let bestOutlet=0,bestSwitch=0;
+    const scales=[.72,1,1.32];
+    for(const s of scales)for(let r=0;r<4;r++){
+      const rot=r*Math.PI/2;
+      // Outlet reference supplied by user: broad dark half-cup + base + short perpendicular stem.
+      const cap=scannerRotatedDensity(mask,w,h,cx,cy,[-7,-7,7,-2],rot,s);
+      const base=scannerRotatedDensity(mask,w,h,cx,cy,[-9,-1,9,1],rot,s);
+      const stem=scannerRotatedDensity(mask,w,h,cx,cy,[-1,2,1,9],rot,s);
+      const side=scannerRotatedDensity(mask,w,h,cx,cy,[-8,3,-3,8],rot,s)+scannerRotatedDensity(mask,w,h,cx,cy,[3,3,8,8],rot,s);
+      const outlet=Math.max(0,cap*.46+base*.30+stem*.28-side*.10);
+      bestOutlet=Math.max(bestOutlet,outlet);
+      // Switch reference: compact filled pivot plus diagonal operating line/lever.
+      const pivot=scannerRotatedDensity(mask,w,h,cx,cy,[-3,-3,3,3],rot,s);
+      const ray=scannerRotatedDensity(mask,w,h,cx,cy,[3,-2,13,1],rot-Math.PI/4,s);
+      const end=scannerRotatedDensity(mask,w,h,cx,cy,[11,-4,16,4],rot-Math.PI/4,s);
+      const switchScore=pivot*.55+ray*.27+end*.18;
+      bestSwitch=Math.max(bestSwitch,switchScore);
+    }
+    if(bestOutlet>.57&&bestOutlet>bestSwitch+.035)return {type:'outlet',score:Math.min(.99,bestOutlet)};
+    if(bestSwitch>.60)return {type:'switch',score:Math.min(.98,bestSwitch)};
+    return null;
+  }
+
+  function scannerNms(cands,radius=14){
+    const out=[]; for(const c of cands.sort((a,b)=>b.score-a.score)){if(out.some(o=>o.type===c.type&&Math.hypot(o.x-c.x,o.y-c.y)<radius))continue;out.push(c)}return out;
+  }
+
+  async function scannerVisualSymbols(page,tc,areas,types){
+    if(!types.outlets&&!types.switches)return [];
+    const base=page.getViewport({scale:1}); const scanScale=Math.min(1,1800/Math.max(1,base.width));
+    const viewport=page.getViewport({scale:scanScale});
+    const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(viewport.width));canvas.height=Math.max(1,Math.round(viewport.height));
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+    await page.render({canvasContext:ctx,viewport}).promise;
+    const img=ctx.getImageData(0,0,canvas.width,canvas.height),d=img.data,w=canvas.width,h=canvas.height,mask=new Uint8Array(w*h);
+    for(let i=0,j=0;i<d.length;i+=4,j++){const lum=(d[i]*3+d[i+1]*6+d[i+2])/10;mask[j]=lum<92?1:0}
+    const boxes=scannerTextBoxes(tc,viewport), vpAreas=scannerToViewportAreas(areas,viewport), cand=[];
+    // Dense-anchor search. Text boxes and title/legend field are suppressed before classification.
+    for(let y=10;y<h-10;y+=3)for(let x=10;x<w-10;x+=3){
+      if((x>w*.80)||(x>w*.70&&y>h*.70)||scannerPointInText(x,y,boxes))continue;
+      const core=scannerRegionDensity(mask,w,h,x,y,-3,-3,3,3,1); if(core<.20)continue;
+      const cls=scannerClassifyAnchor(mask,w,h,x,y); if(!cls)continue;
+      if(cls.type==='outlet'&&!types.outlets)continue;if(cls.type==='switch'&&!types.switches)continue;
+      const near=scannerNearestArea(x,y,vpAreas,w,h); cand.push({...cls,x,y,area:near?.area||null,score:cls.score*(near?.area?(.90+.10*near.confidence):.86)});
+    }
+    canvas.width=1;canvas.height=1;
+    return scannerNms(cand,13);
+  }
+
+  function scannerBucket(map,name,kind='area',confidence=.8){
+    const key=(name||'Ej områdesbestämt').toUpperCase(); if(!map.has(key))map.set(key,{name:name||'Ej områdesbestämt',kind,confidence,counts:new Map(),sources:new Set(),hits:0,scoreSum:0});return map.get(key);
+  }
+
+  function scannerAddHit(map,hit,f,pageNo){
+    const label=hit.area?.name||'Ej områdesbestämt', bucket=scannerBucket(map,label,hit.area?.kind||'unknown',hit.area?.confidence||.60);
+    let key=hit.type==='light'?hit.subtype:(hit.type==='outlet'?'Uttag':'Brytare');bucket.counts.set(key,(bucket.counts.get(key)||0)+1);bucket.sources.add(`${displayLabel(f)} · s${pageNo}`);bucket.hits++;bucket.scoreSum+=hit.score||.6;
+  }
+
+  function scannerAreaSort(a,b){
+    const pa=/^B(\d+)/i.exec(a.name),pb=/^B(\d+)/i.exec(b.name);if(pa&&pb)return Number(pa[1])-Number(pb[1]);if(pa)return -1;if(pb)return 1;
+    const ra=/RUM\s*([A-Z]?\d+)/i.exec(a.name),rb=/RUM\s*([A-Z]?\d+)/i.exec(b.name);if(ra&&rb)return String(ra[1]).localeCompare(String(rb[1]),'sv',{numeric:true});return a.name.localeCompare(b.name,'sv',{numeric:true});
+  }
+
+  function scannerResultHtml(buckets,totalCounts,groups,pages){
+    const selection=Object.entries(groups).map(([c,fs])=>`<span class="counter-chip"><b>${esc(c)}</b> ${fs.length}</span>`).join('');
+    const entries=[...buckets.values()].filter(b=>b.hits||b.name!=='Ej områdesbestämt').sort(scannerAreaSort);
+    const cards=entries.map(b=>{
+      const confidence=b.hits?Math.round((b.scoreSum/b.hits)*100):Math.round((b.confidence||.7)*100);
+      const rows=[...b.counts.entries()].sort((a,b)=>a[0].localeCompare(b[0],'sv',{numeric:true})).map(([k,n])=>`<button class="counter-result-row" type="button"><span>${esc(k)}</span><strong>${n} st</strong></button>`).join('');
+      return `<article class="counter-area-card"><div class="counter-area-title"><div><h3>${esc(b.name)}</h3><small>${b.sources.size} ritningssidor</small></div><span class="counter-confidence ${confidence>=88?'good':confidence>=72?'mid':'low'}">${confidence}%</span></div><div class="counter-area-counts">${rows||'<span class="muted">Inga verifierade symbolträffar.</span>'}</div></article>`;
+    }).join('');
+    const totals=[...totalCounts.entries()].sort((a,b)=>a[0].localeCompare(b[0],'sv',{numeric:true})).map(([k,n])=>`<div class="counter-total-row"><span>${esc(k)}</span><strong>${n} st</strong></div>`).join('');
+    return `<div class="counter-selection-summary">${selection}</div><div class="counter-smart-banner"><strong>Smart Scanner v2</strong><span>${Object.values(groups).reduce((n,a)=>n+a.length,0)} ritningar · ${pages} sidor. Kategori används bara som ritningsfilter; samma symbolbibliotek används på allt markerat.</span></div>${cards||'<div class="counter-card"><h3>Inga säkra områdesresultat ännu</h3><p class="muted">Scannern hittade inte tillräckligt säkra Bxxxx/Rum-kopplingar. Symboler utan område hamnar separat när de är tillräckligt säkra.</p></div>'}<div class="counter-total-card"><h3>Totalt för markerade ritningar</h3>${totals||'<p class="muted">Inga tillräckligt säkra symbolträffar ännu.</p>'}</div><div class="counter-warning"><strong>Kontrollerbar scanner</strong><br>EKIS kombinerar textpositioner och visuell symbolgeometri. Lösa siffror räknas aldrig som rum och text i titelblock/förklaringar filtreras bort. Resultatet är fortfarande beta – verifiera mängden mot ritningen innan beställning.</div>`;
+  }
+
   async function counterPreAnalyze(){
     const ids=[...state.counterSelected]; if(!ids.length){toast('Markera minst en ritning');return}
     const status=$("#counterStatus"), out=$("#counterResults"); out.innerHTML='';
-    const groups=counterSelectedSummary();
-    status.textContent=`AI-scannar ${ids.length} valda ritningar…`;
-    const locations=new Map(), categoryTotals={}; let pages=0;
-    for(const id of ids){
-      const f=fileMeta(id), blob=await getBlob(id); if(!f||!blob)continue;
-      const cat=f.category||'Övrigt'; categoryTotals[cat]=categoryTotals[cat]||{drawings:0,pages:0,tags:new Map()};categoryTotals[cat].drawings++;
+    const groups=counterSelectedSummary(),types=counterRequestedTypes(), buckets=new Map(),totalCounts=new Map(); let pages=0;
+    status.textContent=`Smart Scanner analyserar ${ids.length} ritningar…`;
+    for(let fi=0;fi<ids.length;fi++){
+      const id=ids[fi],f=fileMeta(id),blob=await getBlob(id);if(!f||!blob)continue;
       try{
         const doc=await pdfjsLib.getDocument({data:new Uint8Array(await blob.arrayBuffer())}).promise;
         for(let pg=1;pg<=doc.numPages;pg++){
-          pages++;categoryTotals[cat].pages++;
-          const page=await doc.getPage(pg),tc=await page.getTextContent(), blocks=counterLocationBlocks(tc);
-          const words=tc.items.map(x=>String(x.str||'').trim()).filter(Boolean);
-          // Belysning: collect explicit electrical armature tags only; loose numbers are ignored.
-          const tags=cat==='Belysning'?words.map(w=>splitArmatureTag(w)?.tag).filter(t=>t&&/^(?:ARM\s*\d+|L\d+[A-Z]?|N\d+[A-Z]?|K\d+[A-Z]?|BL)$/i.test(t)):[];
-          for(const t of tags){const k=t.toUpperCase().replace(/\s+/g,'');categoryTotals[cat].tags.set(k,(categoryTotals[cat].tags.get(k)||0)+1)}
-          for(const b of blocks){const key=b.name.toUpperCase();if(!locations.has(key))locations.set(key,{name:b.name,cats:new Set(),drawings:new Set(),pages:0});const r=locations.get(key);r.cats.add(cat);r.drawings.add(displayLabel(f));r.pages++}
+          pages++;status.textContent=`Scannar ${fi+1}/${ids.length} · ${displayLabel(f)} · sida ${pg}/${doc.numPages}`;
+          const page=await doc.getPage(pg),tc=await page.getTextContent(),baseVp=page.getViewport({scale:1}),areas=counterLocationBlocks(tc),vpAreas=scannerToViewportAreas(areas,baseVp);
+          // Keep detected areas even before a symbol is found, so B1801 etc. is visible as scanner context.
+          for(const a of areas)scannerBucket(buckets,a.name,a.kind,a.confidence).sources.add(`${displayLabel(f)} · s${pg}`);
+          const hits=[];
+          if(types.lights)hits.push(...scannerArmatureCandidates(tc,baseVp,vpAreas));
+          try{hits.push(...await scannerVisualSymbols(page,tc,areas,types))}catch(e){console.warn('Visual scanner page failed',e)}
+          for(const hit of hits){scannerAddHit(buckets,hit,f,pg);const key=hit.type==='light'?hit.subtype:(hit.type==='outlet'?'Uttag':'Brytare');totalCounts.set(key,(totalCounts.get(key)||0)+1)}
+          await new Promise(r=>setTimeout(r,0));
         }
         try{await doc.destroy()}catch(_e){}
       }catch(e){console.warn('Counter scan failed',e)}
     }
-    const selectedChips=Object.entries(groups).map(([c,fs])=>`<span class="counter-chip"><b>${esc(c)}</b> ${fs.length}</span>`).join('');
-    const locRows=[...locations.values()].sort((a,b)=>a.name.localeCompare(b.name,'sv')).map(r=>`<tr><td><strong>${esc(r.name)}</strong></td><td>${esc([...r.cats].join(', '))}</td><td>${r.drawings.size}</td></tr>`).join('');
-    const catCards=Object.entries(categoryTotals).map(([cat,r])=>{const tags=[...r.tags.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([t,n])=>`<span class="counter-pill">${esc(t)} <b>${n}</b></span>`).join('');return `<div class="counter-card"><h3>${esc(cat)}</h3><p class="muted">${r.drawings} ritningar · ${r.pages} sidor scannade</p>${cat==='Belysning'?`<div class="counter-pills">${tags||'<span class="muted">Inga säkra armaturbeteckningar hittades.</span>'}</div>`:`<div class="counter-scan-pending"><b>Symbolscanner aktiv</b><br><span class="muted">Uttag/brytare kräver geometrisk symbolmatchning. Lösa cirklar och siffror räknas inte.</span></div>`}</div>`}).join('');
     status.textContent=`${ids.length} ritningar · ${pages} sidor scannade`;
-    out.innerHTML=`<div class="counter-selection-summary">${selectedChips}</div>${catCards}<div class="counter-card"><h3>Lägenheter / rum</h3><table class="counter-table"><thead><tr><th>Område</th><th>Kategori</th><th>Ritningar</th></tr></thead><tbody>${locRows||'<tr><td colspan="3">Inga säkra Bxxxx- eller Rum + nummer-beteckningar hittades.</td></tr>'}</tbody></table></div><div class="counter-warning"><strong>Scanner beta</strong><br>EKIS räknar aldrig lösa siffror som rum. Kraftsymboler visas först när geometrin är verifierad så att arkitektgrafik inte blir falska uttag.</div>`;
+    out.innerHTML=scannerResultHtml(buckets,totalCounts,groups,pages);
   }
 
   async function exportProject(){
