@@ -37,6 +37,8 @@
     touchState: null,
     currentProjectCategory: "Alla",
     smartHotspots: [],
+    drawingRefHotspots: [],
+    drawingRefHistory: [],
     pendingArmatureTarget: null,
     armatureReturn: null,
     armatureHighlight: null,
@@ -1060,7 +1062,7 @@
   }
 
   async function loadSmartHotspots(page,viewport){
-    state.smartHotspots=[]; state.pageTextItems=[];
+    state.smartHotspots=[]; state.drawingRefHotspots=[]; state.pageTextItems=[];
     const f=fileMeta(state.currentFileId); if(!f)return;
     const schedules=findArmatureSchedules(f.projectId);
     try{
@@ -1068,6 +1070,17 @@
       for(const item of tc.items){
         const tx=pdfjsLib.Util.transform(viewport.transform,item.transform),h=Math.max(6,Math.hypot(tx[2],tx[3])),w=Math.max(8,(item.width||String(item.str||"").length*5)*state.renderScale);
         state.pageTextItems.push({str:String(item.str||""),x:tx[4]/state.renderScale,y:(tx[5]-h)/state.renderScale,w:w/state.renderScale,h:h/state.renderScale});
+      }
+      // Interna ritningshänvisningar, t.ex. SE “E-600-1-001”. De fungerar även
+      // när ingen armaturförteckning finns i projektet.
+      const refRe=/\bE\s*[-–]\s*\d{3}\s*[-–]\s*\d\s*[-–]\s*\d{3,5}\b/ig;
+      for(const it of state.pageTextItems){
+        const text=String(it.str||""); let mm;
+        while((mm=refRe.exec(text))){
+          const ref=normalizeDrawingRef(mm[0]);
+          if(!ref)continue;
+          state.drawingRefHotspots.push({ref,x:it.x,y:it.y,w:Math.max(it.w,42),h:Math.max(it.h,12)});
+        }
       }
       if(f.documentType!=="drawing"||!schedules.length)return;
       const index=new Map();
@@ -1082,6 +1095,59 @@
         if(best&&bestScore>=.6)state.smartHotspots.push({tag:best.tag,entry:best,x:it.x,y:it.y,w:Math.max(it.w,24),h:Math.max(it.h,10)});
       }
     }catch(err){console.warn("Hotspot scan failed",err)}
+  }
+
+  function normalizeDrawingRef(v){
+    const m=String(v||"").toUpperCase().replace(/[–—]/g,"-").replace(/\s+/g,"").match(/E-?(\d{3})-?(\d)-?(\d{3,5})/);
+    return m?`E-${m[1]}-${m[2]}-${m[3]}`:"";
+  }
+
+  function findDrawingByReference(projectId,ref){
+    const nr=normalizeDrawingRef(ref); if(!nr)return null;
+    const p=projectById(projectId); if(!p)return null;
+    const c=(p.files||[]).map(id=>fileMeta(id)).filter(Boolean).filter(f=>{
+      const nums=[f.drawingNumber,f.originalName,f.name].map(normalizeDrawingRef).filter(Boolean);
+      return nums.includes(nr);
+    });
+    if(!c.length)return null;
+    c.sort((a,b)=>{
+      const ar=String(a.revisionStatus||'').toLowerCase(),br=String(b.revisionStatus||'').toLowerCase();
+      const ap=ar==='ny'?0:ar==='gammal'?2:1,bp=br==='ny'?0:br==='gammal'?2:1;
+      if(ap!==bp)return ap-bp;
+      return (b.revisionIndex||0)-(a.revisionIndex||0);
+    });
+    return c[0];
+  }
+
+  function nearestDrawingRefHotspot(clientX,clientY){
+    if(!state.drawingRefHotspots.length)return null;
+    const r=$("#overlayCanvas").getBoundingClientRect(),scale=state.renderScale*state.viewZoom;
+    let best=null,bestD=Infinity;
+    for(const h of state.drawingRefHotspots){
+      const left=r.left+h.x*scale,top=r.top+h.y*scale,right=left+h.w*scale,bottom=top+h.h*scale;
+      const nx=Math.max(left,Math.min(clientX,right)),ny=Math.max(top,Math.min(clientY,bottom));
+      const d=Math.hypot(clientX-nx,clientY-ny); if(d<bestD){best=h;bestD=d}
+    }
+    // Ritningsnummer ska tryckas ganska exakt; undviker hopp från vanlig dubbeltryckszoom.
+    return bestD<=Math.max(24,28*state.viewZoom)?best:null;
+  }
+
+  async function openDrawingReference(ref){
+    const source=fileMeta(state.currentFileId); if(!source)return false;
+    const target=findDrawingByReference(source.projectId,ref);
+    if(!target){toast(`${ref} finns inte i projektet`);return true}
+    if(target.id===state.currentFileId){toast(`${ref} är den här ritningen`);return true}
+    state.drawingRefHistory.push({fileId:state.currentFileId,page:state.pageNum,viewState:captureViewState()});
+    if(state.drawingRefHistory.length>12)state.drawingRefHistory.shift();
+    toast(`Öppnar ${ref}`);
+    await openPdf(target.id,{page:1});
+    return true;
+  }
+
+  async function returnFromDrawingReference(){
+    const r=state.drawingRefHistory.pop(); if(!r)return false;
+    await openPdf(r.fileId,{page:r.page,viewState:r.viewState});
+    return true;
   }
 
   function nearestSmartHotspot(clientX,clientY){
@@ -1118,6 +1184,8 @@
 
   async function handleSmartDoubleTap(clientX,clientY){
     if(state.tool!=="pan" || state.syncCapture)return false;
+    const refHit=nearestDrawingRefHotspot(clientX,clientY);
+    if(refHit)return openDrawingReference(refHit.ref);
     const hit=nearestSmartHotspot(clientX,clientY);
     if(!hit)return false;
     showArmatureCard(hit.entry); return true;
@@ -1806,27 +1874,34 @@
   }
 
   function scannerClassifyAnchor(mask,w,h,cx,cy){
-    let bestOutlet=0,bestSwitch=0;
-    const scales=[.72,1,1.32];
-    for(const s of scales)for(let r=0;r<4;r++){
+    let outletBest=null,switchBest=null;
+    const scales=[.72,1,1.28];
+    for(const sc of scales)for(let r=0;r<4;r++){
       const rot=r*Math.PI/2;
-      // Outlet reference supplied by user: broad dark half-cup + base + short perpendicular stem.
-      const cap=scannerRotatedDensity(mask,w,h,cx,cy,[-7,-7,7,-2],rot,s);
-      const base=scannerRotatedDensity(mask,w,h,cx,cy,[-9,-1,9,1],rot,s);
-      const stem=scannerRotatedDensity(mask,w,h,cx,cy,[-1,2,1,9],rot,s);
-      const side=scannerRotatedDensity(mask,w,h,cx,cy,[-8,3,-3,8],rot,s)+scannerRotatedDensity(mask,w,h,cx,cy,[3,3,8,8],rot,s);
-      const outlet=Math.max(0,cap*.46+base*.30+stem*.28-side*.10);
-      bestOutlet=Math.max(bestOutlet,outlet);
-      // Switch reference: compact filled pivot plus diagonal operating line/lever.
-      const pivot=scannerRotatedDensity(mask,w,h,cx,cy,[-3,-3,3,3],rot,s);
-      const ray=scannerRotatedDensity(mask,w,h,cx,cy,[3,-2,13,1],rot-Math.PI/4,s);
-      const end=scannerRotatedDensity(mask,w,h,cx,cy,[11,-4,16,4],rot-Math.PI/4,s);
-      const switchScore=pivot*.55+ray*.27+end*.18;
-      bestSwitch=Math.max(bestSwitch,switchScore);
+      // UTTAG: hela symbolen måste finnas samtidigt: mörk halvkopp, baslinje och kort stam.
+      const cap=scannerRotatedDensity(mask,w,h,cx,cy,[-7,-7,7,-3],rot,sc);
+      const base=scannerRotatedDensity(mask,w,h,cx,cy,[-9,-2,9,1],rot,sc);
+      const stem=scannerRotatedDensity(mask,w,h,cx,cy,[-1,1,1,9],rot,sc);
+      const lowerL=scannerRotatedDensity(mask,w,h,cx,cy,[-8,3,-3,8],rot,sc);
+      const lowerR=scannerRotatedDensity(mask,w,h,cx,cy,[3,3,8,8],rot,sc);
+      const emptyBelow=1-Math.min(1,(lowerL+lowerR)/2);
+      const outletScore=cap*.40+base*.28+stem*.24+emptyBelow*.08;
+      const outletValid=cap>.34&&base>.24&&stem>.20&&outletScore>.62;
+      if(outletValid&&(!outletBest||outletScore>outletBest.score))outletBest={score:outletScore,cap,base,stem};
+
+      // STRÖMSTÄLLARE: fylld pivot + diagonal manöverarm + ändmarkering.
+      const pivot=scannerRotatedDensity(mask,w,h,cx,cy,[-3,-3,3,3],rot,sc);
+      const ray=scannerRotatedDensity(mask,w,h,cx,cy,[3,-2,13,1],rot-Math.PI/4,sc);
+      const endMark=scannerRotatedDensity(mask,w,h,cx,cy,[11,-4,16,4],rot-Math.PI/4,sc);
+      const opposite=scannerRotatedDensity(mask,w,h,cx,cy,[-13,-2,-4,2],rot-Math.PI/4,sc);
+      const switchScore=pivot*.50+ray*.32+endMark*.20-opposite*.08;
+      const switchValid=pivot>.34&&ray>.18&&endMark>.12&&switchScore>.61;
+      if(switchValid&&(!switchBest||switchScore>switchBest.score))switchBest={score:switchScore,pivot,ray,endMark};
     }
-    // Never let proximity decide class. A switch-like diagonal lever vetoes a weak outlet match.
-    if(bestOutlet>.54&&bestOutlet>bestSwitch+.09)return {type:'outlet',score:Math.min(.99,bestOutlet)};
-    if(bestSwitch>.55&&bestSwitch>bestOutlet+.055)return {type:'switch',score:Math.min(.98,bestSwitch)};
+    const o=outletBest?.score||0,sw=switchBest?.score||0;
+    // Tveksam symbol = ingen träff. Precision prioriteras framför antal.
+    if(o>.64&&o>sw+.12)return {type:'outlet',score:Math.min(.99,o)};
+    if(sw>.64&&sw>o+.10)return {type:'switch',score:Math.min(.98,sw)};
     return null;
   }
 
@@ -2174,7 +2249,7 @@
   $('#riserDownBtn').onclick=()=>openAdjacentFloor(-1);
   $("#newTodoBtn").onclick=async()=>{const t=await promptModal("Ny uppgift","Vad ska göras?","");if(!t)return;const pr=await promptModal("Prioritet","Skriv Normal, Viktig eller Akut.","Normal");const due=await promptModal("Deadline","Datum YYYY-MM-DD, eller lämna tomt.","");state.meta.todos.unshift({id:uid(),text:t,done:false,priority:["Normal","Viktig","Akut"].find(x=>x.toLowerCase()===String(pr||"").toLowerCase())||"Normal",due:/^\d{4}-\d{2}-\d{2}$/.test(due||"")?due:"",projectId:state.currentProjectId||null});saveMeta();renderTodos()};
   $$("[data-todo-filter]").forEach(b=>b.onclick=()=>{state.todoFilter=b.dataset.todoFilter;$$('[data-todo-filter]').forEach(x=>x.classList.toggle('active',x===b));renderTodos()});
-  $("#backFilesBtn").onclick=()=>{const f=fileMeta(state.currentFileId); state.armatureReturn=null; state.armatureHighlight=null; if(f){state.currentProjectId=f.projectId;renderProject();showView("projectView",false)}else showView("projectsView")};
+  $("#backFilesBtn").onclick=async()=>{if(await returnFromDrawingReference())return;const f=fileMeta(state.currentFileId); state.armatureReturn=null; state.armatureHighlight=null; if(f){state.currentProjectId=f.projectId;renderProject();showView("projectView",false)}else showView("projectsView")};
   $("#backToDrawingBtn").onclick=returnToArmatureSource;
   $("#closeArmatureSheet").onclick=closeArmatureCard;
   $("#armatureSheet").onclick=e=>{if(e.target===$("#armatureSheet"))closeArmatureCard()};
