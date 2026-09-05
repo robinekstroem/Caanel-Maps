@@ -1758,14 +1758,50 @@
       const switchScore=pivot*.55+ray*.27+end*.18;
       bestSwitch=Math.max(bestSwitch,switchScore);
     }
-    if(bestOutlet>.57&&bestOutlet>bestSwitch+.035)return {type:'outlet',score:Math.min(.99,bestOutlet)};
-    if(bestSwitch>.60)return {type:'switch',score:Math.min(.98,bestSwitch)};
+    // Never let proximity decide class. A switch-like diagonal lever vetoes a weak outlet match.
+    if(bestOutlet>.62&&bestOutlet>bestSwitch+.11)return {type:'outlet',score:Math.min(.99,bestOutlet)};
+    if(bestSwitch>.57&&bestSwitch>bestOutlet+.045)return {type:'switch',score:Math.min(.98,bestSwitch)};
     return null;
   }
 
   function scannerNms(cands,radius=14){
     const out=[]; for(const c of cands.sort((a,b)=>b.score-a.score)){if(out.some(o=>o.type===c.type&&Math.hypot(o.x-c.x,o.y-c.y)<radius))continue;out.push(c)}return out;
   }
+
+  function scannerExclusionZones(tc,viewport){
+    const nodes=scannerTextNodes(tc), scale=Math.hypot(viewport.transform?.[0]||1,viewport.transform?.[1]||0)||1, zones=[];
+    const pt=n=>{const p=viewport.convertToViewportPoint(n.x,n.y);return {x:p[0],y:p[1]}};
+    // Legend is useful as semantic context, but every symbol inside it is forbidden from quantity counts.
+    for(const n of nodes){
+      if(!/FÖRKLARINGAR|FORKLARINGAR|SYMBOLFÖRKLARING|SYMBOLFOR[KL]{1,2}ARING/i.test(n.text))continue;
+      const q=pt(n); const right=q.x>viewport.width*.52;
+      zones.push({kind:'legend',x:right?Math.max(0,q.x-45):Math.max(0,q.x-25),y:Math.max(0,q.y-55),w:right?viewport.width-q.x+45:Math.min(viewport.width*.42,620*scale),h:Math.min(viewport.height-q.y+55,viewport.height*.78)});
+    }
+    // Title/revision blocks: never quantity-bearing.
+    zones.push({kind:'title',x:viewport.width*.80,y:viewport.height*.68,w:viewport.width*.20,h:viewport.height*.32});
+    return zones;
+  }
+
+  function scannerInZone(x,y,zones){return zones.some(z=>x>=z.x&&x<=z.x+z.w&&y>=z.y&&y<=z.y+z.h)}
+
+  function scannerHatchCells(mask,w,h){
+    // Detect large diagonal-hatched reference areas (other drawing parts). Small local hatching is not enough.
+    const cell=28, cols=Math.ceil(w/cell), rows=Math.ceil(h/cell), raw=new Uint8Array(cols*rows);
+    for(let cy=0;cy<rows;cy++)for(let cx=0;cx<cols;cx++){
+      let ink=0,diag=0,opp=0,total=0; const x0=cx*cell,y0=cy*cell,x1=Math.min(w-2,x0+cell),y1=Math.min(h-2,y0+cell);
+      for(let y=y0;y<y1;y+=2)for(let x=x0;x<x1;x+=2){const a=mask[y*w+x];ink+=a;total++; if(a&&mask[(y+1)*w+x+1])diag++; if(a&&x>0&&mask[(y+1)*w+x-1])opp++;}
+      const dens=ink/Math.max(1,total), d=(diag+opp)/Math.max(1,ink);
+      if(d>.42&&dens>.035&&dens<.34)raw[cy*cols+cx]=1;
+    }
+    // Keep only cells that belong to a sizeable vertical/2D run, avoiding furniture and tiny hatch symbols.
+    const keep=new Uint8Array(raw.length);
+    for(let cy=0;cy<rows;cy++)for(let cx=0;cx<cols;cx++)if(raw[cy*cols+cx]){
+      let n=0;for(let yy=Math.max(0,cy-3);yy<=Math.min(rows-1,cy+3);yy++)for(let xx=Math.max(0,cx-2);xx<=Math.min(cols-1,cx+2);xx++)n+=raw[yy*cols+xx];
+      if(n>=9)keep[cy*cols+cx]=1;
+    }
+    return {cell,cols,rows,keep};
+  }
+  function scannerInHatch(x,y,hatch){const cx=Math.floor(x/hatch.cell),cy=Math.floor(y/hatch.cell);return cx>=0&&cy>=0&&cx<hatch.cols&&cy<hatch.rows&&!!hatch.keep[cy*hatch.cols+cx]}
 
   async function scannerVisualSymbols(page,tc,areas,types){
     if(!types.outlets&&!types.switches)return [];
@@ -1776,10 +1812,10 @@
     await page.render({canvasContext:ctx,viewport}).promise;
     const img=ctx.getImageData(0,0,canvas.width,canvas.height),d=img.data,w=canvas.width,h=canvas.height,mask=new Uint8Array(w*h);
     for(let i=0,j=0;i<d.length;i+=4,j++){const lum=(d[i]*3+d[i+1]*6+d[i+2])/10;mask[j]=lum<92?1:0}
-    const boxes=scannerTextBoxes(tc,viewport), vpAreas=scannerToViewportAreas(areas,viewport), cand=[];
+    const boxes=scannerTextBoxes(tc,viewport), vpAreas=scannerToViewportAreas(areas,viewport), zones=scannerExclusionZones(tc,viewport), hatch=scannerHatchCells(mask,w,h), cand=[];
     // Dense-anchor search. Text boxes and title/legend field are suppressed before classification.
     for(let y=10;y<h-10;y+=3)for(let x=10;x<w-10;x+=3){
-      if((x>w*.80)||(x>w*.70&&y>h*.70)||scannerPointInText(x,y,boxes))continue;
+      if(scannerInZone(x,y,zones)||scannerInHatch(x,y,hatch)||scannerPointInText(x,y,boxes))continue;
       const core=scannerRegionDensity(mask,w,h,x,y,-3,-3,3,3,1); if(core<.20)continue;
       const cls=scannerClassifyAnchor(mask,w,h,x,y); if(!cls)continue;
       if(cls.type==='outlet'&&!types.outlets)continue;if(cls.type==='switch'&&!types.switches)continue;
@@ -1790,12 +1826,12 @@
   }
 
   function scannerBucket(map,name,kind='area',confidence=.8){
-    const key=(name||'Ej områdesbestämt').toUpperCase(); if(!map.has(key))map.set(key,{name:name||'Ej områdesbestämt',kind,confidence,counts:new Map(),sources:new Set(),hits:0,scoreSum:0});return map.get(key);
+    const key=(name||'Ej områdesbestämt').toUpperCase(); if(!map.has(key))map.set(key,{name:name||'Ej områdesbestämt',kind,confidence,counts:new Map(),categoryCounts:new Map(),sources:new Set(),hits:0,scoreSum:0});return map.get(key);
   }
 
   function scannerAddHit(map,hit,f,pageNo){
     const label=hit.area?.name||'Ej områdesbestämt', bucket=scannerBucket(map,label,hit.area?.kind||'unknown',hit.area?.confidence||.60);
-    let key=hit.type==='light'?hit.subtype:(hit.type==='outlet'?'Uttag':'Brytare');bucket.counts.set(key,(bucket.counts.get(key)||0)+1);bucket.sources.add(`${displayLabel(f)} · s${pageNo}`);bucket.hits++;bucket.scoreSum+=hit.score||.6;
+    let key=hit.type==='light'?hit.subtype:(hit.type==='outlet'?'Uttag':'Brytare');bucket.counts.set(key,(bucket.counts.get(key)||0)+1);const ck=`${key}@@${f.category||'Övrigt'}`;bucket.categoryCounts.set(ck,(bucket.categoryCounts.get(ck)||0)+1);bucket.sources.add(`${displayLabel(f)} · s${pageNo}`);bucket.hits++;bucket.scoreSum+=hit.score||.6;
   }
 
   function scannerAreaSort(a,b){
@@ -1808,7 +1844,11 @@
     const entries=[...buckets.values()].filter(b=>b.hits||b.name!=='Ej områdesbestämt').sort(scannerAreaSort);
     const cards=entries.map(b=>{
       const confidence=b.hits?Math.round((b.scoreSum/b.hits)*100):Math.round((b.confidence||.7)*100);
-      const rows=[...b.counts.entries()].sort((a,b)=>a[0].localeCompare(b[0],'sv',{numeric:true})).map(([k,n])=>`<button class="counter-result-row" type="button" data-review-area="${esc(b.name)}" data-review-symbol="${esc(k)}" aria-label="Visa träffar för ${esc(k)} i ${esc(b.name)}"><span>${esc(k)}<small>Tryck för att visa träffar</small></span><strong>${n} st</strong></button>`).join('');
+      const rows=[...b.counts.entries()].sort((a,b)=>a[0].localeCompare(b[0],'sv',{numeric:true})).map(([k,n])=>{
+        const cats=[...b.categoryCounts.entries()].filter(([ck])=>ck.startsWith(k+'@@')).map(([ck,cn])=>[ck.split('@@')[1],cn]).sort((a,b)=>a[0].localeCompare(b[0],'sv'));
+        const catHtml=cats.map(([cat,cn])=>`<button class="counter-source-chip" type="button" data-review-area="${esc(b.name)}" data-review-symbol="${esc(k)}" data-review-category="${esc(cat)}">${esc(cat)} ${cn}</button>`).join('');
+        return `<div class="counter-result-group"><button class="counter-result-row" type="button" data-review-area="${esc(b.name)}" data-review-symbol="${esc(k)}"><span>${esc(k)}<small>Tryck för att visa alla träffar</small></span><strong>${n} st</strong></button>${cats.length>1?`<div class="counter-source-chips">${catHtml}</div>`:''}</div>`;
+      }).join('');
       return `<article class="counter-area-card"><div class="counter-area-title"><div><h3>${esc(b.name)}</h3><small>${b.sources.size} ritningssidor</small></div><span class="counter-confidence ${confidence>=88?'good':confidence>=72?'mid':'low'}">${confidence}%</span></div><div class="counter-area-counts">${rows||'<span class="muted">Inga verifierade symbolträffar.</span>'}</div></article>`;
     }).join('');
     const totals=[...totalCounts.entries()].sort((a,b)=>a[0].localeCompare(b[0],'sv',{numeric:true})).map(([k,n])=>`<div class="counter-total-row"><span>${esc(k)}</span><strong>${n} st</strong></div>`).join('');
@@ -1832,7 +1872,7 @@
           const hits=[];
           if(types.lights)hits.push(...scannerArmatureCandidates(tc,baseVp,vpAreas));
           try{hits.push(...await scannerVisualSymbols(page,tc,areas,types))}catch(e){console.warn('Visual scanner page failed',e)}
-          for(const hit of hits){const key=hit.type==='light'?hit.subtype:(hit.type==='outlet'?'Uttag':'Brytare');const areaName=hit.area?.name||'Ej områdesbestämt';const rec={...hit,fileId:f.id||id,page:pg,symbol:key,areaName,display:displayLabel(f)};state.scannerSession.hits.push(rec);scannerAddHit(buckets,hit,f,pg);totalCounts.set(key,(totalCounts.get(key)||0)+1)}
+          for(const hit of hits){const key=hit.type==='light'?hit.subtype:(hit.type==='outlet'?'Uttag':'Brytare');const areaName=hit.area?.name||'Ej områdesbestämt';const rec={...hit,fileId:f.id||id,page:pg,symbol:key,areaName,display:displayLabel(f),category:f.category||'Övrigt'};state.scannerSession.hits.push(rec);scannerAddHit(buckets,hit,f,pg);totalCounts.set(key,(totalCounts.get(key)||0)+1)}
           await new Promise(r=>setTimeout(r,0));
         }
         try{await doc.destroy()}catch(_e){}
@@ -1855,13 +1895,13 @@
     return bar;
   }
 
-  function scannerReviewMatching(areaName,symbol){
-    return (state.scannerSession?.hits||[]).filter(h=>String(h.areaName)===String(areaName)&&String(h.symbol)===String(symbol));
+  function scannerReviewMatching(areaName,symbol,category=''){
+    return (state.scannerSession?.hits||[]).filter(h=>String(h.areaName)===String(areaName)&&String(h.symbol)===String(symbol)&&(!category||String(h.category)===String(category)));
   }
 
-  async function openScannerReview(areaName,symbol){
-    const hits=scannerReviewMatching(areaName,symbol); if(!hits.length){toast('Inga sparade scannerträffar för raden');return}
-    state.scannerReview={areaName,symbol,hits,index:0};
+  async function openScannerReview(areaName,symbol,category=''){
+    const hits=scannerReviewMatching(areaName,symbol,category); if(!hits.length){toast('Inga sparade scannerträffar för raden');return}
+    state.scannerReview={areaName,symbol,category,hits,index:0};
     await scannerReviewShowCurrent(true);
   }
 

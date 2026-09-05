@@ -530,3 +530,9 @@ button.file-tag{cursor:pointer}
 .scanner-review-bar{position:absolute;z-index:80;left:50%;bottom:18px;transform:translateX(-50%);display:grid;grid-template-columns:38px minmax(170px,1fr) 38px 38px;align-items:center;gap:6px;max-width:min(92vw,560px);padding:7px;border:1px solid rgba(255,106,0,.35);border-radius:16px;background:rgba(12,12,13,.94);box-shadow:0 12px 34px rgba(0,0,0,.4);backdrop-filter:blur(12px)}
 .scanner-review-bar.hidden{display:none}.scanner-review-bar button{height:38px;border:1px solid var(--line);border-radius:11px;background:var(--panel);color:var(--text);font-size:22px;font-weight:800}.scanner-review-close{font-size:25px!important}.scanner-review-copy{min-width:0;display:flex;flex-direction:column}.scanner-review-copy strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}.scanner-review-copy small{color:var(--muted);font-size:10px;line-height:1.25}
 .fullscreen-ui .scanner-review-bar{bottom:12px}
+/* v5.0.6 scanner source breakdown */
+.counter-result-group{border-bottom:1px solid rgba(255,255,255,.06)}
+.counter-result-group:last-child{border-bottom:0}.counter-result-group .counter-result-row{border-bottom:0}
+.counter-source-chips{display:flex;gap:8px;flex-wrap:wrap;padding:0 12px 12px}
+.counter-source-chip{appearance:none;border:1px solid rgba(255,255,255,.12);background:#1a1a1d;color:#eee;border-radius:999px;padding:7px 11px;font:700 12px/1 system-ui;cursor:pointer}
+.counter-source-chip:active{border-color:#ff6a00;color:#ff7a1a}
