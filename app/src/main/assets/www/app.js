@@ -81,7 +81,7 @@
   const fileMeta = id => state.meta.fileMeta[id];
 
 
-  const ANALYSIS_VERSION = 7;
+  const ANALYSIS_VERSION = 8;
   const CATEGORY_ORDER = ["Belysning","Kraft","Tele","Kanalisation","Brand","Passage","Övrigt"];
   const stripPdf = name => String(name||"").replace(/\.pdf$/i,"");
   const displayLabel = f => stripPdf(f?.name || f?.originalName || "Ritning");
@@ -235,6 +235,24 @@
     return "";
   }
 
+  function titleBlockDrawingNumber(pages,originalName=""){
+    const re=/\bE[-–]\d{3}[-–]\d[-–]\d{3,5}\b/i;
+    let best=null,bestScore=-1;
+    for(const pg of (pages||[])){
+      const vw=Math.max(1,pg.viewport?.width||1), vh=Math.max(1,pg.viewport?.height||1);
+      for(const it of (pg.items||[])){
+        const m=String(it.str||'').match(re); if(!m)continue;
+        const nx=(it.x||0)/vw, ny=(it.y||0)/vh;
+        let score=nx*1.35+(1-ny)*1.15;
+        if(nx>.62)score+=.55;if(ny<.38)score+=.55;
+        if(score>bestScore){bestScore=score;best=m[0]}
+      }
+    }
+    if(best&&bestScore>1.15)return normalizeDrawingRef(best);
+    const fn=stripPdf(originalName).match(/E[-–]\d{3}[-–]\d[-–]\d{3,5}/i)?.[0]||'';
+    return normalizeDrawingRef(fn);
+  }
+
   async function analyzePdfBlob(blob, originalName){
     if(!window.pdfjsLib) return null;
     try{
@@ -274,7 +292,7 @@
         } else {
           // Läs ritningsnummer tidigt för säker serie-fallback. Vi använder inte
           // plantextens lösa BELYSNING/TELE-ord som kategori eftersom de ofta är hänvisningar.
-          const earlyNo=(allText.match(/\bE[-–]\d{3}[-–]\d[-–]\d{3,5}\b/i)||[])[0]||stripPdf(originalName).match(/E[-–]\d{3}[-–]\d[-–]\d{3,5}/i)?.[0]||"";
+          const earlyNo=titleBlockDrawingNumber(pages,originalName);
           const series=drawingSeriesCategory(earlyNo,originalName);
           if(series!=="Övrigt"){category=series;categorySource="drawingSeries";categoryVerified=true;}
           else {category="Övrigt";categorySource="unverified";categoryVerified=false;}
@@ -324,7 +342,7 @@
       else displayName=stripPdf(originalName);
       const detectedScales={};
       for(const pg of pages){const ds=extractDrawingScale(pg.items.map(x=>x.str).join(" "));if(ds)detectedScales[pg.page]=ds;}
-      const drawingNumber=(allText.match(/\bE[-–]\d{3}[-–]\d[-–]\d{3,5}\b/i)||[])[0]||stripPdf(originalName).match(/E[-–]\d{3}[-–]\d[-–]\d{3,5}/i)?.[0]||"";
+      const drawingNumber=titleBlockDrawingNumber(pages,originalName);
       const sourceDate=(allText.match(/\b20\d{2}[-./]\d{2}[-./]\d{2}\b/)||[])[0]||"";
       const result={analysisVersion:ANALYSIS_VERSION,documentType:isOcchio?"occhioSchedule":(isSchedule?"armatureSchedule":"drawing"),category,categorySource,categoryVerified,plan,part,displayName,armatureIndex,pages:doc.numPages,detectedScales,drawingNumber,sourceDate};
       try{await doc.destroy()}catch(_e){}
@@ -1106,8 +1124,9 @@
     const nr=normalizeDrawingRef(ref); if(!nr)return null;
     const p=projectById(projectId); if(!p)return null;
     const c=(p.files||[]).map(id=>fileMeta(id)).filter(Boolean).filter(f=>{
-      const nums=[f.drawingNumber,f.originalName,f.name].map(normalizeDrawingRef).filter(Boolean);
-      return nums.includes(nr);
+      // Only the verified identity extracted from the title block may match.
+      // Visible references inside the plan and friendly display names are links, not identity.
+      return normalizeDrawingRef(f.drawingNumber)===nr;
     });
     if(!c.length)return null;
     c.sort((a,b)=>{
@@ -1886,7 +1905,7 @@
       const lowerR=scannerRotatedDensity(mask,w,h,cx,cy,[3,3,8,8],rot,sc);
       const emptyBelow=1-Math.min(1,(lowerL+lowerR)/2);
       const outletScore=cap*.40+base*.28+stem*.24+emptyBelow*.08;
-      const outletValid=cap>.34&&base>.24&&stem>.20&&outletScore>.62;
+      const outletValid=cap>.40&&base>.30&&stem>.27&&emptyBelow>.68&&outletScore>.69;
       if(outletValid&&(!outletBest||outletScore>outletBest.score))outletBest={score:outletScore,cap,base,stem};
 
       // STRÖMSTÄLLARE: fylld pivot + diagonal manöverarm + ändmarkering.
@@ -1895,13 +1914,13 @@
       const endMark=scannerRotatedDensity(mask,w,h,cx,cy,[11,-4,16,4],rot-Math.PI/4,sc);
       const opposite=scannerRotatedDensity(mask,w,h,cx,cy,[-13,-2,-4,2],rot-Math.PI/4,sc);
       const switchScore=pivot*.50+ray*.32+endMark*.20-opposite*.08;
-      const switchValid=pivot>.34&&ray>.18&&endMark>.12&&switchScore>.61;
+      const switchValid=pivot>.42&&ray>.24&&endMark>.18&&switchScore>.68;
       if(switchValid&&(!switchBest||switchScore>switchBest.score))switchBest={score:switchScore,pivot,ray,endMark};
     }
     const o=outletBest?.score||0,sw=switchBest?.score||0;
     // Tveksam symbol = ingen träff. Precision prioriteras framför antal.
-    if(o>.64&&o>sw+.12)return {type:'outlet',score:Math.min(.99,o)};
-    if(sw>.64&&sw>o+.10)return {type:'switch',score:Math.min(.98,sw)};
+    if(o>.70&&o>sw+.16)return {type:'outlet',score:Math.min(.99,o)};
+    if(sw>.70&&sw>o+.15)return {type:'switch',score:Math.min(.98,sw)};
     return null;
   }
 
