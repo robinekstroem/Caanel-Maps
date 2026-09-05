@@ -779,37 +779,60 @@
   function editAta(a){ if(!a)return; state.ataEditingId=a.id; renderAtas(); }
   function imageSize(dataUrl){return new Promise(resolve=>{const im=new Image();im.onload=()=>resolve({w:im.naturalWidth||im.width,h:im.naturalHeight||im.height});im.onerror=()=>resolve(null);im.src=dataUrl})}
   async function shareSelectedAtas(){
-    const items=(state.meta.atas||[]).filter(a=>state.ataSelected.has(a.id));if(!items.length){toast('Välj minst en ÄTA');return} if(!window.jspdf?.jsPDF){toast('PDF-modulen saknas');return}
-    const {jsPDF}=window.jspdf, doc=new jsPDF(); const pageH=297, margin=14, contentW=182; let y=18;
-    const newPage=()=>{doc.addPage();y=18}; const ensure=h=>{if(y+h>pageH-18)newPage()};
-    doc.setFontSize(18);doc.setFont(undefined,'bold');doc.text('EKIS FIELD – ÄTA / Avvikelser',margin,y);y+=7;doc.setFontSize(8);doc.setFont(undefined,'normal');doc.text('© 2026 Robin Ekström. Alla rättigheter förbehållna.',margin,y);y+=10;
-    for(let ai=0;ai<items.length;ai++){
-      const a=items[ai]; if(ai>0){newPage()}
-      doc.setFontSize(14);doc.setFont(undefined,'bold');doc.text(`${a.number} – ${a.title}`,margin,y);y+=7;
-      doc.setFontSize(9);doc.setFont(undefined,'normal');doc.text(`Status: ${a.status}   Datum: ${a.date||'-'}   Timmar: ${ataHours(a).toFixed(1)} h   Est: ${Number(a.estimate||0).toFixed(1)} h`,margin,y);y+=6;
-      const p=projectById(a.projectId); if(p){doc.text(`Projekt: ${p.name}`,margin,y);y+=5}
-      if(a.description){const lines=doc.splitTextToSize(a.description,contentW);ensure(lines.length*4.5+3);doc.text(lines,margin,y);y+=lines.length*4.5+3}
-      if(a.drawingNote){ensure(7);doc.text(`Placering: ${a.drawingNote}`,margin,y);y+=7}
-      const snapshots=(a.drawingSnapshots||[]).map(x=>x?.dataUrl||x).filter(Boolean);
-      if(snapshots.length){ensure(10);doc.setFont(undefined,'bold');doc.text(`Markering på ritning (${snapshots.length})`,margin,y);doc.setFont(undefined,'normal');y+=6;
-        for(const dataUrl of snapshots){
-          const size=await imageSize(dataUrl); if(!size)continue;
-          const maxW=contentW,maxH=118,ratio=Math.min(maxW/size.w,maxH/size.h),w=size.w*ratio,h=size.h*ratio;ensure(h+8);
-          try{doc.addImage(dataUrl,'JPEG',margin,y,w,h,undefined,'FAST')}catch(e){try{doc.addImage(dataUrl,'PNG',margin,y,w,h,undefined,'FAST')}catch(_){}}
-          y+=h+7;
-        }
+    const items=(state.meta.atas||[]).filter(a=>state.ataSelected.has(a.id));
+    if(!items.length){toast('Välj minst en ÄTA');return}
+    if(!window.jspdf?.jsPDF){toast('PDF-modulen saknas');return}
+    const {jsPDF}=window.jspdf;
+    const doc=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
+    const W=210,H=297,M=14,CW=W-M*2,orange=[255,106,0],dark=[20,20,22],muted=[95,95,100];
+    const addHeader=(a,p,pageNo,totalHint='')=>{
+      doc.setTextColor(...dark);doc.setFont('helvetica','bold');doc.setFontSize(17);doc.text('EKIS',M,15);
+      doc.setTextColor(...orange);doc.text('FIELD',M+27,15);
+      doc.setTextColor(...dark);doc.setFontSize(12);doc.text('ÄTA / AVVIKELSE',W-M,14,{align:'right'});
+      doc.setFontSize(8);doc.setFont('helvetica','normal');doc.text(a.number||'',W-M,19,{align:'right'});
+      doc.setDrawColor(...orange);doc.setLineWidth(.45);doc.line(M,23,W-M,23);
+      doc.setTextColor(...muted);doc.setFontSize(7.5);doc.text(`EKIS FIELD  |  ${p?.name||'Projekt'}  |  ${a.number||''}`,M,H-8);
+      doc.text(`${a.date||''}   Sida ${pageNo}${totalHint}`,W-M,H-8,{align:'right'});
+    };
+    const addImageFit=async(dataUrl,x,y,maxW,maxH)=>{
+      const size=await imageSize(dataUrl);if(!size)return 0;
+      const r=Math.min(maxW/size.w,maxH/size.h),w=size.w*r,h=size.h*r;
+      try{doc.addImage(dataUrl,'JPEG',x+(maxW-w)/2,y,w,h,undefined,'FAST')}catch(e){try{doc.addImage(dataUrl,'PNG',x+(maxW-w)/2,y,w,h,undefined,'FAST')}catch(_){return 0}}
+      return h;
+    };
+    let firstDocPage=true;
+    for(const a of items){
+      const p=projectById(a.projectId); const f=a.drawing?.fileId?fileMeta(a.drawing.fileId):null;
+      const snaps=(a.drawingSnapshots||[]).map(x=>x?.dataUrl||x).filter(Boolean), photos=(a.photos||[]).filter(Boolean), sessions=a.sessions||[];
+      if(!firstDocPage)doc.addPage(); firstDocPage=false;
+      addHeader(a,p,1);
+      let y=31;
+      doc.setTextColor(...dark);doc.setFont('helvetica','bold');doc.setFontSize(16);doc.text(a.title||'ÄTA / Avvikelse',M,y);y+=8;
+      doc.setFillColor(247,247,248);doc.roundedRect(M,y,CW,24,2,2,'F');
+      doc.setFontSize(8);doc.setTextColor(...muted);doc.setFont('helvetica','normal');
+      const col=[M+4,M+50,M+96,M+140];
+      doc.text('PROJEKT',col[0],y+6);doc.text('RITNING',col[1],y+6);doc.text('DATUM',col[2],y+6);doc.text('STATUS',col[3],y+6);
+      doc.setTextColor(...dark);doc.setFont('helvetica','bold');doc.setFontSize(9);
+      doc.text(p?.name||'-',col[0],y+13);doc.text(f?.drawingNumber||f?.displayName||'-',col[1],y+13);doc.text(a.date||'-',col[2],y+13);
+      doc.setTextColor(...orange);doc.text(a.status||'-',col[3],y+13);y+=31;
+      if(a.description){doc.setTextColor(...dark);doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text('Beskrivning',M,y);y+=5;doc.setFont('helvetica','normal');doc.setFontSize(9);const lines=doc.splitTextToSize(a.description,CW);doc.text(lines,M,y);y+=lines.length*4.2+5;}
+      if(snaps.length){doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text('Markerad ritning',M,y);y+=5;const maxH=Math.max(70,235-y);const h=await addImageFit(snaps[snaps.length-1],M,y,CW,maxH);y+=h+4;doc.setTextColor(...muted);doc.setFont('helvetica','italic');doc.setFontSize(7.5);doc.text(`Markerad ändring${f?.drawingNumber?' på '+f.drawingNumber:''}`,M,y);}
+      else{doc.setDrawColor(220);doc.rect(M,y,CW,82);doc.setTextColor(...muted);doc.setFontSize(9);doc.text('Ingen ritningsmarkering sparad i denna ÄTA.',W/2,y+42,{align:'center'});}
+      if(photos.length){
+        doc.addPage();addHeader(a,p,2);doc.setTextColor(...dark);doc.setFont('helvetica','bold');doc.setFontSize(15);doc.text('Fotodokumentation',M,34);
+        const gap=7,cellW=(CW-gap)/2,cellH=92;let py=43;
+        for(let i=0;i<photos.length;i++){if(i>0&&i%4===0){doc.addPage();addHeader(a,p,2+Math.floor(i/4));py=34;doc.setFontSize(15);doc.text('Fotodokumentation',M,py);py=43}const coln=i%2,row=Math.floor((i%4)/2),x=M+coln*(cellW+gap),yy=py+row*112;await addImageFit(photos[i],x,yy,cellW,88);doc.setTextColor(...dark);doc.setFont('helvetica','bold');doc.setFontSize(8);doc.text(`Foto ${i+1}`,x,yy+94);doc.setFont('helvetica','normal');doc.setTextColor(...muted);doc.text(a.date||'',x,yy+99);}
       }
-      const photos=a.photos||[];
-      if(photos.length){ensure(10);doc.setFont(undefined,'bold');doc.text(`Fotodokumentation (${photos.length})`,margin,y);doc.setFont(undefined,'normal');y+=6;
-        for(const dataUrl of photos){
-          const size=await imageSize(dataUrl); if(!size)continue;
-          const maxW=contentW, maxH=105; const ratio=Math.min(maxW/size.w,maxH/size.h); const w=size.w*ratio,h=size.h*ratio; ensure(h+8);
-          try{doc.addImage(dataUrl,'JPEG',margin,y,w,h,undefined,'FAST')}catch(e){try{doc.addImage(dataUrl,'PNG',margin,y,w,h,undefined,'FAST')}catch(_){} }
-          y+=h+7;
-        }
+      if(sessions.length||a.estimate){
+        doc.addPage();addHeader(a,p,photos.length?3:2);doc.setTextColor(...dark);doc.setFont('helvetica','bold');doc.setFontSize(15);doc.text('Tidsredovisning',M,34);
+        let ty=43;doc.setFillColor(242,242,243);doc.rect(M,ty,CW,9,'F');doc.setFontSize(8);doc.text('Datum',M+3,ty+6);doc.text('Arbete',M+38,ty+6);doc.text('Tid (h)',W-M-22,ty+6);ty+=9;
+        doc.setFont('helvetica','normal');for(const x of sessions){doc.setDrawColor(225);doc.line(M,ty+9,W-M,ty+9);doc.setTextColor(...dark);doc.text(x.date||'-',M+3,ty+6);doc.text(doc.splitTextToSize(x.note||'Arbete',105)[0],M+38,ty+6);doc.text(Number(x.hours||0).toFixed(1).replace('.',','),W-M-22,ty+6);ty+=10;}
+        doc.setFont('helvetica','bold');doc.text('Totalt',M+38,ty+7);doc.text(ataHours(a).toFixed(1).replace('.',','),W-M-22,ty+7);ty+=18;
+        doc.setFontSize(10);doc.text(`Bedömd tid: ${Number(a.estimate||0).toFixed(1).replace('.',',')} h`,M,ty);doc.text(`Utfall: ${ataHours(a).toFixed(1).replace('.',',')} h`,M+65,ty);
       }
     }
-    const data=doc.output('datauristring'); const name=`EKIS_FIELD_ATA_${new Date().toISOString().slice(0,10)}.pdf`; if(window.Android?.shareBase64)Android.shareBase64(name,data,'application/pdf'); else downloadBlob(doc.output('blob'),name);
+    const data=doc.output('datauristring');const name=`EKIS_FIELD_ATA_${new Date().toISOString().slice(0,10)}.pdf`;
+    if(window.Android?.shareBase64)Android.shareBase64(name,data,'application/pdf');else downloadBlob(doc.output('blob'),name);
   }
 
   async function openPdf(id, opts={}){
@@ -979,7 +1002,7 @@
     const r=$("#overlayCanvas").getBoundingClientRect();
     const sc=state.renderScale*state.viewZoom;
     const x=e.clientX-r.left, y=e.clientY-r.top;
-    const tol=26;
+    const tol=38;
     const sp=p=>({x:p.x*sc,y:p.y*sc});
     const pointDist=p=>Math.hypot(x-p.x,y-p.y);
     const segDist=(p,a,b)=>{
@@ -1667,6 +1690,15 @@
         };
         if(state.tool==="pan"){
           const ts=state.touchState;
+          const immediateHit=nearestOverlayObject({clientX:t.clientX,clientY:t.clientY});
+          if(immediateHit){
+            state.selectedOverlay=immediateHit;
+            for(const a of getAnnotations())a.selected=immediateHit.kind==='annotation'&&immediateHit.obj.id===a.id;
+            $("#deleteSelectedBtn").classList.remove("hidden");
+            const isText=immediateHit.kind==='annotation'&&immediateHit.obj.type==='text';
+            $("#textSmallerBtn").classList.toggle("hidden",!isText);$("#textLargerBtn").classList.toggle("hidden",!isText);$("#editSelectedTextBtn").classList.toggle("hidden",!isText);
+            drawOverlay();
+          }
           ts.longPressTimer=setTimeout(()=>{
             if(!state.touchState||state.touchState!==ts||ts.moved)return;
             const hit=nearestOverlayObject({clientX:ts.startX,clientY:ts.startY});
@@ -2173,7 +2205,7 @@
     const px=p=>({x:p.x*scale,y:p.y*scale});
     ctx.save();ctx.strokeStyle='#ff6a00';ctx.fillStyle='#ff6a00';ctx.lineWidth=3;ctx.lineCap='round';ctx.lineJoin='round';
     if(a.type==='pen'&&a.points?.length){ctx.beginPath();a.points.forEach((p,i)=>{const q=px(p);i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y)});ctx.stroke()}
-    if(a.type==='arrow'&&a.points?.length>=2){const p=px(a.points[0]),q=px(a.points[1]);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();const an=Math.atan2(q.y-p.y,q.x-p.x);ctx.beginPath();ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-18*Math.cos(an-.5),q.y-18*Math.sin(an-.5));ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-18*Math.cos(an+.5),q.y-18*Math.sin(an+.5));ctx.stroke()}
+    if(a.type==='arrow'&&a.points?.length>=2){const p=px(a.points[0]),q=px(a.points[1]);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();const an=Math.atan2(q.y-p.y,q.x-p.x);ctx.beginPath();ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-10*Math.cos(an-.48),q.y-10*Math.sin(an-.48));ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-10*Math.cos(an+.48),q.y-10*Math.sin(an+.48));ctx.stroke()}
     if(a.type==='circle'&&a.points?.length>=2){const p=px(a.points[0]),q=px(a.points[1]);ctx.beginPath();ctx.ellipse((p.x+q.x)/2,(p.y+q.y)/2,Math.max(3,Math.abs(q.x-p.x)/2),Math.max(3,Math.abs(q.y-p.y)/2),0,0,Math.PI*2);ctx.stroke()}
     if(a.type==='text'&&a.points?.length){const p=px(a.points[0]);ctx.font='bold 18px Arial,sans-serif';ctx.lineWidth=4;ctx.strokeStyle='rgba(255,255,255,.92)';ctx.strokeText(a.text||'',p.x,p.y);ctx.fillStyle='#ff6a00';ctx.fillText(a.text||'',p.x,p.y)}
     ctx.restore();

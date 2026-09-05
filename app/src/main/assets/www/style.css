@@ -554,3 +554,11 @@ button.file-tag{cursor:pointer}
 .bottom-nav .nav-btn .counter-nav-icon{width:22px;height:22px;display:flex;align-items:center;justify-content:center}
 .bottom-nav .nav-btn .counter-nav-icon svg{width:22px;height:22px;display:block;fill:currentColor;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .bottom-nav .nav-btn .counter-nav-icon svg path{fill:none}
+
+/* EKIS FIELD v5.1.3 Build 44 – viewer stability */
+.drawing-edge-arrow{position:fixed!important;top:62%!important;transform:translateY(-50%)!important;z-index:90!important}
+.drawing-edge-left{left:5px!important}.drawing-edge-right{right:5px!important}
+.viewer-view.fullscreen-ui .drawing-edge-arrow{top:62%!important}
+.viewer-view.fullscreen-ui .drawing-edge-left{left:5px!important}.viewer-view.fullscreen-ui .drawing-edge-right{right:62px!important}
+#canvasWrap{min-width:max-content;min-height:max-content}
+.pdf-viewport{overscroll-behavior:contain;touch-action:pan-x pan-y pinch-zoom}
