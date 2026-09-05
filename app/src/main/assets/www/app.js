@@ -47,7 +47,7 @@
     distanceDraft: null,
     pageTextItems: [],
     calibrationMode: null,
-    ataFilter: "open", ataSelected: new Set(), ataPhotoTarget: null, activeAtaMark:null, ataMarkAnnotationId:null, ataMarkBaseIds:null, riserMode:false, selectedOverlay:null, drawDraft:null, counterSelected:new Set(), counterCategory:"Belysning", ataEditingId:null, ataHoursEditingId:null
+    ataFilter: "open", ataSelected: new Set(), ataPhotoTarget: null, activeAtaMark:null, ataMarkAnnotationId:null, ataMarkBaseIds:null, riserMode:false, selectedOverlay:null, drawDraft:null, counterSelected:new Set(), counterCategory:"Belysning", ataEditingId:null, ataHoursEditingId:null, scannerSession:null, scannerReview:null
   };
 
   function defaultMeta() {
@@ -868,6 +868,11 @@
       if(a.type==='arrow'){const p=toPx(a.points[0]),q=toPx(a.points[1]);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();const an=Math.atan2(q.y-p.y,q.x-p.x);ctx.beginPath();ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-16*Math.cos(an-.5),q.y-16*Math.sin(an-.5));ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-16*Math.cos(an+.5),q.y-16*Math.sin(an+.5));ctx.stroke()}
       if(a.type==='circle'){const p=toPx(a.points[0]),q=toPx(a.points[1]);ctx.beginPath();ctx.ellipse((p.x+q.x)/2,(p.y+q.y)/2,Math.abs(q.x-p.x)/2,Math.abs(q.y-p.y)/2,0,0,Math.PI*2);ctx.stroke()}
       if(a.type==='text'){const p=toPx(a.points[0]);ctx.font='bold 16px sans-serif';ctx.fillText(a.text,p.x,p.y)}ctx.restore();
+    }
+    const review=state.scannerReview;
+    if(review?.pageHits?.length){
+      ctx.save();ctx.lineWidth=3;ctx.strokeStyle="#ff6a00";ctx.fillStyle="rgba(255,106,0,.15)";ctx.font="800 12px system-ui";
+      review.pageHits.forEach((hit,i)=>{if(!Number.isFinite(hit.nx)||!Number.isFinite(hit.ny))return;const x=hit.nx*state.baseCanvasWidth,y=hit.ny*state.baseCanvasHeight,r=13;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle="#ff6a00";ctx.fillText(String(i+1),x+r+4,y+4);ctx.fillStyle="rgba(255,106,0,.15)";});ctx.restore();
     }
     if(state.tempPoints.length) drawPath(state.tempPoints,false,"");
   }
@@ -1716,7 +1721,7 @@
       if((x>viewport.width*.80)||(x>viewport.width*.70&&y>viewport.height*.70)||(y>viewport.height*.94))continue;
       const key=`${raw.toUpperCase().replace(/\s+/g,'')}:${Math.round(x/4)}:${Math.round(y/4)}`;if(seen.has(key))continue;seen.add(key);
       const near=scannerNearestArea(x,y,areas,viewport.width,viewport.height);
-      out.push({type:'light',subtype:raw.toUpperCase().replace(/\s+/g,''),x,y,score:near?.area?Math.min(.97,.78+(near.confidence*.18)):.72,area:near?.area||null});
+      out.push({type:'light',subtype:raw.toUpperCase().replace(/\s+/g,''),x,y,nx:x/Math.max(1,viewport.width),ny:y/Math.max(1,viewport.height),score:near?.area?Math.min(.97,.78+(near.confidence*.18)):.72,area:near?.area||null});
     }
     return out;
   }
@@ -1778,7 +1783,7 @@
       const core=scannerRegionDensity(mask,w,h,x,y,-3,-3,3,3,1); if(core<.20)continue;
       const cls=scannerClassifyAnchor(mask,w,h,x,y); if(!cls)continue;
       if(cls.type==='outlet'&&!types.outlets)continue;if(cls.type==='switch'&&!types.switches)continue;
-      const near=scannerNearestArea(x,y,vpAreas,w,h); cand.push({...cls,x,y,area:near?.area||null,score:cls.score*(near?.area?(.90+.10*near.confidence):.86)});
+      const near=scannerNearestArea(x,y,vpAreas,w,h); cand.push({...cls,x,y,nx:x/Math.max(1,w),ny:y/Math.max(1,h),area:near?.area||null,score:cls.score*(near?.area?(.90+.10*near.confidence):.86)});
     }
     canvas.width=1;canvas.height=1;
     return scannerNms(cand,13);
@@ -1803,7 +1808,7 @@
     const entries=[...buckets.values()].filter(b=>b.hits||b.name!=='Ej områdesbestämt').sort(scannerAreaSort);
     const cards=entries.map(b=>{
       const confidence=b.hits?Math.round((b.scoreSum/b.hits)*100):Math.round((b.confidence||.7)*100);
-      const rows=[...b.counts.entries()].sort((a,b)=>a[0].localeCompare(b[0],'sv',{numeric:true})).map(([k,n])=>`<button class="counter-result-row" type="button"><span>${esc(k)}</span><strong>${n} st</strong></button>`).join('');
+      const rows=[...b.counts.entries()].sort((a,b)=>a[0].localeCompare(b[0],'sv',{numeric:true})).map(([k,n])=>`<button class="counter-result-row" type="button" data-review-area="${esc(b.name)}" data-review-symbol="${esc(k)}" aria-label="Visa träffar för ${esc(k)} i ${esc(b.name)}"><span>${esc(k)}<small>Tryck för att visa träffar</small></span><strong>${n} st</strong></button>`).join('');
       return `<article class="counter-area-card"><div class="counter-area-title"><div><h3>${esc(b.name)}</h3><small>${b.sources.size} ritningssidor</small></div><span class="counter-confidence ${confidence>=88?'good':confidence>=72?'mid':'low'}">${confidence}%</span></div><div class="counter-area-counts">${rows||'<span class="muted">Inga verifierade symbolträffar.</span>'}</div></article>`;
     }).join('');
     const totals=[...totalCounts.entries()].sort((a,b)=>a[0].localeCompare(b[0],'sv',{numeric:true})).map(([k,n])=>`<div class="counter-total-row"><span>${esc(k)}</span><strong>${n} st</strong></div>`).join('');
@@ -1813,7 +1818,7 @@
   async function counterPreAnalyze(){
     const ids=[...state.counterSelected]; if(!ids.length){toast('Markera minst en ritning');return}
     const status=$("#counterStatus"), out=$("#counterResults"); out.innerHTML='';
-    const groups=counterSelectedSummary(),types=counterRequestedTypes(), buckets=new Map(),totalCounts=new Map(); let pages=0;
+    const groups=counterSelectedSummary(),types=counterRequestedTypes(), buckets=new Map(),totalCounts=new Map(); let pages=0; state.scannerSession={createdAt:Date.now(),hits:[],groups:{}};
     status.textContent=`Smart Scanner analyserar ${ids.length} ritningar…`;
     for(let fi=0;fi<ids.length;fi++){
       const id=ids[fi],f=fileMeta(id),blob=await getBlob(id);if(!f||!blob)continue;
@@ -1827,7 +1832,7 @@
           const hits=[];
           if(types.lights)hits.push(...scannerArmatureCandidates(tc,baseVp,vpAreas));
           try{hits.push(...await scannerVisualSymbols(page,tc,areas,types))}catch(e){console.warn('Visual scanner page failed',e)}
-          for(const hit of hits){scannerAddHit(buckets,hit,f,pg);const key=hit.type==='light'?hit.subtype:(hit.type==='outlet'?'Uttag':'Brytare');totalCounts.set(key,(totalCounts.get(key)||0)+1)}
+          for(const hit of hits){const key=hit.type==='light'?hit.subtype:(hit.type==='outlet'?'Uttag':'Brytare');const areaName=hit.area?.name||'Ej områdesbestämt';const rec={...hit,fileId:f.id||id,page:pg,symbol:key,areaName,display:displayLabel(f)};state.scannerSession.hits.push(rec);scannerAddHit(buckets,hit,f,pg);totalCounts.set(key,(totalCounts.get(key)||0)+1)}
           await new Promise(r=>setTimeout(r,0));
         }
         try{await doc.destroy()}catch(_e){}
@@ -1836,6 +1841,65 @@
     status.textContent=`${ids.length} ritningar · ${pages} sidor scannade`;
     out.innerHTML=scannerResultHtml(buckets,totalCounts,groups,pages);
   }
+
+
+  function scannerReviewBar(){
+    let bar=document.getElementById('scannerReviewBar');
+    if(bar)return bar;
+    bar=document.createElement('div');bar.id='scannerReviewBar';bar.className='scanner-review-bar hidden';
+    bar.innerHTML='<button type="button" id="scannerReviewPrev" aria-label="Föregående scannerträff">‹</button><div class="scanner-review-copy"><strong id="scannerReviewTitle">Scannerträffar</strong><small id="scannerReviewMeta"></small></div><button type="button" id="scannerReviewNext" aria-label="Nästa scannerträff">›</button><button type="button" id="scannerReviewClose" class="scanner-review-close" aria-label="Stäng scannerträffar">×</button>';
+    document.getElementById('viewerView')?.appendChild(bar);
+    bar.querySelector('#scannerReviewPrev')?.addEventListener('click',()=>scannerReviewStep(-1));
+    bar.querySelector('#scannerReviewNext')?.addEventListener('click',()=>scannerReviewStep(1));
+    bar.querySelector('#scannerReviewClose')?.addEventListener('click',closeScannerReview);
+    return bar;
+  }
+
+  function scannerReviewMatching(areaName,symbol){
+    return (state.scannerSession?.hits||[]).filter(h=>String(h.areaName)===String(areaName)&&String(h.symbol)===String(symbol));
+  }
+
+  async function openScannerReview(areaName,symbol){
+    const hits=scannerReviewMatching(areaName,symbol); if(!hits.length){toast('Inga sparade scannerträffar för raden');return}
+    state.scannerReview={areaName,symbol,hits,index:0};
+    await scannerReviewShowCurrent(true);
+  }
+
+  async function scannerReviewShowCurrent(forceOpen=false){
+    const r=state.scannerReview;if(!r||!r.hits.length)return;
+    r.index=Math.max(0,Math.min(r.hits.length-1,r.index));const h=r.hits[r.index];
+    const needsOpen=forceOpen||state.currentFileId!==h.fileId||state.pageNum!==h.page;
+    if(needsOpen)await openPdf(h.fileId,{page:h.page});
+    const samePage=r.hits.filter(x=>x.fileId===h.fileId&&x.page===h.page);
+    state.scannerReview.pageHits=samePage;
+    const bar=scannerReviewBar();bar.classList.remove('hidden');
+    bar.querySelector('#scannerReviewTitle').textContent=`${r.areaName} · ${r.symbol}`;
+    const pageNo=[...new Set(r.hits.map(x=>`${x.fileId}:${x.page}`))].indexOf(`${h.fileId}:${h.page}`)+1;
+    const pageCount=new Set(r.hits.map(x=>`${x.fileId}:${x.page}`)).size;
+    bar.querySelector('#scannerReviewMeta').textContent=`${r.hits.length} träffar · visar ${samePage.length} på denna sida · ${pageNo}/${pageCount}`;
+    drawOverlay();
+    const first=samePage[0];if(first&&Number.isFinite(first.nx)&&Number.isFinite(first.ny)){
+      requestAnimationFrame(()=>{
+        const vp=document.getElementById('pdfViewport'),wrap=document.getElementById('canvasWrap');if(!vp||!wrap)return;
+        const x=first.nx*wrap.getBoundingClientRect().width,y=first.ny*wrap.getBoundingClientRect().height;
+        if(wrap.getBoundingClientRect().width>vp.clientWidth||wrap.getBoundingClientRect().height>vp.clientHeight){vp.scrollTo({left:Math.max(0,x-vp.clientWidth/2),top:Math.max(0,y-vp.clientHeight/2),behavior:'smooth'})}
+      });
+    }
+  }
+
+  async function scannerReviewStep(dir){
+    const r=state.scannerReview;if(!r)return;
+    const pages=[];for(const h of r.hits){const k=`${h.fileId}:${h.page}`;if(!pages.some(x=>x.k===k))pages.push({k,fileId:h.fileId,page:h.page})}
+    const cur=r.hits[r.index],ck=`${cur.fileId}:${cur.page}`;let pi=Math.max(0,pages.findIndex(x=>x.k===ck));pi=(pi+dir+pages.length)%pages.length;
+    const target=pages[pi];r.index=Math.max(0,r.hits.findIndex(x=>x.fileId===target.fileId&&x.page===target.page));await scannerReviewShowCurrent(true);
+  }
+
+  function closeScannerReview(){state.scannerReview=null;document.getElementById('scannerReviewBar')?.classList.add('hidden');drawOverlay()}
+
+  document.getElementById('counterResults')?.addEventListener('click',e=>{
+    const row=e.target.closest('.counter-result-row[data-review-area][data-review-symbol]');if(!row)return;
+    openScannerReview(row.dataset.reviewArea,row.dataset.reviewSymbol);
+  });
 
   async function exportProject(){
     const p=currentProject(); if(!p||!window.JSZip)return;
