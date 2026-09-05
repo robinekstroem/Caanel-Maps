@@ -1772,8 +1772,8 @@
       bestSwitch=Math.max(bestSwitch,switchScore);
     }
     // Never let proximity decide class. A switch-like diagonal lever vetoes a weak outlet match.
-    if(bestOutlet>.62&&bestOutlet>bestSwitch+.11)return {type:'outlet',score:Math.min(.99,bestOutlet)};
-    if(bestSwitch>.57&&bestSwitch>bestOutlet+.045)return {type:'switch',score:Math.min(.98,bestSwitch)};
+    if(bestOutlet>.54&&bestOutlet>bestSwitch+.09)return {type:'outlet',score:Math.min(.99,bestOutlet)};
+    if(bestSwitch>.55&&bestSwitch>bestOutlet+.055)return {type:'switch',score:Math.min(.98,bestSwitch)};
     return null;
   }
 
@@ -1818,7 +1818,7 @@
 
   async function scannerVisualSymbols(page,tc,areas,types){
     if(!types.outlets&&!types.switches)return [];
-    const base=page.getViewport({scale:1}); const scanScale=Math.min(1,1800/Math.max(1,base.width));
+    const base=page.getViewport({scale:1}); const scanScale=Math.min(1.35,2600/Math.max(1,base.width));
     const viewport=page.getViewport({scale:scanScale});
     const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(viewport.width));canvas.height=Math.max(1,Math.round(viewport.height));
     const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -1827,15 +1827,15 @@
     for(let i=0,j=0;i<d.length;i+=4,j++){const lum=(d[i]*3+d[i+1]*6+d[i+2])/10;mask[j]=lum<92?1:0}
     const boxes=scannerTextBoxes(tc,viewport), vpAreas=scannerToViewportAreas(areas,viewport), zones=scannerExclusionZones(tc,viewport), hatch=scannerHatchCells(mask,w,h), cand=[];
     // Dense-anchor search. Text boxes and title/legend field are suppressed before classification.
-    for(let y=10;y<h-10;y+=3)for(let x=10;x<w-10;x+=3){
+    for(let y=10;y<h-10;y+=2)for(let x=10;x<w-10;x+=2){
       if(scannerInZone(x,y,zones)||scannerInHatch(x,y,hatch)||scannerPointInText(x,y,boxes))continue;
-      const core=scannerRegionDensity(mask,w,h,x,y,-3,-3,3,3,1); if(core<.20)continue;
+      const core=scannerRegionDensity(mask,w,h,x,y,-3,-3,3,3,1); if(core<.16)continue;
       const cls=scannerClassifyAnchor(mask,w,h,x,y); if(!cls)continue;
       if(cls.type==='outlet'&&!types.outlets)continue;if(cls.type==='switch'&&!types.switches)continue;
       const near=scannerNearestArea(x,y,vpAreas,w,h); cand.push({...cls,x,y,nx:x/Math.max(1,w),ny:y/Math.max(1,h),area:near?.area||null,score:cls.score*(near?.area?(.90+.10*near.confidence):.86)});
     }
     canvas.width=1;canvas.height=1;
-    return scannerNms(cand,13);
+    return scannerNms(cand,10);
   }
 
   function scannerBucket(map,name,kind='area',confidence=.8){
@@ -1855,17 +1855,33 @@
   function scannerResultHtml(buckets,totalCounts,groups,pages){
     const selection=Object.entries(groups).map(([c,fs])=>`<span class="counter-chip"><b>${esc(c)}</b> ${fs.length}</span>`).join('');
     const entries=[...buckets.values()].filter(b=>b.hits||b.name!=='Ej områdesbestämt').sort(scannerAreaSort);
+    let outletTotal=0,switchTotal=0,armatureTotal=0;
+    for(const [k,n] of totalCounts.entries()){
+      if(k==='Uttag')outletTotal+=n;
+      else if(k==='Strömställare')switchTotal+=n;
+      else armatureTotal+=n;
+    }
+    const mainArea=entries.find(b=>/^B\d+/i.test(b.name))?.name||entries[0]?.name||'Alla valda';
+    const hero=`<section class="counter-symbol-panel">
+      <div class="counter-symbol-head"><div><small>Räknare – symboler</small><h2>${esc(mainArea)}</h2></div><span class="counter-scan-badge">${pages} sidor</span></div>
+      <div class="counter-symbol-grid">
+        <button class="counter-symbol-tile" data-review-area="${esc(mainArea)}" data-review-symbol="Uttag"><span class="counter-symbol-icon">◉</span><span>Uttag</span><strong>${outletTotal} st</strong></button>
+        <button class="counter-symbol-tile" data-review-area="${esc(mainArea)}" data-review-symbol="Strömställare"><span class="counter-symbol-icon">⌁</span><span>Strömställare</span><strong>${switchTotal} st</strong></button>
+        <div class="counter-symbol-tile static"><span class="counter-symbol-icon">✣</span><span>Armaturer</span><strong>${armatureTotal} st</strong></div>
+      </div>
+      <div class="counter-symbol-actions"><button type="button" id="counterShowHits">◎ Visa markeringar</button><button type="button" id="counterZoomHits">⌖ Kontrollera i ritning</button></div>
+    </section>`;
     const cards=entries.map(b=>{
       const confidence=b.hits?Math.round((b.scoreSum/b.hits)*100):Math.round((b.confidence||.7)*100);
       const rows=[...b.counts.entries()].sort((a,b)=>a[0].localeCompare(b[0],'sv',{numeric:true})).map(([k,n])=>{
         const cats=[...b.categoryCounts.entries()].filter(([ck])=>ck.startsWith(k+'@@')).map(([ck,cn])=>[ck.split('@@')[1],cn]).sort((a,b)=>a[0].localeCompare(b[0],'sv'));
         const catHtml=cats.map(([cat,cn])=>`<button class="counter-source-chip" type="button" data-review-area="${esc(b.name)}" data-review-symbol="${esc(k)}" data-review-category="${esc(cat)}">${esc(cat)} ${cn}</button>`).join('');
-        return `<div class="counter-result-group"><button class="counter-result-row" type="button" data-review-area="${esc(b.name)}" data-review-symbol="${esc(k)}"><span>${esc(k)}<small>Tryck för att visa alla träffar</small></span><strong>${n} st</strong></button>${cats.length>1?`<div class="counter-source-chips">${catHtml}</div>`:''}</div>`;
+        return `<div class="counter-result-group"><button class="counter-result-row" type="button" data-review-area="${esc(b.name)}" data-review-symbol="${esc(k)}"><span>${esc(k)}<small>Tryck för att visa träffarna i ritningen</small></span><strong>${n} st</strong></button>${catHtml?`<div class="counter-source-chips">${catHtml}</div>`:''}</div>`;
       }).join('');
-      return `<article class="counter-area-card"><div class="counter-area-title"><div><h3>${esc(b.name)}</h3><small>${b.sources.size} ritningssidor</small></div><span class="counter-confidence ${confidence>=88?'good':confidence>=72?'mid':'low'}">${confidence}%</span></div><div class="counter-area-counts">${rows||'<span class="muted">Inga verifierade symbolträffar.</span>'}</div></article>`;
+      return `<article class="counter-area-card"><div class="counter-area-title"><div><h3>${esc(b.name)}</h3><small>${b.sources.size} ritningssidor</small></div><span class="counter-confidence ${confidence>=88?'good':confidence>=72?'mid':'low'}">${confidence}%</span></div><div class="counter-area-counts">${rows||'<span class="muted">Inga säkra symbolträffar.</span>'}</div></article>`;
     }).join('');
     const totals=[...totalCounts.entries()].sort((a,b)=>a[0].localeCompare(b[0],'sv',{numeric:true})).map(([k,n])=>`<div class="counter-total-row"><span>${esc(k)}</span><strong>${n} st</strong></div>`).join('');
-    return `<div class="counter-selection-summary">${selection}</div><div class="counter-smart-banner"><strong>Smart Scanner v2</strong><span>${Object.values(groups).reduce((n,a)=>n+a.length,0)} ritningar · ${pages} sidor. Kategori används bara som ritningsfilter; samma symbolbibliotek används på allt markerat.</span></div>${cards||'<div class="counter-card"><h3>Inga säkra områdesresultat ännu</h3><p class="muted">Scannern hittade inte tillräckligt säkra Bxxxx/Rum-kopplingar. Symboler utan område hamnar separat när de är tillräckligt säkra.</p></div>'}<div class="counter-total-card"><h3>Totalt för markerade ritningar</h3>${totals||'<p class="muted">Inga tillräckligt säkra symbolträffar ännu.</p>'}</div><div class="counter-warning"><strong>Kontrollerbar scanner</strong><br>EKIS kombinerar textpositioner och visuell symbolgeometri. Lösa siffror räknas aldrig som rum och text i titelblock/förklaringar filtreras bort. Resultatet är fortfarande beta – verifiera mängden mot ritningen innan beställning.</div>`;
+    return `${hero}<div class="counter-selection-summary">${selection}</div><div class="counter-smart-banner"><strong>EKIS Scanner</strong><span>${Object.values(groups).reduce((n,a)=>n+a.length,0)} ritningar analyserade. Tryck på ett resultat för att se exakt vad som räknats.</span></div>${cards||'<div class="counter-card"><h3>Inga säkra områdesresultat ännu</h3><p class="muted">Scannern hittade inte tillräckligt säkra symbolträffar.</p></div>'}<div class="counter-total-card"><h3>Totalt för markerade ritningar</h3>${totals||'<p class="muted">Inga tillräckligt säkra symbolträffar ännu.</p>'}</div><div class="counter-warning"><strong>Kontrollera före beställning</strong><br>Scannern markerar sina träffar i ritningen så att du snabbt kan verifiera mängden. Legend, titelblock och skrafferade referensytor ska inte räknas.</div>`;
   }
 
   async function counterPreAnalyze(){
@@ -1950,8 +1966,11 @@
   function closeScannerReview(){state.scannerReview=null;document.getElementById('scannerReviewBar')?.classList.add('hidden');drawOverlay()}
 
   document.getElementById('counterResults')?.addEventListener('click',e=>{
-    const row=e.target.closest('.counter-result-row[data-review-area][data-review-symbol]');if(!row)return;
-    openScannerReview(row.dataset.reviewArea,row.dataset.reviewSymbol);
+    const row=e.target.closest('[data-review-area][data-review-symbol]');
+    if(row){openScannerReview(row.dataset.reviewArea,row.dataset.reviewSymbol,row.dataset.reviewCategory||'');return}
+    if(e.target.closest('#counterShowHits')||e.target.closest('#counterZoomHits')){
+      const h=state.scannerSession?.hits?.[0];if(h)openScannerReview(h.areaName,h.symbol);else toast('Inga scannerträffar att visa');
+    }
   });
 
   async function exportProject(){
