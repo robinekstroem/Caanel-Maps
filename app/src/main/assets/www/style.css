@@ -494,3 +494,18 @@ button.file-tag{cursor:pointer}
 .counter-results{display:grid;gap:12px}.counter-card{border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:14px}.counter-card h3{margin:0 0 8px}.counter-table{width:100%;border-collapse:collapse}.counter-table td,.counter-table th{padding:7px;border-bottom:1px solid var(--line);text-align:left}.counter-warning{border-left:3px solid #ff6a00;padding:10px 12px;background:rgba(255,106,0,.08);border-radius:8px;margin-bottom:10px}
 @media(max-width:650px){.drawing-edge-arrow{width:30px;height:50px;font-size:26px}.bottom-nav .nav-btn{font-size:9px}.bottom-nav{gap:0}.viewer-view.fullscreen-ui .pdf-viewport{padding-right:62px!important}}
 .ata-sessions{display:grid;gap:5px;margin:8px 0}.ata-session{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:11px}.ata-photo-wrap{position:relative;display:inline-block}.ata-photo-del{position:absolute;right:3px;top:3px;width:25px;height:25px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.72);color:#fff;font-weight:900}.ata-photo-wrap img{display:block}
+
+/* EKIS FIELD v5.0.1 — consolidated mobile fixes */
+.bottom-nav{grid-template-columns:repeat(6,minmax(0,1fr))!important;height:72px!important}
+.bottom-nav .nav-btn{min-width:0!important;font-size:8.5px!important;padding:0 1px!important;white-space:nowrap!important}
+.bottom-nav .nav-btn span{font-size:17px!important;line-height:18px!important}
+.bottom-nav .nav-btn[data-view="ataView"]{font-size:8.5px!important}
+.bottom-nav .nav-btn[data-view="ataView"] span{font-size:12px!important}
+.viewer-view.fullscreen-ui .drawing-edge-left{left:6px!important}
+.viewer-view.fullscreen-ui .drawing-edge-right{right:70px!important}
+.viewer-view.fullscreen-ui .drawing-edge-arrow{width:28px!important;height:46px!important;font-size:23px!important;opacity:.58!important}
+.viewer-view.fullscreen-ui .pdf-viewport{padding:0 64px 0 0!important;overflow:auto!important}
+.viewer-view.fullscreen-ui .canvas-wrap{margin:0!important}
+.counter-category-tabs{display:flex;gap:7px;overflow-x:auto;padding-top:8px;scrollbar-width:none}.counter-category-tabs .category-tab{flex:0 0 auto}
+.ata-inline-edit{display:grid;gap:10px;margin-top:6px}.ata-inline-edit label{display:grid;gap:5px;color:var(--muted);font-size:11px;font-weight:800}.ata-inline-edit input,.ata-inline-edit textarea,.ata-hours-inline input{width:100%;box-sizing:border-box;border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:10px;padding:10px;font:inherit}.ata-inline-edit textarea{resize:vertical;min-height:110px}.ata-inline-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ata-inline-actions{display:flex;gap:8px}.ata-hours-inline{display:grid;grid-template-columns:90px 135px 1fr auto auto;gap:6px;margin:9px 0;padding:9px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}.ata-title-direct,.ata-info-direct{cursor:text}
+@media(max-width:650px){.ata-hours-inline{grid-template-columns:1fr 1fr}.ata-hours-note{grid-column:1/-1}.bottom-nav{height:70px!important}}

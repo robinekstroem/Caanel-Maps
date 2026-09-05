@@ -47,7 +47,7 @@
     distanceDraft: null,
     pageTextItems: [],
     calibrationMode: null,
-    ataFilter: "open", ataSelected: new Set(), ataPhotoTarget: null, activeAtaMark:null, ataMarkAnnotationId:null, ataMarkBaseIds:null, riserMode:false, selectedOverlay:null, drawDraft:null, counterSelected:new Set()
+    ataFilter: "open", ataSelected: new Set(), ataPhotoTarget: null, activeAtaMark:null, ataMarkAnnotationId:null, ataMarkBaseIds:null, riserMode:false, selectedOverlay:null, drawDraft:null, counterSelected:new Set(), counterCategory:"Belysning", ataEditingId:null, ataHoursEditingId:null
   };
 
   function defaultMeta() {
@@ -581,11 +581,25 @@
     applyAnalysis(f,item.analysis); saveMeta(); return f;
   }
 
+  function refreshRevisionLabels(project){
+    if(!project)return;
+    const groups=new Map();
+    for(const id of project.files||[]){const f=fileMeta(id);if(!f)continue;const k=revisionKey(f);if(!k)continue;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(f)}
+    for(const arr of groups.values()){
+      if(arr.length<2)continue;
+      arr.sort((a,b)=>String(a.sourceDate||'').localeCompare(String(b.sourceDate||'')) || (a.addedAt||0)-(b.addedAt||0));
+      arr.forEach((f,i)=>{
+        const base=(f.category&&f.category!=='Övrigt')?`${f.category}${f.plan?` – P${f.plan}`:''}${f.part?` – Del ${f.part}`:''}`:stripPdf(f.originalName||f.name);
+        f.revisionIndex=i+1; f.revisionCount=arr.length; f.revisionStatus=i===arr.length-1?'Ny':'Gammal';
+        f.name=`${base} · ${f.revisionStatus}.pdf`; f.autoNamed=true;
+      });
+    }
+  }
+
   async function processImportItems(rawItems, sourceLabel='filer'){
     const p=currentProject(); if(!p)return;
     const existing=(p.files||[]).map(fileMeta).filter(Boolean);
-    let imported=0, skipped=0, duplicateCount=0, revisionCount=0;
-    let duplicateBatch=null, revisionBatch=null;
+    let imported=0, duplicateCount=0, revisionCount=0;
     const prepared=[];
     $("#projectStatus").textContent=`Analyserar ${rawItems.length} PDF-filer…`;
     for(let i=0;i<rawItems.length;i++){
@@ -595,35 +609,14 @@
     for(let i=0;i<prepared.length;i++){
       const item=prepared[i]; $("#projectStatus").textContent=`Importerar… ${i+1}/${prepared.length}`;
       let exact=null;
-      if(item.hash){for(const f of [...existing]){if(await ensureFileHash(f)===item.hash){exact=f;break}}}
-      if(exact){
-        duplicateCount++;
-        let action=duplicateBatch;
-        if(!action){action=await choiceModal('Identisk ritning hittad',`${item.originalName} är exakt identisk med en ritning som redan finns. (${duplicateCount} dubblett${duplicateCount===1?'':'er'} hittills)`,[
-          {label:'Behåll befintlig',value:'skip'},{label:'Ersätt denna',value:'replace',primary:true},{label:'Behåll båda',value:'both'},{label:'Behåll alla befintliga',value:'skipAll'},{label:'Ersätt alla identiska',value:'replaceAll'}
-        ])}
-        if(action==='skipAll'){duplicateBatch='skip';action='skip'} if(action==='replaceAll'){duplicateBatch='replace';action='replace'}
-        if(action===null||action==='skip'){skipped++;continue}
-        if(action==='replace'){await removeImportedDrawing(exact.id);existing.splice(existing.indexOf(exact),1)}
-      }else{
-        const key=revisionKey(item.temp);
-        const possible=existing.find(f=>revisionKey(f)===key && (!item.hash || f.contentHash!==item.hash));
-        if(possible && key){
-          revisionCount++;
-          let action=revisionBatch;
-          if(!action){action=await choiceModal('Möjlig revidering',`${revisionEvidence(possible,item.temp)}. Innehållet skiljer sig från befintlig ritning.`,[
-            {label:'Ny revision',value:'revision',primary:true},{label:'Ersätt denna',value:'replace'},{label:'Behåll båda',value:'both'},{label:'Alla som nya revisioner',value:'revisionAll'},{label:'Ersätt alla möjliga',value:'replaceAll'}
-          ])}
-          if(action==='revisionAll'){revisionBatch='revision';action='revision'} if(action==='replaceAll'){revisionBatch='replace';action='replace'}
-          if(action===null){skipped++;continue}
-          if(action==='replace'){possible.revisionStatus='Tidigare revision';possible.replacedAt=Date.now();item.temp.replacesId=possible.id}
-          if(action==='revision'){item.temp.replacesId=possible.id}
-        }
-      }
-      const added=await addInspectedPdf(item); if(added){if(item.temp.replacesId)added.replacesId=item.temp.replacesId; existing.push(added); imported++}
+      if(item.hash){for(const f of existing){if(await ensureFileHash(f)===item.hash){exact=f;break}}}
+      if(exact){duplicateCount++;continue;} // identiska filer läggs inte dubbelt
+      const key=revisionKey(item.temp);
+      if(key && existing.some(f=>revisionKey(f)===key)) revisionCount++;
+      const added=await addInspectedPdf(item); if(added){existing.push(added);imported++}
     }
-    saveMeta(); renderProject();renderProjects();renderAllDrawings();
-    $("#projectStatus").textContent=`Import klar: ${imported} importerade · ${duplicateCount} identiska · ${revisionCount} möjliga revisioner${skipped?` · ${skipped} hoppades över`:''}.`;
+    refreshRevisionLabels(p); saveMeta(); renderProject();renderProjects();renderAllDrawings();
+    $("#projectStatus").textContent=`Import klar: ${imported} importerade${revisionCount?` · ${revisionCount} revisioner grupperade`:''}${duplicateCount?` · ${duplicateCount} identiska hoppades över`:''}.`;
     toast(`${imported} PDF importerade från ${sourceLabel}`);
   }
 
@@ -682,22 +675,24 @@
     $('#ataSummary').innerHTML=`<div><small>Öppna</small><b>${open}</b></div><div><small>Utförda</small><b>${done}</b></div><div><small>Extra timmar</small><b>${total.toFixed(1)} h</b></div>`;
     $('#ataSelectedCount').textContent=state.ataSelected.size;
     if(!items.length){list.innerHTML='<div class="empty">Inga avvikelser här.</div>';return}
-    list.innerHTML=items.map(a=>{const p=projectById(a.projectId);return `<div class="ata-card ${a.status==='Utförd'?'done':''}" data-ata="${a.id}"><div class="ata-top"><input class="ata-select" type="checkbox" ${state.ataSelected.has(a.id)?'checked':''}><div class="ata-main"><div class="ata-num">${esc(a.number)}</div><strong>${esc(a.title)}</strong><div class="ata-meta"><span class="ata-status ${a.status==='Utförd'?'done':''}">${esc(a.status)}</span><span>📅 ${esc(a.date||'')}</span><span>⏱ ${ataHours(a).toFixed(1)} h${a.estimate?` / est. ${Number(a.estimate).toFixed(1)} h`:''}</span>${p?`<span>▦ ${esc(p.name)}</span>`:''}</div>${a.description?`<p class="muted" style="margin-top:7px">${esc(a.description)}</p>`:''}${a.drawingNote?`<p class="muted" style="margin-top:5px">📍 ${esc(a.drawingNote)}</p>`:''}${(a.sessions||[]).length?`<div class="ata-sessions">${a.sessions.map((x,i)=>`<div class="ata-session"><span>${esc(x.date||'')} · <b>${Number(x.hours||0).toFixed(1)} h</b>${x.note?` · ${esc(x.note)}`:''}</span><button class="mini-btn ata-session-del" data-session="${i}">✕</button></div>`).join('')}</div>`:''}${(a.drawingSnapshots||[]).length?`<div class="ata-mark-snapshots"><div class="ata-mark-snapshots-label">Markering på ritning</div><div class="ata-mark-snapshots-grid">${(a.drawingSnapshots||[]).map(x=>`<img src="${x.dataUrl||x}" alt="ÄTA-markering på ritning">`).join('')}</div></div>`:''}<div class="ata-photos">${(a.photos||[]).map((x,i)=>`<span class="ata-photo-wrap"><img src="${x}" alt="ÄTA-bild"><button class="ata-photo-del" data-photo="${i}">✕</button></span>`).join('')}</div></div></div><div class="ata-card-actions"><button class="mini-btn ata-edit-btn">✏️ Redigera</button><button class="mini-btn ata-status-btn">${a.status==='Utförd'?'↺ Öppna':'✓ Utförd'}</button><button class="mini-btn ata-hours-btn">+ Timmar</button><button class="mini-btn ata-camera-btn">📷 Ta foto</button><button class="mini-btn ata-photo-btn">🖼 Galleri</button><button class="mini-btn ata-mark-btn">⌖ Markera på ritning</button><button class="mini-btn ata-delete-btn">✕</button></div></div>`}).join('');
-    list.querySelectorAll('[data-ata]').forEach(row=>{const a=all.find(x=>x.id===row.dataset.ata); row.querySelector('.ata-edit-btn').onclick=()=>editAta(a); row.querySelector('.ata-select').onchange=e=>{e.target.checked?state.ataSelected.add(a.id):state.ataSelected.delete(a.id);renderAtas()}; row.querySelector('.ata-status-btn').onclick=()=>{a.status=a.status==='Utförd'?'Pågående':'Utförd';if(a.status==='Utförd')a.completed=new Date().toISOString().slice(0,10);saveMeta();renderAtas()}; row.querySelector('.ata-hours-btn').onclick=async()=>{const h=Number(String(await promptModal('Extra timmar','Arbetade timmar för detta pass.','1.0','number')||'').replace(',','.'));if(!(h>0))return;const date=await promptModal('Datum för passet','YYYY-MM-DD',new Date().toISOString().slice(0,10));const note=await promptModal('Beskrivning','Kort beskrivning av extraarbetet.','');a.sessions=a.sessions||[];a.sessions.push({id:uid(),date:/^\d{4}-\d{2}-\d{2}$/.test(date||'')?date:new Date().toISOString().slice(0,10),hours:h,note:note||''});a.status='Pågående';saveMeta();renderAtas();toast('Extra timmar sparade')}; row.querySelector('.ata-camera-btn').onclick=()=>{state.ataPhotoTarget=a.id;if(window.Android?.capturePhoto){Android.capturePhoto()}else{$('#ataCameraInput').click()}}; row.querySelector('.ata-photo-btn').onclick=()=>{state.ataPhotoTarget=a.id;$('#ataPhotoInput').click()}; row.querySelectorAll('.ata-session-del').forEach(btn=>btn.onclick=async()=>{const i=Number(btn.dataset.session);if(!await confirmDelete('Ta bort timmar?','Vill du verkligen ta bort detta arbetspass?'))return;a.sessions.splice(i,1);saveMeta();renderAtas()}); row.querySelectorAll('.ata-photo-del').forEach(btn=>btn.onclick=async()=>{const i=Number(btn.dataset.photo);if(!await confirmDelete('Ta bort foto?','Vill du verkligen ta bort detta?'))return;a.photos.splice(i,1);saveMeta();renderAtas()}); row.querySelector('.ata-mark-btn').onclick=async()=>{state.currentProjectId=a.projectId||state.currentProjectId; const p=projectById(state.currentProjectId); const id=a.drawing?.fileId || p?.files?.[0]; if(!id){toast('Lägg först in en ritning i projektet');return} state.activeAtaMark=a.id; state.ataMarkAnnotationId=null; await openPdf(id,{page:a.drawing?.page||1,viewState:a.drawing?.view||null}); state.ataMarkBaseIds=new Set(getAnnotations().map(x=>x.id)); setTool('pen'); updateAtaMarkBar(); toast('Rita, skriv, använd pil eller ring. Tryck sedan Spara till ÄTA')}; row.querySelector('.ata-delete-btn').onclick=async()=>{if(!await confirmDelete('Ta bort ÄTA?',`Vill du verkligen ta bort ${a.number} – ${a.title}?`))return;state.meta.atas=all.filter(x=>x.id!==a.id);state.ataSelected.delete(a.id);saveMeta();renderAtas()};});
+    list.innerHTML=items.map(a=>{const p=projectById(a.projectId), editing=state.ataEditingId===a.id, hourEdit=state.ataHoursEditingId===a.id;
+      const body=editing?`<div class="ata-inline-edit"><label>Titel<input class="ata-inline-title" value="${esc(a.title||'')}"></label><label>Info ÄTA<textarea class="ata-inline-info" rows="5">${esc(a.description||'')}</textarea></label><div class="ata-inline-grid"><label>Datum<input class="ata-inline-date" type="date" value="${esc(a.date||'')}"></label><label>Est. timmar<input class="ata-inline-est" type="number" step="0.5" min="0" value="${Number(a.estimate||0)}"></label></div><div class="ata-inline-actions"><button class="btn primary ata-inline-save">Spara</button><button class="btn ata-inline-cancel">Avbryt</button></div></div>`:`<strong class="ata-title-direct" title="Tryck för att redigera">${esc(a.title)}</strong><div class="ata-meta"><span class="ata-status ${a.status==='Utförd'?'done':''}">${esc(a.status)}</span><span>📅 ${esc(a.date||'')}</span><span>⏱ ${ataHours(a).toFixed(1)} h${a.estimate?` / est. ${Number(a.estimate).toFixed(1)} h`:''}</span>${p?`<span>▦ ${esc(p.name)}</span>`:''}</div>${a.description?`<p class="muted ata-info-direct" title="Tryck för att redigera" style="margin-top:7px">${esc(a.description)}</p>`:'<p class="muted ata-info-direct" style="margin-top:7px">+ Lägg till info</p>'}`;
+      const hours=hourEdit?`<div class="ata-hours-inline"><input class="ata-hours-value" type="number" min="0.1" step="0.25" placeholder="Timmar"><input class="ata-hours-date" type="date" value="${new Date().toISOString().slice(0,10)}"><input class="ata-hours-note" placeholder="Beskrivning"><button class="mini-btn ata-hours-save">Spara</button><button class="mini-btn ata-hours-cancel">Avbryt</button></div>`:'';
+      return `<div class="ata-card ${a.status==='Utförd'?'done':''}" data-ata="${a.id}"><div class="ata-top"><input class="ata-select" type="checkbox" ${state.ataSelected.has(a.id)?'checked':''}><div class="ata-main"><div class="ata-num">${esc(a.number)}</div>${body}${a.drawingNote?`<p class="muted" style="margin-top:5px">📍 ${esc(a.drawingNote)}</p>`:''}${(a.sessions||[]).length?`<div class="ata-sessions">${a.sessions.map((x,i)=>`<div class="ata-session"><span>${esc(x.date||'')} · <b>${Number(x.hours||0).toFixed(1)} h</b>${x.note?` · ${esc(x.note)}`:''}</span><button class="mini-btn ata-session-del" data-session="${i}">✕</button></div>`).join('')}</div>`:''}${hours}<div class="ata-photos">${(a.photos||[]).map((x,i)=>`<span class="ata-photo-wrap"><img src="${x}" alt="ÄTA-bild"><button class="ata-photo-del" data-photo="${i}">✕</button></span>`).join('')}</div></div></div>${editing?'':`<div class="ata-card-actions"><button class="mini-btn ata-edit-btn">✏️ Redigera</button><button class="mini-btn ata-status-btn">${a.status==='Utförd'?'↺ Öppna':'✓ Utförd'}</button><button class="mini-btn ata-hours-btn">+ Timmar</button><button class="mini-btn ata-camera-btn">📷 Ta foto</button><button class="mini-btn ata-photo-btn">🖼 Galleri</button><button class="mini-btn ata-mark-btn">⌖ Markera på ritning</button><button class="mini-btn ata-delete-btn">✕</button></div>`}</div>`}).join('');
+    list.querySelectorAll('[data-ata]').forEach(row=>{const a=all.find(x=>x.id===row.dataset.ata); const q=x=>row.querySelector(x);
+      q('.ata-select').onchange=e=>{e.target.checked?state.ataSelected.add(a.id):state.ataSelected.delete(a.id);renderAtas()};
+      q('.ata-edit-btn')?.addEventListener('click',()=>{state.ataEditingId=a.id;renderAtas()}); q('.ata-title-direct')?.addEventListener('click',()=>{state.ataEditingId=a.id;renderAtas()}); q('.ata-info-direct')?.addEventListener('click',()=>{state.ataEditingId=a.id;renderAtas()});
+      q('.ata-inline-cancel')?.addEventListener('click',()=>{state.ataEditingId=null;renderAtas()}); q('.ata-inline-save')?.addEventListener('click',()=>{const title=q('.ata-inline-title').value.trim();if(!title){toast('Titel behövs');return}a.title=title;a.description=q('.ata-inline-info').value;a.date=q('.ata-inline-date').value||a.date;a.estimate=Number(q('.ata-inline-est').value)||0;state.ataEditingId=null;saveMeta();renderAtas();toast(`${a.number} sparad`)});
+      q('.ata-status-btn')?.addEventListener('click',()=>{a.status=a.status==='Utförd'?'Pågående':'Utförd';if(a.status==='Utförd')a.completed=new Date().toISOString().slice(0,10);saveMeta();renderAtas()});
+      q('.ata-hours-btn')?.addEventListener('click',()=>{state.ataHoursEditingId=a.id;renderAtas()}); q('.ata-hours-cancel')?.addEventListener('click',()=>{state.ataHoursEditingId=null;renderAtas()}); q('.ata-hours-save')?.addEventListener('click',()=>{const h=Number(String(q('.ata-hours-value').value).replace(',','.'));if(!(h>0)){toast('Ange timmar');return}a.sessions=a.sessions||[];a.sessions.push({id:uid(),date:q('.ata-hours-date').value||new Date().toISOString().slice(0,10),hours:h,note:q('.ata-hours-note').value.trim()});a.status='Pågående';state.ataHoursEditingId=null;saveMeta();renderAtas();toast('Extra timmar sparade')});
+      q('.ata-camera-btn')?.addEventListener('click',()=>{state.ataPhotoTarget=a.id;if(window.Android?.capturePhoto){Android.capturePhoto()}else{$('#ataCameraInput').click()}}); q('.ata-photo-btn')?.addEventListener('click',()=>{state.ataPhotoTarget=a.id;$('#ataPhotoInput').click()});
+      row.querySelectorAll('.ata-session-del').forEach(btn=>btn.onclick=async()=>{const i=Number(btn.dataset.session);if(!await confirmDelete('Ta bort timmar?','Vill du verkligen ta bort detta arbetspass?'))return;a.sessions.splice(i,1);saveMeta();renderAtas()}); row.querySelectorAll('.ata-photo-del').forEach(btn=>btn.onclick=async()=>{const i=Number(btn.dataset.photo);if(!await confirmDelete('Ta bort foto?','Vill du verkligen ta bort detta?'))return;a.photos.splice(i,1);saveMeta();renderAtas()});
+      q('.ata-mark-btn')?.addEventListener('click',async()=>{state.currentProjectId=a.projectId||state.currentProjectId; const p=projectById(state.currentProjectId); const id=a.drawing?.fileId || p?.files?.[0]; if(!id){toast('Lägg först in en ritning i projektet');return} state.activeAtaMark=a.id; state.ataMarkAnnotationId=null; await openPdf(id,{page:a.drawing?.page||1,viewState:a.drawing?.view||null}); state.ataMarkBaseIds=new Set(getAnnotations().map(x=>x.id)); setTool('pen'); updateAtaMarkBar(); toast('Rita, skriv, använd pil eller ring. Tryck sedan Spara till ÄTA')});
+      q('.ata-delete-btn')?.addEventListener('click',async()=>{if(!await confirmDelete('Ta bort ÄTA?',`Vill du verkligen ta bort ${a.number} – ${a.title}?`))return;state.meta.atas=all.filter(x=>x.id!==a.id);state.ataSelected.delete(a.id);saveMeta();renderAtas()});
+    });
   }
   async function createAta(){ const title=await promptModal('Ny ÄTA / Avvikelse','Beskriv extraarbetet kort.','');if(!title)return; const desc=await promptModal('Beskrivning','Orsak / vad som ska göras.',''); const est=Number(String(await promptModal('Beräknade timmar','Kan lämnas 0 om okänt.','0','number')||0).replace(',','.'))||0; const projectId=state.currentProjectId||state.meta.projects[0]?.id||null; state.meta.atas.unshift({id:uid(),number:ataNumber(),title,description:desc||'',date:new Date().toISOString().slice(0,10),status:'Ej påbörjad',estimate:est,sessions:[],photos:[],projectId});saveMeta();renderAtas(); }
-  async function editAta(a){
-    if(!a)return;
-    const title=await promptModal(`Redigera ${a.number}`,'Titel / kort beskrivning.',a.title||''); if(!title)return;
-    const desc=await promptModal('Beskrivning','Orsak / vad som ska göras.',a.description||'');
-    const date=await promptModal('Datum','YYYY-MM-DD',a.date||new Date().toISOString().slice(0,10));
-    const statusRaw=await promptModal('Status','Ej påbörjad, Pågående eller Utförd.',a.status||'Ej påbörjad');
-    const est=Number(String(await promptModal('Beräknade timmar','Kan lämnas 0 om okänt.',String(a.estimate||0),'number')||0).replace(',','.'))||0;
-    const statuses=['Ej påbörjad','Pågående','Utförd']; const status=statuses.find(x=>x.toLowerCase()===String(statusRaw||'').trim().toLowerCase())||a.status||'Ej påbörjad';
-    a.title=title;a.description=desc||'';a.date=/^\d{4}-\d{2}-\d{2}$/.test(date||'')?date:a.date;a.status=status;a.estimate=est;
-    if(status==='Utförd'&&!a.completed)a.completed=new Date().toISOString().slice(0,10); if(status!=='Utförd')a.completed='';
-    saveMeta();renderAtas();toast(`${a.number} uppdaterad`);
-  }
+  function editAta(a){ if(!a)return; state.ataEditingId=a.id; renderAtas(); }
   function imageSize(dataUrl){return new Promise(resolve=>{const im=new Image();im.onload=()=>resolve({w:im.naturalWidth||im.width,h:im.naturalHeight||im.height});im.onerror=()=>resolve(null);im.src=dataUrl})}
   async function shareSelectedAtas(){
     const items=(state.meta.atas||[]).filter(a=>state.ataSelected.has(a.id));if(!items.length){toast('Välj minst en ÄTA');return} if(!window.jspdf?.jsPDF){toast('PDF-modulen saknas');return}
@@ -1394,16 +1389,14 @@
   function centerFullscreenDrawing(){
     const viewer=$("#viewerView"), viewport=$("#pdfViewport"), wrap=$("#canvasWrap");
     if(!viewer||!viewport||!wrap||!viewer.classList.contains("fullscreen-ui"))return;
-    wrap.style.marginTop="18px"; wrap.style.marginBottom="18px";
-    requestAnimationFrame(()=>{
-      const cs=getComputedStyle(viewport);
-      const innerH=viewport.clientHeight-(parseFloat(cs.paddingTop)||0)-(parseFloat(cs.paddingBottom)||0);
-      const h=wrap.getBoundingClientRect().height;
-      if(h>0 && h<innerH){const gap=Math.max(18,(innerH-h)/2);wrap.style.marginTop=gap+"px";wrap.style.marginBottom=gap+"px";viewport.scrollTop=0;}
-      const innerW=viewport.clientWidth-(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0);
-      const w=wrap.getBoundingClientRect().width;
-      if(w>innerW) viewport.scrollLeft=Math.max(0,(viewport.scrollWidth-viewport.clientWidth)/2);
-    });
+    const cs=getComputedStyle(viewport), pt=parseFloat(cs.paddingTop)||0, pb=parseFloat(cs.paddingBottom)||0, pl=parseFloat(cs.paddingLeft)||0, pr=parseFloat(cs.paddingRight)||0;
+    const innerH=Math.max(0,viewport.clientHeight-pt-pb), innerW=Math.max(0,viewport.clientWidth-pl-pr);
+    const h=parseFloat(wrap.style.height)||wrap.getBoundingClientRect().height, w=parseFloat(wrap.style.width)||wrap.getBoundingClientRect().width;
+    wrap.style.marginTop=(h<innerH?Math.max(0,(innerH-h)/2):0)+"px";
+    wrap.style.marginBottom=(h<innerH?Math.max(0,(innerH-h)/2):0)+"px";
+    wrap.style.marginLeft=(w<innerW?Math.max(0,(innerW-w)/2):0)+"px";
+    wrap.style.marginRight=(w<innerW?Math.max(0,(innerW-w)/2):0)+"px";
+    if(h<innerH)viewport.scrollTop=0;if(w<innerW)viewport.scrollLeft=0;
   }
 
   async function toggleFullscreen(){
@@ -1436,7 +1429,7 @@
   function syncFullscreenUI(){
     const active=!!(document.fullscreenElement||document.webkitFullscreenElement)||$("#viewerView").classList.contains("pseudo-fullscreen");
     $("#fullscreenBtn").textContent=active?"⤢":"⛶";
-    $("#viewerView").classList.toggle("fullscreen-ui",active);
+    $("#viewerView").classList.toggle("fullscreen-ui",active); if(active)setTimeout(()=>{fitDrawing();centerFullscreenDrawing()},80);
   }
 
   window.ekisBack=function(){const viewer=$("#viewerView");const active=!!(document.fullscreenElement||document.webkitFullscreenElement)||viewer.classList.contains("pseudo-fullscreen");if(active){toggleFullscreen();return true}if(state.currentView==="viewerView"){showView("projectView",false);renderProject();return true}return false};
@@ -1600,36 +1593,21 @@
 
   function renderCounter(){
     const list=$("#counterDrawingList"); if(!list)return;
-    const files=(state.meta.projects||[]).flatMap(p=>(p.files||[]).map(id=>fileMeta(id))).filter(f=>f&&f.documentType!=="armatureSchedule"&&f.documentType!=="occhioSchedule");
-    list.innerHTML=files.length?files.map(f=>`<label class="counter-drawing"><input type="checkbox" data-counter-file="${f.id}" ${state.counterSelected.has(f.id)?'checked':''}><span><strong>${esc(displayLabel(f))}</strong><small class="muted">${esc(projectById(f.projectId)?.name||'')} · ${f.pageCount||1} sida${(f.pageCount||1)===1?'':'or'}</small></span></label>`).join(''):'<div class="empty">Lägg in ritningar först.</div>';
+    const cat=state.counterCategory||'Belysning';
+    $$("[data-counter-category]").forEach(b=>b.classList.toggle('active',b.dataset.counterCategory===cat));
+    const files=(state.meta.projects||[]).flatMap(p=>(p.files||[]).map(id=>fileMeta(id))).filter(f=>f&&f.documentType!=="armatureSchedule"&&f.documentType!=="occhioSchedule"&&f.category===cat);
+    for(const id of [...state.counterSelected]){const f=fileMeta(id);if(!f||f.category!==cat)state.counterSelected.delete(id)}
+    list.innerHTML=files.length?files.map(f=>`<label class="counter-drawing"><input type="checkbox" data-counter-file="${f.id}" ${state.counterSelected.has(f.id)?'checked':''}><span><strong>${esc(displayLabel(f))}</strong><small class="muted">${esc(projectById(f.projectId)?.name||'')} · ${f.pageCount||1} sida${(f.pageCount||1)===1?'':'or'}</small></span></label>`).join(''):`<div class="empty">Inga ${esc(cat.toLowerCase())}-ritningar.</div>`;
     list.querySelectorAll('[data-counter-file]').forEach(cb=>cb.onchange=e=>{e.target.checked?state.counterSelected.add(e.target.dataset.counterFile):state.counterSelected.delete(e.target.dataset.counterFile)});
   }
   async function counterPreAnalyze(){
     const ids=[...state.counterSelected]; if(!ids.length){toast('Markera minst en ritning');return}
     const status=$("#counterStatus"), out=$("#counterResults"); out.innerHTML=''; status.textContent='Analyserar valda ritningar…';
-    const locations=new Map(), totals=new Map();
-    for(const id of ids){
-      const f=fileMeta(id), blob=await getBlob(id); if(!f||!blob)continue;
-      try{
-        const doc=await pdfjsLib.getDocument({data:new Uint8Array(await blob.arrayBuffer())}).promise;
-        for(let pg=1;pg<=doc.numPages;pg++){
-          const page=await doc.getPage(pg), tc=await page.getTextContent();
-          const words=tc.items.map(x=>String(x.str||'').trim()).filter(Boolean);
-          const locs=[...new Set(words.flatMap(w=>[...(w.toUpperCase().matchAll(/\bB\d{3,5}\b/g))].map(m=>m[0])))];
-          // Fallback room numbers only when no apartment IDs are present on the page.
-          const roomLocs=locs.length?[]:[...new Set(words.filter(w=>/^\d{3,5}$/.test(w)))].slice(0,80);
-          const pageLocs=locs.length?locs:roomLocs.map(x=>'Rum '+x);
-          const tags=words.map(w=>splitArmatureTag(w)?.tag).filter(Boolean);
-          const uniqueTags=[...new Set(tags)];
-          for(const loc of pageLocs){if(!locations.has(loc))locations.set(loc,{drawings:new Set(),types:new Set()});const r=locations.get(loc);r.drawings.add(displayLabel(f));uniqueTags.forEach(t=>r.types.add(t));}
-          uniqueTags.forEach(t=>totals.set(t,(totals.get(t)||0)+1));
-        }
-        try{await doc.destroy()}catch(_e){}
-      }catch(e){console.warn('Counter pre-analysis failed',e)}
-    }
-    status.textContent=`${ids.length} ritning${ids.length===1?'':'ar'} analyserade`;
-    const locRows=[...locations.entries()].sort().map(([loc,r])=>`<tr><td><strong>${esc(loc)}</strong></td><td>${esc([...r.types].sort().join(', ')||'–')}</td><td>${r.drawings.size}</td></tr>`).join('');
-    out.innerHTML=`<div class="counter-warning"><strong>Symbolkontroll v5.0</strong><br>EKIS har hittat områden och typbeteckningar. Antal visas inte som färdigt mängdresultat förrän elsymbolen är verifierad – arkitektgrafik ska aldrig räknas som lampor.</div><div class="counter-card"><h3>Identifierade lägenheter / rum</h3><table class="counter-table"><thead><tr><th>Område</th><th>Armaturtyper i underlaget</th><th>Ritningar</th></tr></thead><tbody>${locRows||'<tr><td colspan="3">Inga säkra lägenhets- eller rumsbeteckningar hittades.</td></tr>'}</tbody></table></div><div class="counter-card"><h3>Nästa steg: verifiera symbol</h3><p class="muted">Tryck på en riktig elsymbol i ritningen för att lära Räknaren vad som ska räknas. Den delen byggs vidare utan att använda arkitektens bakgrundssymboler som facit.</p></div>`;
+    const locations=new Map();
+    for(const id of ids){const f=fileMeta(id), blob=await getBlob(id); if(!f||!blob)continue;try{const doc=await pdfjsLib.getDocument({data:new Uint8Array(await blob.arrayBuffer())}).promise;for(let pg=1;pg<=doc.numPages;pg++){const page=await doc.getPage(pg),tc=await page.getTextContent();const words=tc.items.map(x=>String(x.str||'').trim()).filter(Boolean), joined=words.join(' ');let locs=[...new Set([...joined.toUpperCase().matchAll(/\bB\d{3,5}\b/g)].map(m=>m[0]))];if(!locs.length)locs=[...new Set([...joined.toUpperCase().matchAll(/\b(?:RUM|ROOM)\s*([A-Z]?\d{2,5})\b/g)].map(m=>'Rum '+m[1]))];const tags=state.counterCategory==='Belysning'?[...new Set(words.map(w=>splitArmatureTag(w)?.tag).filter(t=>t&&/^(?:ARM\s*\d+|L\d+[A-Z]?|N\d+[A-Z]?|K\d+[A-Z]?|BL)$/i.test(t)))]:[];for(const loc of locs){if(!locations.has(loc))locations.set(loc,{drawings:new Set(),types:new Set()});const r=locations.get(loc);r.drawings.add(displayLabel(f));tags.forEach(t=>r.types.add(t));}}try{await doc.destroy()}catch(_e){}}catch(e){console.warn('Counter analysis failed',e)}}
+    status.textContent=`${ids.length} ritning${ids.length===1?'':'ar'} analyserade · ${state.counterCategory}`;
+    const rows=[...locations.entries()].sort().map(([loc,r])=>`<tr><td><strong>${esc(loc)}</strong></td><td>${state.counterCategory==='Belysning'?esc([...r.types].sort().join(', ')||'–'):'–'}</td><td>${r.drawings.size}</td></tr>`).join('');
+    out.innerHTML=`<div class="counter-warning"><strong>Föranalys – inga falska mängder</strong><br>EKIS visar bara säkra lägenhets-ID eller uttryckliga “Rum”-beteckningar. Antal skapas först efter verifierad elsymbol.</div><div class="counter-card"><h3>Identifierade områden · ${esc(state.counterCategory)}</h3><table class="counter-table"><thead><tr><th>Område</th><th>${state.counterCategory==='Belysning'?'Armaturtyper':'Typ'}</th><th>Ritningar</th></tr></thead><tbody>${rows||'<tr><td colspan="3">Inga säkra områdesbeteckningar hittades.</td></tr>'}</tbody></table></div><div class="counter-card"><h3>Symbolverifiering</h3><p class="muted">Nästa mängdsteg kräver att en riktig elsymbol pekas ut. EKIS räknar inte cirklar, siffror eller arkitektgrafik som elsymboler automatiskt.</p></div>`;
   }
 
   async function exportProject(){
@@ -1787,6 +1765,7 @@
   $("#nextDrawingBtn").onclick=()=>openAdjacentDrawing(1);
   $("#floatingPrevDrawing").onclick=()=>openAdjacentDrawing(-1);
   $("#floatingNextDrawing").onclick=()=>openAdjacentDrawing(1);
+  $$(`[data-counter-category]`).forEach(b=>b.onclick=()=>{state.counterCategory=b.dataset.counterCategory;state.counterSelected.clear();$("#counterResults").innerHTML="";$("#counterStatus").textContent="";renderCounter()});
   $("#runCounterBtn").onclick=counterPreAnalyze;
   $("#counterSelectAllBtn").onclick=()=>{const boxes=$$("[data-counter-file]");const all=boxes.length&&boxes.every(x=>x.checked);boxes.forEach(x=>{x.checked=!all;!all?state.counterSelected.add(x.dataset.counterFile):state.counterSelected.delete(x.dataset.counterFile)});};
   $("#fullscreenBtn").onclick=toggleFullscreen;
