@@ -509,3 +509,10 @@ button.file-tag{cursor:pointer}
 .counter-category-tabs{display:flex;gap:7px;overflow-x:auto;padding-top:8px;scrollbar-width:none}.counter-category-tabs .category-tab{flex:0 0 auto}
 .ata-inline-edit{display:grid;gap:10px;margin-top:6px}.ata-inline-edit label{display:grid;gap:5px;color:var(--muted);font-size:11px;font-weight:800}.ata-inline-edit input,.ata-inline-edit textarea,.ata-hours-inline input{width:100%;box-sizing:border-box;border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:10px;padding:10px;font:inherit}.ata-inline-edit textarea{resize:vertical;min-height:110px}.ata-inline-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ata-inline-actions{display:flex;gap:8px}.ata-hours-inline{display:grid;grid-template-columns:90px 135px 1fr auto auto;gap:6px;margin:9px 0;padding:9px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}.ata-title-direct,.ata-info-direct{cursor:text}
 @media(max-width:650px){.ata-hours-inline{grid-template-columns:1fr 1fr}.ata-hours-note{grid-column:1/-1}.bottom-nav{height:70px!important}}
+
+/* EKIS FIELD v5.0.2 build 33 — viewer geometry + scanner */
+.viewer-view.fullscreen-ui .drawing-edge-arrow{top:69%!important}
+.viewer-view.fullscreen-ui .drawing-edge-left{left:7px!important}
+.viewer-view.fullscreen-ui .drawing-edge-right{right:72px!important}
+.viewer-view.fullscreen-ui .canvas-wrap{margin:0!important}
+.counter-selection-summary{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0 12px}.counter-chip,.counter-pill{display:inline-flex;gap:5px;align-items:center;border:1px solid var(--line);border-radius:999px;padding:6px 9px;background:var(--panel2);font-size:11px}.counter-pills{display:flex;gap:6px;flex-wrap:wrap}.counter-scan-pending{padding:10px;border:1px dashed var(--line);border-radius:10px;background:var(--panel2)}

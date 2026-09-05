@@ -157,13 +157,24 @@
     return [...new Set(out)];
   }
 
+  function drawingSortMeta(f){
+    const text=`${displayLabel(f)} ${f.originalName||''} ${f.path||''}`;
+    const pm=text.match(/(?:\bP|\bPLAN\s*)(\d{1,2})\b/i);
+    const dm=text.match(/(?:\bDEL\s*|[-_.](?:D)?)([123])(?:\b|[-_.])/i);
+    const plan=Number(f.plan||pm?.[1]||9999);
+    const part=Number(f.part||dm?.[1]||0);
+    const rev=String(f.revisionStatus||'').toLowerCase()==='ny'?0:String(f.revisionStatus||'').toLowerCase()==='gammal'?1:0;
+    return {plan,part,rev};
+  }
   function smartSortFiles(a,b){
     const ca=CATEGORY_ORDER.indexOf(a.category||"Övrigt"), cb=CATEGORY_ORDER.indexOf(b.category||"Övrigt");
     if(ca!==cb) return (ca<0?99:ca)-(cb<0?99:cb);
-    const pa=Number(a.plan||9999), pb=Number(b.plan||9999);
-    if(pa!==pb) return pa-pb;
-    const da=Number(a.part||0), db=Number(b.part||0); if(da!==db)return da-db;
-    return displayLabel(a).localeCompare(displayLabel(b),"sv");
+    const A=drawingSortMeta(a), B=drawingSortMeta(b);
+    if(A.plan!==B.plan)return A.plan-B.plan;
+    if(A.part!==B.part)return A.part-B.part;
+    if(A.rev!==B.rev)return A.rev-B.rev; // aktuell/ny före gammal inom samma plan+del
+    const ri=(b.revisionIndex||0)-(a.revisionIndex||0); if(ri)return ri;
+    return displayLabel(a).localeCompare(displayLabel(b),"sv",{numeric:true,sensitivity:'base'});
   }
 
   function valueAfterLabel(lines,label){
@@ -1389,14 +1400,15 @@
   function centerFullscreenDrawing(){
     const viewer=$("#viewerView"), viewport=$("#pdfViewport"), wrap=$("#canvasWrap");
     if(!viewer||!viewport||!wrap||!viewer.classList.contains("fullscreen-ui"))return;
-    const cs=getComputedStyle(viewport), pt=parseFloat(cs.paddingTop)||0, pb=parseFloat(cs.paddingBottom)||0, pl=parseFloat(cs.paddingLeft)||0, pr=parseFloat(cs.paddingRight)||0;
-    const innerH=Math.max(0,viewport.clientHeight-pt-pb), innerW=Math.max(0,viewport.clientWidth-pl-pr);
-    const h=parseFloat(wrap.style.height)||wrap.getBoundingClientRect().height, w=parseFloat(wrap.style.width)||wrap.getBoundingClientRect().width;
-    wrap.style.marginTop=(h<innerH?Math.max(0,(innerH-h)/2):0)+"px";
-    wrap.style.marginBottom=(h<innerH?Math.max(0,(innerH-h)/2):0)+"px";
-    wrap.style.marginLeft=(w<innerW?Math.max(0,(innerW-w)/2):0)+"px";
-    wrap.style.marginRight=(w<innerW?Math.max(0,(innerW-w)/2):0)+"px";
-    if(h<innerH)viewport.scrollTop=0;if(w<innerW)viewport.scrollLeft=0;
+    // Explicit numeric centering. CSS margins/padding had conflicting historical overrides.
+    wrap.style.margin="0"; wrap.style.position="relative"; wrap.style.top="0px"; wrap.style.left="0px";
+    const rail=64, topSafe=58, bottomSafe=12;
+    const availW=Math.max(0,viewport.clientWidth-rail), availH=Math.max(0,viewport.clientHeight-topSafe-bottomSafe);
+    const rect=wrap.getBoundingClientRect(), w=rect.width, h=rect.height;
+    const x=w<availW?Math.max(0,(availW-w)/2):0;
+    const y=h<availH?Math.max(0,topSafe+(availH-h)/2):0;
+    wrap.style.left=x+"px"; wrap.style.top=y+"px";
+    if(w<availW)viewport.scrollLeft=0;if(h<availH)viewport.scrollTop=0;
   }
 
   async function toggleFullscreen(){
@@ -1595,19 +1607,55 @@
     const list=$("#counterDrawingList"); if(!list)return;
     const cat=state.counterCategory||'Belysning';
     $$("[data-counter-category]").forEach(b=>b.classList.toggle('active',b.dataset.counterCategory===cat));
-    const files=(state.meta.projects||[]).flatMap(p=>(p.files||[]).map(id=>fileMeta(id))).filter(f=>f&&f.documentType!=="armatureSchedule"&&f.documentType!=="occhioSchedule"&&f.category===cat);
-    for(const id of [...state.counterSelected]){const f=fileMeta(id);if(!f||f.category!==cat)state.counterSelected.delete(id)}
+    const files=(state.meta.projects||[]).flatMap(p=>(p.files||[]).map(id=>fileMeta(id))).filter(f=>f&&f.documentType!=="armatureSchedule"&&f.documentType!=="occhioSchedule"&&f.category===cat).sort(smartSortFiles);
     list.innerHTML=files.length?files.map(f=>`<label class="counter-drawing"><input type="checkbox" data-counter-file="${f.id}" ${state.counterSelected.has(f.id)?'checked':''}><span><strong>${esc(displayLabel(f))}</strong><small class="muted">${esc(projectById(f.projectId)?.name||'')} · ${f.pageCount||1} sida${(f.pageCount||1)===1?'':'or'}</small></span></label>`).join(''):`<div class="empty">Inga ${esc(cat.toLowerCase())}-ritningar.</div>`;
     list.querySelectorAll('[data-counter-file]').forEach(cb=>cb.onchange=e=>{e.target.checked?state.counterSelected.add(e.target.dataset.counterFile):state.counterSelected.delete(e.target.dataset.counterFile)});
   }
+  function counterLocationBlocks(tc){
+    const items=(tc.items||[]).map((x,i)=>({i,text:String(x.str||'').trim(),x:+(x.transform?.[4]||0),y:+(x.transform?.[5]||0),w:+(x.width||0),h:Math.abs(+(x.height||x.transform?.[0]||8))})).filter(x=>x.text);
+    const found=[];
+    // Apartment IDs are strong identifiers on their own.
+    for(const a of items){for(const m of a.text.toUpperCase().matchAll(/\bB\d{3,5}\b/g))found.push({name:m[0],x:a.x,y:a.y,confidence:1})}
+    // Room number must be spatially tied to the word RUM/ROOM. Never accept loose numbers.
+    for(const a of items){if(!/^(RUM|ROOM)\b/i.test(a.text))continue;
+      let m=a.text.match(/^(?:RUM|ROOM)\s*([A-Z]?\d{2,5})\b/i);
+      if(m){found.push({name:'Rum '+m[1].toUpperCase(),x:a.x,y:a.y,confidence:.98});continue}
+      const near=items.filter(b=>b!==a && /^[A-Z]?\d{2,5}$/i.test(b.text) && Math.abs(b.y-a.y)<Math.max(16,a.h*2.4) && b.x>=a.x-8 && b.x<a.x+120).sort((u,v)=>Math.hypot(u.x-a.x,u.y-a.y)-Math.hypot(v.x-a.x,v.y-a.y))[0];
+      if(near){const area=items.some(c=>/m²|m2/i.test(c.text)&&Math.abs(c.y-a.y)<45&&Math.abs(c.x-a.x)<170);found.push({name:'Rum '+near.text.toUpperCase(),x:a.x,y:a.y,confidence:area?.99:.9})}
+    }
+    const uniq=new Map();for(const x of found){const k=x.name.toUpperCase();if(!uniq.has(k)||uniq.get(k).confidence<x.confidence)uniq.set(k,x)}return [...uniq.values()];
+  }
+  function counterSelectedSummary(){
+    const m={};for(const id of state.counterSelected){const f=fileMeta(id);if(!f)continue;(m[f.category]||(m[f.category]=[])).push(f)}return m;
+  }
   async function counterPreAnalyze(){
     const ids=[...state.counterSelected]; if(!ids.length){toast('Markera minst en ritning');return}
-    const status=$("#counterStatus"), out=$("#counterResults"); out.innerHTML=''; status.textContent='Analyserar valda ritningar…';
-    const locations=new Map();
-    for(const id of ids){const f=fileMeta(id), blob=await getBlob(id); if(!f||!blob)continue;try{const doc=await pdfjsLib.getDocument({data:new Uint8Array(await blob.arrayBuffer())}).promise;for(let pg=1;pg<=doc.numPages;pg++){const page=await doc.getPage(pg),tc=await page.getTextContent();const words=tc.items.map(x=>String(x.str||'').trim()).filter(Boolean), joined=words.join(' ');let locs=[...new Set([...joined.toUpperCase().matchAll(/\bB\d{3,5}\b/g)].map(m=>m[0]))];if(!locs.length)locs=[...new Set([...joined.toUpperCase().matchAll(/\b(?:RUM|ROOM)\s*([A-Z]?\d{2,5})\b/g)].map(m=>'Rum '+m[1]))];const tags=state.counterCategory==='Belysning'?[...new Set(words.map(w=>splitArmatureTag(w)?.tag).filter(t=>t&&/^(?:ARM\s*\d+|L\d+[A-Z]?|N\d+[A-Z]?|K\d+[A-Z]?|BL)$/i.test(t)))]:[];for(const loc of locs){if(!locations.has(loc))locations.set(loc,{drawings:new Set(),types:new Set()});const r=locations.get(loc);r.drawings.add(displayLabel(f));tags.forEach(t=>r.types.add(t));}}try{await doc.destroy()}catch(_e){}}catch(e){console.warn('Counter analysis failed',e)}}
-    status.textContent=`${ids.length} ritning${ids.length===1?'':'ar'} analyserade · ${state.counterCategory}`;
-    const rows=[...locations.entries()].sort().map(([loc,r])=>`<tr><td><strong>${esc(loc)}</strong></td><td>${state.counterCategory==='Belysning'?esc([...r.types].sort().join(', ')||'–'):'–'}</td><td>${r.drawings.size}</td></tr>`).join('');
-    out.innerHTML=`<div class="counter-warning"><strong>Föranalys – inga falska mängder</strong><br>EKIS visar bara säkra lägenhets-ID eller uttryckliga “Rum”-beteckningar. Antal skapas först efter verifierad elsymbol.</div><div class="counter-card"><h3>Identifierade områden · ${esc(state.counterCategory)}</h3><table class="counter-table"><thead><tr><th>Område</th><th>${state.counterCategory==='Belysning'?'Armaturtyper':'Typ'}</th><th>Ritningar</th></tr></thead><tbody>${rows||'<tr><td colspan="3">Inga säkra områdesbeteckningar hittades.</td></tr>'}</tbody></table></div><div class="counter-card"><h3>Symbolverifiering</h3><p class="muted">Nästa mängdsteg kräver att en riktig elsymbol pekas ut. EKIS räknar inte cirklar, siffror eller arkitektgrafik som elsymboler automatiskt.</p></div>`;
+    const status=$("#counterStatus"), out=$("#counterResults"); out.innerHTML='';
+    const groups=counterSelectedSummary();
+    status.textContent=`AI-scannar ${ids.length} valda ritningar…`;
+    const locations=new Map(), categoryTotals={}; let pages=0;
+    for(const id of ids){
+      const f=fileMeta(id), blob=await getBlob(id); if(!f||!blob)continue;
+      const cat=f.category||'Övrigt'; categoryTotals[cat]=categoryTotals[cat]||{drawings:0,pages:0,tags:new Map()};categoryTotals[cat].drawings++;
+      try{
+        const doc=await pdfjsLib.getDocument({data:new Uint8Array(await blob.arrayBuffer())}).promise;
+        for(let pg=1;pg<=doc.numPages;pg++){
+          pages++;categoryTotals[cat].pages++;
+          const page=await doc.getPage(pg),tc=await page.getTextContent(), blocks=counterLocationBlocks(tc);
+          const words=tc.items.map(x=>String(x.str||'').trim()).filter(Boolean);
+          // Belysning: collect explicit electrical armature tags only; loose numbers are ignored.
+          const tags=cat==='Belysning'?words.map(w=>splitArmatureTag(w)?.tag).filter(t=>t&&/^(?:ARM\s*\d+|L\d+[A-Z]?|N\d+[A-Z]?|K\d+[A-Z]?|BL)$/i.test(t)):[];
+          for(const t of tags){const k=t.toUpperCase().replace(/\s+/g,'');categoryTotals[cat].tags.set(k,(categoryTotals[cat].tags.get(k)||0)+1)}
+          for(const b of blocks){const key=b.name.toUpperCase();if(!locations.has(key))locations.set(key,{name:b.name,cats:new Set(),drawings:new Set(),pages:0});const r=locations.get(key);r.cats.add(cat);r.drawings.add(displayLabel(f));r.pages++}
+        }
+        try{await doc.destroy()}catch(_e){}
+      }catch(e){console.warn('Counter scan failed',e)}
+    }
+    const selectedChips=Object.entries(groups).map(([c,fs])=>`<span class="counter-chip"><b>${esc(c)}</b> ${fs.length}</span>`).join('');
+    const locRows=[...locations.values()].sort((a,b)=>a.name.localeCompare(b.name,'sv')).map(r=>`<tr><td><strong>${esc(r.name)}</strong></td><td>${esc([...r.cats].join(', '))}</td><td>${r.drawings.size}</td></tr>`).join('');
+    const catCards=Object.entries(categoryTotals).map(([cat,r])=>{const tags=[...r.tags.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([t,n])=>`<span class="counter-pill">${esc(t)} <b>${n}</b></span>`).join('');return `<div class="counter-card"><h3>${esc(cat)}</h3><p class="muted">${r.drawings} ritningar · ${r.pages} sidor scannade</p>${cat==='Belysning'?`<div class="counter-pills">${tags||'<span class="muted">Inga säkra armaturbeteckningar hittades.</span>'}</div>`:`<div class="counter-scan-pending"><b>Symbolscanner aktiv</b><br><span class="muted">Uttag/brytare kräver geometrisk symbolmatchning. Lösa cirklar och siffror räknas inte.</span></div>`}</div>`}).join('');
+    status.textContent=`${ids.length} ritningar · ${pages} sidor scannade`;
+    out.innerHTML=`<div class="counter-selection-summary">${selectedChips}</div>${catCards}<div class="counter-card"><h3>Lägenheter / rum</h3><table class="counter-table"><thead><tr><th>Område</th><th>Kategori</th><th>Ritningar</th></tr></thead><tbody>${locRows||'<tr><td colspan="3">Inga säkra Bxxxx- eller Rum + nummer-beteckningar hittades.</td></tr>'}</tbody></table></div><div class="counter-warning"><strong>Scanner beta</strong><br>EKIS räknar aldrig lösa siffror som rum. Kraftsymboler visas först när geometrin är verifierad så att arkitektgrafik inte blir falska uttag.</div>`;
   }
 
   async function exportProject(){
@@ -1765,7 +1813,7 @@
   $("#nextDrawingBtn").onclick=()=>openAdjacentDrawing(1);
   $("#floatingPrevDrawing").onclick=()=>openAdjacentDrawing(-1);
   $("#floatingNextDrawing").onclick=()=>openAdjacentDrawing(1);
-  $$(`[data-counter-category]`).forEach(b=>b.onclick=()=>{state.counterCategory=b.dataset.counterCategory;state.counterSelected.clear();$("#counterResults").innerHTML="";$("#counterStatus").textContent="";renderCounter()});
+  $$(`[data-counter-category]`).forEach(b=>b.onclick=()=>{state.counterCategory=b.dataset.counterCategory;renderCounter();});
   $("#runCounterBtn").onclick=counterPreAnalyze;
   $("#counterSelectAllBtn").onclick=()=>{const boxes=$$("[data-counter-file]");const all=boxes.length&&boxes.every(x=>x.checked);boxes.forEach(x=>{x.checked=!all;!all?state.counterSelected.add(x.dataset.counterFile):state.counterSelected.delete(x.dataset.counterFile)});};
   $("#fullscreenBtn").onclick=toggleFullscreen;
