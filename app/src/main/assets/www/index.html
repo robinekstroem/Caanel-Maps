@@ -90,6 +90,13 @@
         <input id="ataCameraInput" type="file" accept="image/*" capture="environment" hidden>
       </section>
 
+      <section id="counterView" class="view">
+        <div class="section-head"><div><p class="eyebrow">MÄNGDNING</p><h1>Räknare</h1><p class="muted">Välj ritningar och bygg en kontrollerbar mängdning per lägenhet eller rum.</p></div><button id="runCounterBtn" class="btn primary">Räkna valda</button></div>
+        <div class="settings-card counter-options"><h3>Vad ska räknas?</h3><div class="counter-types"><label><input type="checkbox" data-count-type="lights" checked> Lampor / armaturer</label><label><input type="checkbox" data-count-type="switches" checked> Brytare</label><label><input type="checkbox" data-count-type="outlets" checked> Uttag</label></div><p class="muted">Räknaren använder elsymboler som mål. Textbeteckningar används som stöd för typ och område – inte som ensam symbolträff.</p></div>
+        <div class="settings-card"><div class="counter-head"><h3>Ritningar</h3><button id="counterSelectAllBtn" class="mini-btn">Markera alla</button></div><div id="counterDrawingList" class="counter-drawing-list"></div></div>
+        <div id="counterStatus" class="statusline"></div><div id="counterResults" class="counter-results"></div>
+      </section>
+
       <section id="settingsView" class="view">
         <div class="section-head">
           <div>
@@ -116,11 +123,12 @@
         <div class="settings-card about-card">
           <div class="about-head">
             <div class="about-mark"><span>EKIS</span><small>FIELD</small></div>
-            <div><h3>Om EKIS FIELD</h3><div class="version-badge">Version 4.0.24 · Build 30</div></div>
+            <div><h3>Om EKIS FIELD</h3><div class="version-badge">Version 5.0 · Build 31</div></div>
           </div>
           <div class="owner-card"><strong>Utvecklad för och ägs av Robin Ekström</strong><span>© 2026 Robin Ekström · Alla rättigheter förbehållna.</span></div>
           <div class="about-section-title">Versionshistorik</div>
-          <details class="release-note" open><summary><span><b>4.0.24</b> Simple Fade Splash</span><em>Senaste</em></summary><p><strong>Fixat</strong> Splashen är förenklad till en enda stabil fade-in av EKIS FIELD och RITNINGAR · ÄTA · DOKUMENTATION. Inga linjer, bilder eller komplexa animationer.</p></details>
+          <details class="release-note" open><summary><span><b>5.0</b> Räknare & Viewer</span><em>Senaste</em></summary><p><strong>Nytt</strong> Räknare, PDF-swipe inom flersidiga dokument, flytande ritningspilar, förbättrad fullscreen och ÄTA-timmar/bildhantering.</p></details>
+          <details class="release-note"><summary><span><b>4.0.24</b> Simple Fade Splash</span></summary><p>Stabil enkel splash.</p></details>
           <details class="release-note"><summary><span><b>4.0.23</b> Splash CSS Fix</span></summary><p>Tidigare försök att stabilisera linjeanimation och splash-styling.</p></details>
           <details class="release-note"><summary><span><b>4.0.22</b> Splash Final-State Fix</span></summary><p>Tidigare slutlägesfix för splashen.</p></details>
           <details class="release-note"><summary><span><b>4.0.21</b> Line Splash Stable</span></summary><p>Lampan togs bort och ersattes av två animerade ritningsledningar.</p></details>
@@ -241,6 +249,8 @@
 
         <div id="measureHint" class="hidden"></div>
         <canvas id="measureMagnifier" width="180" height="180" class="measure-magnifier hidden" aria-hidden="true"></canvas>
+        <button id="floatingPrevDrawing" class="drawing-edge-arrow drawing-edge-left" title="Föregående ritning">‹</button>
+        <button id="floatingNextDrawing" class="drawing-edge-arrow drawing-edge-right" title="Nästa ritning">›</button>
         <div id="pdfViewport" class="pdf-viewport">
           <div id="canvasWrap" class="canvas-wrap">
             <canvas id="pdfCanvas"></canvas>
@@ -263,6 +273,7 @@
       <button class="nav-btn" data-view="drawingsView"><span>▤</span>Ritningar</button>
       <button class="nav-btn" data-view="todoView"><span>✓</span>Att göra</button>
       <button class="nav-btn" data-view="ataView"><span>ÄTA</span>Avvikelser</button>
+      <button class="nav-btn" data-view="counterView"><span>∑</span>Räknare</button>
       <button class="nav-btn" data-view="settingsView"><span>⚙</span>Mer</button>
     </nav>
 
