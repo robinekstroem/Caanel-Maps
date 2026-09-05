@@ -79,7 +79,7 @@
   const fileMeta = id => state.meta.fileMeta[id];
 
 
-  const ANALYSIS_VERSION = 6;
+  const ANALYSIS_VERSION = 7;
   const CATEGORY_ORDER = ["Belysning","Kraft","Tele","Kanalisation","Brand","Passage","Övrigt"];
   const stripPdf = name => String(name||"").replace(/\.pdf$/i,"");
   const displayLabel = f => stripPdf(f?.name || f?.originalName || "Ritning");
@@ -92,12 +92,56 @@
   }
   function normalizeCategory(text){
     const u=String(text||"").toUpperCase();
-    if(/BELYSNING|LJUSPLAN|ARMATURPLAN/.test(u)) return "Belysning";
     if(/KANALISATION|KANALISERING/.test(u)) return "Kanalisation";
+    if(/BELYSNING|LJUSPLAN|ARMATURPLAN/.test(u)) return "Belysning";
     if(/\bKRAFT\b|KRAFTPLAN/.test(u)) return "Kraft";
     if(/\bTELE\b|DATA\/TELE|TELEPLAN/.test(u)) return "Tele";
     if(/\bBRAND\b|BRANDLARM/.test(u)) return "Brand";
     if(/PASSAGE|PASSERSYSTEM|PASSER/.test(u)) return "Passage";
+    return "Övrigt";
+  }
+
+  // Kategori i ritningshuvudet är facit. Ord ute i själva planbilden får aldrig
+  // skriva över ett tydligt kategoriord nere till höger i titelblocket.
+  function titleBlockCategory(pages){
+    const defs=[
+      {category:"Kanalisation",re:/KANALISATION|KANALISERING/i},
+      {category:"Belysning",re:/BELYSNING|LJUSPLAN|ARMATURPLAN/i},
+      {category:"Kraft",re:/\bKRAFT\b|KRAFTPLAN/i},
+      {category:"Tele",re:/\bTELE\b|DATA\/TELE|TELEPLAN/i},
+      {category:"Brand",re:/\bBRAND\b|BRANDLARM/i},
+      {category:"Passage",re:/PASSAGE|PASSERSYSTEM|PASSER/i}
+    ];
+    let best=null;
+    for(const pg of (pages||[]).slice(0,3)){
+      const W=pg.viewport?.width||1,H=pg.viewport?.height||1;
+      for(const item of pg.items||[]){
+        const cx=(item.x+(item.w||0)/2)/W, cy=(item.y+(item.h||0)/2)/H;
+        for(const d of defs){
+          if(!d.re.test(String(item.str||"")))continue;
+          let score=1;
+          if(cx>=.62)score+=3;
+          if(cy>=.72)score+=3;
+          if(cx>=.78&&cy>=.82)score+=10;
+          if(cx>=.84&&cy>=.88)score+=6;
+          const exact=String(item.str||"").trim().toUpperCase();
+          if(["KANALISATION","BELYSNING","KRAFT","TELE","BRAND","PASSAGE"].includes(exact))score+=3;
+          if(!best||score>best.score)best={category:d.category,score,text:item.str,x:cx,y:cy};
+        }
+      }
+    }
+    return best&&best.score>=10?best:null;
+  }
+
+  function drawingSeriesCategory(drawingNumber,originalName=""){
+    const t=`${drawingNumber||""} ${originalName||""}`.toUpperCase();
+    // Verifierat mot det importerade Skimra-paketet. Används bara när
+    // titelblocket inte lämnar ett explicit kategoriord.
+    if(/\bE[-–]61[01][-–]/.test(t))return "Kanalisation";
+    if(/\bE[-–]631[-–]/.test(t))return "Belysning";
+    if(/\bE[-–]632[-–]/.test(t))return "Kraft";
+    if(/\bE[-–]640[-–]/.test(t))return "Tele";
+    if(/\bE[-–]642[-–]/.test(t))return "Passage";
     return "Övrigt";
   }
   function extractPlan(text){
@@ -219,11 +263,20 @@
       const tail=first.slice(-Math.max(80,Math.ceil(first.length*.28)));
       const tailText=tail.join(" ");
       let category=isSchedule ? "Belysning" : "Övrigt";
+      let categorySource=isSchedule?"armatureSchedule":"unverified";
+      let categoryVerified=!!isSchedule;
       if(!isSchedule){
-        const exact=tail.map(x=>String(x).trim().toUpperCase());
-        const exactMap=[["BELYSNING","Belysning"],["KRAFT","Kraft"],["TELE","Tele"],["KANALISATION","Kanalisation"],["BRAND","Brand"],["PASSAGE","Passage"]];
-        const hit=exactMap.find(([k])=>exact.includes(k));
-        category=hit?hit[1]:normalizeCategory(tailText);
+        const titleHit=titleBlockCategory(pages);
+        if(titleHit){
+          category=titleHit.category; categorySource="titleBlock"; categoryVerified=true;
+        } else {
+          // Läs ritningsnummer tidigt för säker serie-fallback. Vi använder inte
+          // plantextens lösa BELYSNING/TELE-ord som kategori eftersom de ofta är hänvisningar.
+          const earlyNo=(allText.match(/\bE[-–]\d{3}[-–]\d[-–]\d{3,5}\b/i)||[])[0]||stripPdf(originalName).match(/E[-–]\d{3}[-–]\d[-–]\d{3,5}/i)?.[0]||"";
+          const series=drawingSeriesCategory(earlyNo,originalName);
+          if(series!=="Övrigt"){category=series;categorySource="drawingSeries";categoryVerified=true;}
+          else {category="Övrigt";categorySource="unverified";categoryVerified=false;}
+        }
       }
       // Title block wins over orientation figures and other PLAN references on the sheet.
       const titlePlanPart=extractTitlePlanPart(tailText)||extractTitlePlanPart(first.join(" "))||extractTitlePlanPart(allText);
@@ -271,7 +324,7 @@
       for(const pg of pages){const ds=extractDrawingScale(pg.items.map(x=>x.str).join(" "));if(ds)detectedScales[pg.page]=ds;}
       const drawingNumber=(allText.match(/\bE[-–]\d{3}[-–]\d[-–]\d{3,5}\b/i)||[])[0]||stripPdf(originalName).match(/E[-–]\d{3}[-–]\d[-–]\d{3,5}/i)?.[0]||"";
       const sourceDate=(allText.match(/\b20\d{2}[-./]\d{2}[-./]\d{2}\b/)||[])[0]||"";
-      const result={analysisVersion:ANALYSIS_VERSION,documentType:isOcchio?"occhioSchedule":(isSchedule?"armatureSchedule":"drawing"),category,plan,part,displayName,armatureIndex,pages:doc.numPages,detectedScales,drawingNumber,sourceDate};
+      const result={analysisVersion:ANALYSIS_VERSION,documentType:isOcchio?"occhioSchedule":(isSchedule?"armatureSchedule":"drawing"),category,categorySource,categoryVerified,plan,part,displayName,armatureIndex,pages:doc.numPages,detectedScales,drawingNumber,sourceDate};
       try{await doc.destroy()}catch(_e){}
       return result;
     }catch(err){console.warn("PDF analysis failed",originalName,err);return null}
@@ -279,7 +332,7 @@
 
   function applyAnalysis(f,a){
     if(!f||!a)return;
-    f.analysisVersion=ANALYSIS_VERSION; f.documentType=a.documentType; f.category=a.category; f.plan=a.plan; f.part=a.part||""; f.armatureIndex=a.armatureIndex||[]; f.pageCount=a.pages||1; f.drawingNumber=a.drawingNumber||f.drawingNumber||""; f.sourceDate=a.sourceDate||f.sourceDate||"";
+    f.analysisVersion=ANALYSIS_VERSION; f.documentType=a.documentType; f.category=a.category; f.categorySource=a.categorySource||"unverified"; f.categoryVerified=!!a.categoryVerified; f.plan=a.plan; f.part=a.part||""; f.armatureIndex=a.armatureIndex||[]; f.pageCount=a.pages||1; f.drawingNumber=a.drawingNumber||f.drawingNumber||""; f.sourceDate=a.sourceDate||f.sourceDate||"";
     f.scales=f.scales||{}; for(const [pg,sc] of Object.entries(a.detectedScales||{})){if(!f.scales[pg] || f.scales[pg]===100)f.scales[pg]=sc;}
     if(f.name===f.originalName || f.autoNamed){ f.name=a.displayName+".pdf"; f.autoNamed=true; }
   }
@@ -293,11 +346,11 @@
     try{
       for(let i=0;i<ids.length;i++){
         const f=fileMeta(ids[i]), blob=await getBlob(ids[i]); if(!f||!blob)continue;
-        if(state.currentProjectId===projectId) $("#projectStatus").textContent=`Analyserar ritningar… ${i+1}/${ids.length}`;
+        if(state.currentProjectId===projectId) $("#projectStatus").textContent=`Verifierar ritningshuvud… ${i+1}/${ids.length}`;
         applyAnalysis(f,await analyzePdfBlob(blob,f.originalName));
       }
       state.meta.version=ANALYSIS_VERSION; saveMeta();
-      if(state.currentProjectId===projectId){$("#projectStatus").textContent="PDF-analys klar.";renderProject()}
+      if(state.currentProjectId===projectId){$("#projectStatus").textContent="Ritningskategorier verifierade.";renderProject()}
       renderProjects(); renderAllDrawings();
     }finally{state.analysisBusy=false}
   }
