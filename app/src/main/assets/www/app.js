@@ -46,7 +46,7 @@
     analysisBusy: false,
     todoFilter: "open",
     editMeasure: null,
-    distanceDraft: null,
+    distanceDraft: null, distanceFirstDraft: null,
     pageTextItems: [],
     calibrationMode: null,
     ataFilter: "open", ataSelected: new Set(), ataPhotoTarget: null, activeAtaMark:null, ataMarkAnnotationId:null, ataMarkBaseIds:null, riserMode:false, selectedOverlay:null, drawDraft:null, counterSelected:new Set(), counterCategory:"Belysning", ataEditingId:null, ataHoursEditingId:null, scannerSession:null, scannerReview:null
@@ -912,7 +912,7 @@
   function routeLength(points){let n=0;for(let i=1;i<points.length;i++)n+=distancePt(points[i-1],points[i]);return n}
 
   function setTool(tool){
-    state.tool=tool; state.tempPoints=[]; state.distanceDraft=null;
+    state.tool=tool; state.tempPoints=[]; state.distanceDraft=null; state.distanceFirstDraft=null;
     $$(".tool[data-tool]").forEach(b=>b.classList.toggle("active",b.dataset.tool===tool));
     $$('[data-ata-tool]').forEach(b=>b.classList.toggle('active',b.dataset.ataTool===tool));
     $("#finishMeasureBtn").classList.toggle("hidden",!(tool==="route"||tool==="area"));
@@ -1078,9 +1078,10 @@
     }
     return best;
   }
-  $('#overlayCanvas').addEventListener('pointerdown',e=>{if(!['pen','arrow','circle'].includes(state.tool))return;const p=pdfPointFromEvent(e);state.drawDraft={type:state.tool,points:[p],pointerId:e.pointerId};try{e.target.setPointerCapture(e.pointerId)}catch{}e.preventDefault()});
-  $('#overlayCanvas').addEventListener('pointermove',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;const p=pdfPointFromEvent(e);if(d.type==='pen')d.points.push(p);else d.points[1]=p;state.tempPoints=d.points;drawOverlay()});
-  $('#overlayCanvas').addEventListener('pointerup',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;const p=pdfPointFromEvent(e);if(d.type!=='pen')d.points[1]=p;if(d.points.length>1){const a={id:uid(),type:d.type,points:d.points};getAnnotations().push(a);if(state.activeAtaMark){state.ataMarkAnnotationId=a.id; updateAtaMarkBar();}saveMeta()}state.drawDraft=null;state.tempPoints=[];setTool('pan');drawOverlay()});
+  $('#overlayCanvas').addEventListener('pointerdown',e=>{if(!['pen','arrow','circle'].includes(state.tool))return;const p=pdfPointFromEvent(e);state.drawDraft={type:state.tool,points:[p],pointerId:e.pointerId};if(state.tool==='arrow')showMeasureMagnifier(e);try{e.target.setPointerCapture(e.pointerId)}catch{}e.preventDefault()});
+  $('#overlayCanvas').addEventListener('pointermove',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;const p=pdfPointFromEvent(e);if(d.type==='pen')d.points.push(p);else d.points[1]=p;state.tempPoints=d.points;if(d.type==='arrow')showMeasureMagnifier(e);drawOverlay()});
+  $('#overlayCanvas').addEventListener('pointerup',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;if(d.type==='arrow')hideMeasureMagnifier();const p=pdfPointFromEvent(e);if(d.type!=='pen')d.points[1]=p;if(d.points.length>1){const a={id:uid(),type:d.type,points:d.points};getAnnotations().push(a);if(state.activeAtaMark){state.ataMarkAnnotationId=a.id; updateAtaMarkBar();}saveMeta()}state.drawDraft=null;state.tempPoints=[];setTool('pan');drawOverlay()});
+  $('#overlayCanvas').addEventListener('pointercancel',()=>{if(state.drawDraft?.type==='arrow')hideMeasureMagnifier()});
   function openDirectTextEditor(clientX,clientY,pdfPoint,existing=null){
     const old=document.querySelector('.drawing-text-editor');if(old)old.remove();
     const input=document.createElement('input');input.type='text';input.className='drawing-text-editor';
@@ -1093,7 +1094,9 @@
   }
   $('#overlayCanvas').addEventListener('click',e=>{if(state.tool!=='text')return;e.preventDefault();e.stopImmediatePropagation();openDirectTextEditor(e.clientX,e.clientY,pdfPointFromEvent(e));});
 
-  // Distance: first tap fixes A. Second press starts B; drag and release commits a straight A–B distance.
+  // Distance: first press starts A — drag while still pressed to fine-tune it (the
+  // magnifier tracks this too, since a thumb usually covers the exact spot being
+  // placed), release to fix it. Second press starts B the same way as before.
   $("#overlayCanvas").addEventListener("pointerdown",e=>{
     if(state.tool!=="distance")return;
     showMeasureMagnifier(e);
@@ -1101,17 +1104,21 @@
     // Existing endpoint editing has priority.
     let best=null,d=Infinity;for(const m of getMeasurements())for(const h of screenMeasureHandles(m)){const q=Math.hypot(e.clientX-h.cx,e.clientY-h.cy);if(q<30&&q<d){best={m,h};d=q}}
     if(best){state.editMeasure=best;e.preventDefault();try{e.target.setPointerCapture(e.pointerId)}catch{}return;}
-    if(!state.tempPoints.length){state.tempPoints=[p];state.distanceDraft=null;drawOverlay();e.preventDefault();return;}
+    if(!state.tempPoints.length){state.distanceFirstDraft={p,pointerId:e.pointerId};state.tempPoints=[p];drawOverlay();e.preventDefault();try{e.target.setPointerCapture(e.pointerId)}catch{}return;}
     state.distanceDraft={a:state.tempPoints[0],b:p,pointerId:e.pointerId};e.preventDefault();try{e.target.setPointerCapture(e.pointerId)}catch{}drawOverlay();
   });
   $("#overlayCanvas").addEventListener("pointermove",e=>{
-    if(state.tool==="distance"&&(state.distanceDraft||state.editMeasure))showMeasureMagnifier(e);
+    if(state.tool==="distance"&&(state.distanceDraft||state.editMeasure||state.distanceFirstDraft))showMeasureMagnifier(e);
     if(state.editMeasure){const p=pdfPointFromEvent(e),m=state.editMeasure.m;if(state.editMeasure.h.kind==="a")m.points[0]=p;else m.points[1]=p;m.label=formatLength(ptToM(distancePt(m.points[0],m.points[1])));$("#measureResult").textContent=m.label;drawOverlay();return;}
+    if(state.distanceFirstDraft && state.distanceFirstDraft.pointerId===e.pointerId){const p=pdfPointFromEvent(e);state.distanceFirstDraft.p=p;state.tempPoints=[p];drawOverlay();return;}
     if(state.distanceDraft && (state.distanceDraft.pointerId==null||state.distanceDraft.pointerId===e.pointerId)){state.distanceDraft.b=pdfPointFromEvent(e);const m=ptToM(distancePt(state.distanceDraft.a,state.distanceDraft.b));$("#measureResult").textContent=formatLength(m);drawOverlay();}
   });
   $("#overlayCanvas").addEventListener("pointerup",e=>{
     hideMeasureMagnifier();
     if(state.editMeasure){saveMeta();state.editMeasure=null;drawOverlay();return;}
+    if(state.distanceFirstDraft && state.distanceFirstDraft.pointerId===e.pointerId){
+      state.tempPoints=[state.distanceFirstDraft.p];state.distanceFirstDraft=null;drawOverlay();return;
+    }
     if(state.tool==="distance"&&state.distanceDraft){
       const d=state.distanceDraft;d.b=pdfPointFromEvent(e);const rawPt=distancePt(d.a,d.b);const m=ptToM(rawPt);
       if(rawPt>1){
@@ -1125,7 +1132,7 @@
       state.tempPoints=[];state.distanceDraft=null;drawOverlay();
     }
   });
-  $("#overlayCanvas").addEventListener("pointercancel",()=>{if(state.editMeasure){state.editMeasure=null;}if(state.distanceDraft){state.distanceDraft=null;}drawOverlay();});
+  $("#overlayCanvas").addEventListener("pointercancel",()=>{if(state.editMeasure){state.editMeasure=null;}if(state.distanceDraft){state.distanceDraft=null;}if(state.distanceFirstDraft){state.distanceFirstDraft=null;state.tempPoints=[];}drawOverlay();});
   $("#overlayCanvas").addEventListener("click",e=>{if(Date.now()<state.suppressClickUntil||["pan","distance","text","pen","arrow","circle"].includes(state.tool))return;state.tempPoints.push(pdfPointFromEvent(e));drawOverlay();});
 
   function screenMeasureHandles(m){
@@ -1691,7 +1698,17 @@
       viewer.classList.add("pseudo-fullscreen","fullscreen-ui");
     }
     $("#fullscreenBtn").textContent="⤢";
-    setTimeout(centerFullscreenDrawing,120);
+    // Entering fullscreen changes the available viewport size dramatically (a
+    // normal-mode pdf-viewport is capped well short of full height; fullscreen
+    // gets the whole screen). Only re-centering here — without also recomputing
+    // "fit" for that new, much larger viewport — left the drawing at whatever
+    // zoom level was correct for the SMALL pre-fullscreen viewport, which reads
+    // as "tiny in the corner" the instant fullscreen opens. On WebViews where the
+    // real Fullscreen API isn't available (the "pseudo-fullscreen" catch above,
+    // common on Android WebView), no fullscreenchange event ever fires either, so
+    // syncFullscreenUI()'s own fitDrawing() call below never runs to correct it —
+    // this was the only code path for that case, and it was missing the refit.
+    setTimeout(fitDrawing,120);
   }
 
   function syncFullscreenUI(){
@@ -2182,7 +2199,22 @@
       let ink=0,diag=0,opp=0,total=0; const x0=cx*cell,y0=cy*cell,x1=Math.min(w-2,x0+cell),y1=Math.min(h-2,y0+cell);
       for(let y=y0;y<y1;y+=2)for(let x=x0;x<x1;x+=2){const a=mask[y*w+x];ink+=a;total++; if(a&&mask[(y+1)*w+x+1])diag++; if(a&&x>0&&mask[(y+1)*w+x-1])opp++;}
       const dens=ink/Math.max(1,total), d=(diag+opp)/Math.max(1,ink);
-      if(d>.42&&dens>.035&&dens<.34)raw[cy*cols+cx]=1;
+      if(d>.42&&dens>.035&&dens<.34){
+        // The diagonal-adjacency test above can't tell "many thin parallel hatch
+        // lines" from "one thick straight/angled cable-route line" — a thick line
+        // is solid enough that consecutive rows are both inked, which trivially
+        // satisfies the same adjacency check. Genuine cross-hatch is PERIODIC:
+        // cutting across it lands on several separate ink bands with gaps between
+        // them; cutting across a single thick line lands on exactly one. Sampling
+        // a short line through the cell center, perpendicular to each candidate
+        // hatch angle, and requiring several ink/gap transitions is what actually
+        // tells them apart — this is what let the false "switch" hits that used to
+        // trace straight down cable runs (see conversation history) disappear
+        // without touching the real hatched zones.
+        const ccx=x0+cell/2, ccy=y0+cell/2;
+        const bands=(ang)=>{const dx=Math.cos(ang),dy=Math.sin(ang);let prev=0,trans=0,n=0;for(let t=-cell*0.9;t<=cell*0.9;t++){const xx=Math.round(ccx+dx*t),yy=Math.round(ccy+dy*t);if(xx<0||yy<0||xx>=w||yy>=h)continue;const v=mask[yy*w+xx];n++;if(n>1&&v!==prev)trans++;prev=v}return trans};
+        if(Math.max(bands(Math.PI/4),bands(-Math.PI/4))>=3)raw[cy*cols+cx]=1;
+      }
     }
     // Keep only cells that belong to a sizeable vertical/2D run, avoiding furniture and tiny hatch symbols.
     const keep=new Uint8Array(raw.length);
@@ -2191,14 +2223,18 @@
       if(n>=9)keep[cy*cols+cx]=1;
     }
     // NOTE: bridging small gaps (from a symbol sitting on the hatch) into a single
-    // excluded bounding box was tried here and reverted — on real drawings it also
-    // bridged across separate, legitimate rooms whenever a thick cable-route line
-    // happened to trip the same diagonal-density test along its own path, turning
-    // scattered single-cell false positives into whole-room false exclusions. A
-    // few real symbols sitting unexcluded right on a hatched reference area is a
-    // smaller problem than silently dropping a room's worth of real outlets, so
-    // this stays as a plain per-cell test until the underlying diagonal test can
-    // be made to stop firing on thick straight/angled lines.
+    // excluded bounding box was tried again this round — even a small FIXED-radius
+    // "look nearby" check (not a flood fill) still ate real rooms, because
+    // legitimate small hatch-like wall/insulation details are scattered all over
+    // these drawings, not just inside the one big "other section" zone. There
+    // isn't a safe radius that bridges a symbol-sized gap in the real hatch
+    // without also spreading into ordinary rooms that happen to have their own
+    // small hatch details nearby. A few real symbols sitting unexcluded right on
+    // a hatched reference area is a smaller problem than silently dropping a
+    // room's worth of real outlets, so this stays a plain per-cell test. Properly
+    // fixing the original complaint would need a different signal entirely — e.g.
+    // detecting the reference area's own drawn border/label — rather than
+    // inferring it purely from hatch texture.
     return {cell,cols,rows,keep};
   }
   function scannerInHatch(x,y,hatch){
@@ -2507,7 +2543,7 @@
     const id=state.activeAtaMark,base=state.ataMarkBaseIds instanceof Set?state.ataMarkBaseIds:new Set();
     state.meta.annotations[pageKey()]=getAnnotations().filter(a=>base.has(a.id));saveMeta();returnToAta(id);state.activeAtaMark=null;state.ataMarkAnnotationId=null;state.ataMarkBaseIds=null;updateAtaMarkBar();
   }
-  function showMeasureMagnifier(e){if(state.tool!=="distance")return;const mag=$("#measureMagnifier"),base=$("#pdfCanvas"),over=$("#overlayCanvas"),vp=$("#pdfViewport");if(!mag||!base)return;mag.classList.remove("hidden");const vr=vp.getBoundingClientRect();mag.style.left=Math.max(8,Math.min(vp.clientWidth-160,e.clientX-vr.left-75))+"px";mag.style.top=Math.max(8,e.clientY-vr.top-190)+"px";const ctx=mag.getContext("2d"),r=over.getBoundingClientRect(),sx=(e.clientX-r.left)*(over.width/r.width),sy=(e.clientY-r.top)*(over.height/r.height),crop=45;ctx.clearRect(0,0,180,180);ctx.drawImage(base,sx-crop,sy-crop,crop*2,crop*2,0,0,180,180);ctx.strokeStyle="#ff6a00";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(90,68);ctx.lineTo(90,112);ctx.moveTo(68,90);ctx.lineTo(112,90);ctx.stroke();}
+  function showMeasureMagnifier(e){const mag=$("#measureMagnifier"),base=$("#pdfCanvas"),over=$("#overlayCanvas"),vp=$("#pdfViewport");if(!mag||!base)return;mag.classList.remove("hidden");const vr=vp.getBoundingClientRect();mag.style.left=Math.max(8,Math.min(vp.clientWidth-160,e.clientX-vr.left-75))+"px";mag.style.top=Math.max(8,e.clientY-vr.top-190)+"px";const ctx=mag.getContext("2d"),r=over.getBoundingClientRect(),sx=(e.clientX-r.left)*(over.width/r.width),sy=(e.clientY-r.top)*(over.height/r.height),crop=45;ctx.clearRect(0,0,180,180);ctx.drawImage(base,sx-crop,sy-crop,crop*2,crop*2,0,0,180,180);ctx.strokeStyle="#ff6a00";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(90,68);ctx.lineTo(90,112);ctx.moveTo(68,90);ctx.lineTo(112,90);ctx.stroke();}
   function hideMeasureMagnifier(){$("#measureMagnifier")?.classList.add("hidden")}
   $$(".nav-btn").forEach(b=>b.onclick=()=>{showView(b.dataset.view); if(b.dataset.view==="projectsView")renderProjects(); if(b.dataset.view==="drawingsView")renderAllDrawings(); if(b.dataset.view==="todoView")renderTodos(); if(b.dataset.view==="ataView")renderAtas(); if(b.dataset.view==="counterView")renderCounter()});
   $$('[data-theme-choice]').forEach(b=>b.onclick=()=>{applyTheme(b.dataset.themeChoice,true);toast(b.dataset.themeChoice==='light'?'Ljust tema aktiverat':'Mörkt tema aktiverat')});
