@@ -963,6 +963,11 @@
       if(a.type==='pen'){ctx.beginPath();a.points.forEach((p,i)=>{const q=toPx(p);i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y)});ctx.stroke()}
       if(a.type==='arrow'){const p=toPx(a.points[0]),q=toPx(a.points[1]);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();const an=Math.atan2(q.y-p.y,q.x-p.x);ctx.beginPath();ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-16*Math.cos(an-.5),q.y-16*Math.sin(an-.5));ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-16*Math.cos(an+.5),q.y-16*Math.sin(an+.5));ctx.stroke()}
       if(a.type==='circle'){const p=toPx(a.points[0]),q=toPx(a.points[1]);ctx.beginPath();ctx.ellipse((p.x+q.x)/2,(p.y+q.y)/2,Math.abs(q.x-p.x)/2,Math.abs(q.y-p.y)/2,0,0,Math.PI*2);ctx.stroke()}
+      if(a.selected&&['arrow','circle'].includes(a.type)&&a.points?.length===2){
+        ctx.save();ctx.fillStyle='#ff4d4f';
+        [a.points[0],a.points[1]].forEach(pt=>{const q=toPx(pt);ctx.beginPath();ctx.arc(q.x,q.y,6,0,Math.PI*2);ctx.fill()});
+        ctx.restore();
+      }
       if(a.type==='text'){const p=toPx(a.points[0]);const fs=Math.max(10,Math.min(48,Number(a.fontSize)||16));ctx.font=`bold ${fs}px sans-serif`;ctx.fillText(a.text,p.x,p.y);if(a.selected){const w=Math.max(44,String(a.text||'').length*fs*.62);ctx.save();ctx.strokeStyle='#ff4d4f';ctx.setLineDash([5,4]);ctx.strokeRect(p.x-5,p.y-fs-5,w+10,fs+12);ctx.restore()}}ctx.restore();
     }
     const review=state.scannerReview;
@@ -1100,6 +1105,11 @@
 
   function screenMeasureHandles(m){
     if(!m||m.type!=="distance"||m.points?.length!==2)return [];const sc=state.renderScale*state.viewZoom,r=$("#overlayCanvas").getBoundingClientRect();return [{kind:"a",p:m.points[0]},{kind:"b",p:m.points[1]}].map(h=>({...h,cx:r.left+h.p.x*sc,cy:r.top+h.p.y*sc}));
+  }
+  function screenAnnotationHandles(a){
+    if(!a||!['arrow','circle'].includes(a.type)||(a.points||[]).length!==2)return [];
+    const sc=state.renderScale*state.viewZoom,r=$("#overlayCanvas").getBoundingClientRect();
+    return [{kind:'a',p:a.points[0]},{kind:'b',p:a.points[1]}].map(h=>({...h,cx:r.left+h.p.x*sc,cy:r.top+h.p.y*sc}));
   }
 
   async function loadSmartHotspots(page,viewport){
@@ -1581,21 +1591,35 @@
 
   function centerFullscreenDrawing(){
     const viewer=$("#viewerView"), viewport=$("#pdfViewport"), wrap=$("#canvasWrap");
-    if(!viewer||!viewport||!wrap||!viewer.classList.contains("fullscreen-ui"))return;
-    const rail=64, topSafe=56, bottomSafe=10;
-    const w=parseFloat(wrap.style.width)||wrap.getBoundingClientRect().width, h=parseFloat(wrap.style.height)||wrap.getBoundingClientRect().height;
-    const availW=Math.max(80,viewport.clientWidth-rail), availH=Math.max(80,viewport.clientHeight-topSafe-bottomSafe);
-    const fits=w<=availW+1&&h<=availH+1;
-    wrap.style.margin="0";wrap.style.transform="none";
+    if(!viewer||!viewport||!wrap)return;
+    // This used to bail out here unless fullscreen-ui was active, which meant a
+    // zoomed-out drawing was NEVER centered in the normal (non-fullscreen) viewer —
+    // it just sat top-left inside pdf-viewport, leaving a big empty area below it.
+    // Centering must run in both modes; only the reserved header/rail space differs,
+    // because in fullscreen the head/toolstrip float as absolute overlays on top of
+    // pdfViewport, while in normal mode they sit in flow above/below it.
+    const isFs=viewer.classList.contains("fullscreen-ui");
+    const rail=isFs?76:0, topSafe=isFs?62:0, bottomSafe=isFs?18:0;
+    const w=parseFloat(wrap.style.width)||wrap.getBoundingClientRect().width;
+    const h=parseFloat(wrap.style.height)||wrap.getBoundingClientRect().height;
+    const availW=Math.max(80,viewport.clientWidth-rail);
+    const availH=Math.max(80,viewport.clientHeight-topSafe-bottomSafe);
+    const fits=w<=availW+1 && h<=availH+1;
+    wrap.style.transform="none";
     if(fits){
-      // When the whole sheet fits, take it out of normal document flow and place its centre
-      // in the actual usable fullscreen rectangle. This avoids historical margin/flex conflicts.
-      const x=Math.max(0,(availW-w)/2), y=Math.max(topSafe,topSafe+(availH-h)/2);
-      wrap.style.position="absolute";wrap.style.left=x+"px";wrap.style.top=y+"px";
-      viewport.style.overflow="hidden";viewport.scrollLeft=0;viewport.scrollTop=0;
+      const x=Math.max(0,(availW-w)/2);
+      const y=Math.max(topSafe,topSafe+(availH-h)/2);
+      viewport.classList.add("fit-centered");
+      wrap.style.position="absolute";
+      wrap.style.left=x+"px";
+      wrap.style.top=y+"px";
+      viewport.style.overflow="hidden";
+      viewport.scrollLeft=0; viewport.scrollTop=0;
     }else{
-      // Zoomed drawings stay in normal scroll flow so every edge remains reachable.
-      wrap.style.position="relative";wrap.style.left="0px";wrap.style.top="0px";
+      viewport.classList.remove("fit-centered");
+      wrap.style.position="relative";
+      wrap.style.left="0px";
+      wrap.style.top="0px";
       viewport.style.overflow="auto";
     }
   }
@@ -1686,10 +1710,26 @@
         const t=e.touches[0];
         state.touchState={
           mode:"single",startX:t.clientX,startY:t.clientY,lastX:t.clientX,lastY:t.clientY,
-          scrollLeft:viewport.scrollLeft,scrollTop:viewport.scrollTop,time:Date.now(),moved:false,longPressTimer:null,markupDrag:null
+          scrollLeft:viewport.scrollLeft,scrollTop:viewport.scrollTop,time:Date.now(),moved:false,longPressTimer:null,markupDrag:null,handleDrag:null
         };
         if(state.tool==="pan"){
           const ts=state.touchState;
+          // If an arrow/circle is already selected, a touch starting right on one of
+          // its two endpoint handles adjusts just that point instead of the whole
+          // shape or re-selecting something else underneath.
+          const sel=state.selectedOverlay;
+          if(sel?.kind==='annotation' && ['arrow','circle'].includes(sel.obj.type)){
+            let bestHandle=null,bestHd=Infinity;
+            for(const h of screenAnnotationHandles(sel.obj)){
+              const d=Math.hypot(t.clientX-h.cx,t.clientY-h.cy);
+              if(d<34&&d<bestHd){bestHd=d;bestHandle=h}
+            }
+            if(bestHandle){
+              ts.handleDrag={annotation:sel.obj,kind:bestHandle.kind};
+              state.suppressClickUntil=Date.now()+700;
+              return;
+            }
+          }
           const immediateHit=nearestOverlayObject({clientX:t.clientX,clientY:t.clientY});
           if(immediateHit){
             state.selectedOverlay=immediateHit;
@@ -1735,6 +1775,12 @@
         e.preventDefault();
         const t=e.touches[0],dx=t.clientX-ts.startX,dy=t.clientY-ts.startY;
         ts.lastX=t.clientX;ts.lastY=t.clientY;
+        if(ts.handleDrag){
+          const hd=ts.handleDrag, p=pdfPointFromEvent({clientX:t.clientX,clientY:t.clientY});
+          hd.annotation.points=hd.annotation.points||[];
+          hd.annotation.points[hd.kind==='a'?0:1]=p;
+          ts.moved=true;drawOverlay();return;
+        }
         if(ts.markupDrag){
           const md=ts.markupDrag, sc=state.renderScale*state.viewZoom||1;
           const ddx=(t.clientX-md.lastX)/sc, ddy=(t.clientY-md.lastY)/sc;
@@ -1756,6 +1802,7 @@
       state.touchState=null;
       if(ts.longPressTimer)clearTimeout(ts.longPressTimer);
       if(ts.mode!=="single")return;
+      if(ts.handleDrag){saveMeta();drawOverlay();state.suppressClickUntil=Date.now()+500;toast("Ändpunkten flyttad");return;}
       if(ts.markupDrag){saveMeta();drawOverlay();state.suppressClickUntil=Date.now()+500;toast("Markeringen flyttad");return;}
       const dx=ts.lastX-ts.startX,dy=ts.lastY-ts.startY,dt=Date.now()-ts.time;
 
@@ -1917,44 +1964,134 @@
     return total?hit/total:0;
   }
 
+  // ---- Symbol scanning v3: shape-profile classification, calibrated per project ----
+  // A dome (uttag) and a circle (strömställare) both live in every project's own
+  // FÖRKLARINGAR legend. Rather than hard-code a generic symbol's geometry (which
+  // varies between projects and even between drawing categories in the SAME
+  // project), we (1) measure the real pixel size of each from THIS drawing's own
+  // legend, then (2) classify every candidate by its WIDTH-PROFILE shape at that
+  // calibrated size: a dome tapers from full width at one end to near-nothing at
+  // the other; a circle bulges wide in the middle and narrows at BOTH ends —
+  // checked in two perpendicular cuts, because a single-cut check can't tell a
+  // circle from the cross-section of an ordinary thick cable-route line.
+  function buildIntegralImage(mask,w,h){
+    const integral=new Int32Array((w+1)*(h+1));
+    for(let y=0;y<h;y++){
+      let rowSum=0;
+      for(let x=0;x<w;x++){
+        rowSum+=mask[y*w+x];
+        integral[(y+1)*(w+1)+(x+1)]=integral[y*(w+1)+(x+1)]+rowSum;
+      }
+    }
+    return integral;
+  }
+  function integralBoxDensity(integral,w,h,x0,y0,x1,y1){
+    x0=Math.max(0,x0);y0=Math.max(0,y0);x1=Math.min(w-1,x1);y1=Math.min(h-1,y1);
+    if(x1<x0||y1<y0)return 0;
+    const W=w+1;
+    const sum=integral[(y1+1)*W+(x1+1)]-integral[y0*W+(x1+1)]-integral[(y1+1)*W+x0]+integral[y0*W+x0];
+    const area=(x1-x0+1)*(y1-y0+1);
+    return area>0?sum/area:0;
+  }
   function scannerRotatedDensity(mask,w,h,cx,cy,rect,rot,s=1){
     const [x0,y0,x1,y1]=rect;let hit=0,total=0;const c=Math.cos(rot),sn=Math.sin(rot);
     for(let v=y0;v<=y1;v++)for(let u=x0;u<=x1;u++){
       const xx=Math.round(cx+(u*c-v*sn)*s), yy=Math.round(cy+(u*sn+v*c)*s); if(xx<0||yy<0||xx>=w||yy>=h)continue;total++;if(mask[yy*w+xx])hit++;
     }return total?hit/total:0;
   }
-
-  function scannerClassifyAnchor(mask,w,h,cx,cy){
-    let outletBest=null,switchBest=null;
-    const scales=[.72,1,1.28];
-    for(const sc of scales)for(let r=0;r<4;r++){
-      const rot=r*Math.PI/2;
-      // UTTAG: hela symbolen måste finnas samtidigt: mörk halvkopp, baslinje och kort stam.
-      const cap=scannerRotatedDensity(mask,w,h,cx,cy,[-7,-7,7,-3],rot,sc);
-      const base=scannerRotatedDensity(mask,w,h,cx,cy,[-9,-2,9,1],rot,sc);
-      const stem=scannerRotatedDensity(mask,w,h,cx,cy,[-1,1,1,9],rot,sc);
-      const lowerL=scannerRotatedDensity(mask,w,h,cx,cy,[-8,3,-3,8],rot,sc);
-      const lowerR=scannerRotatedDensity(mask,w,h,cx,cy,[3,3,8,8],rot,sc);
-      const emptyBelow=1-Math.min(1,(lowerL+lowerR)/2);
-      const outletScore=cap*.40+base*.28+stem*.24+emptyBelow*.08;
-      const outletValid=cap>.40&&base>.30&&stem>.27&&emptyBelow>.68&&outletScore>.69;
-      if(outletValid&&(!outletBest||outletScore>outletBest.score))outletBest={score:outletScore,cap,base,stem};
-
-      // STRÖMSTÄLLARE: fylld pivot + diagonal manöverarm + ändmarkering.
-      const pivot=scannerRotatedDensity(mask,w,h,cx,cy,[-3,-3,3,3],rot,sc);
-      const ray=scannerRotatedDensity(mask,w,h,cx,cy,[3,-2,13,1],rot-Math.PI/4,sc);
-      const endMark=scannerRotatedDensity(mask,w,h,cx,cy,[11,-4,16,4],rot-Math.PI/4,sc);
-      const opposite=scannerRotatedDensity(mask,w,h,cx,cy,[-13,-2,-4,2],rot-Math.PI/4,sc);
-      const switchScore=pivot*.50+ray*.32+endMark*.20-opposite*.08;
-      const switchValid=pivot>.42&&ray>.24&&endMark>.18&&switchScore>.68;
-      if(switchValid&&(!switchBest||switchScore>switchBest.score))switchBest={score:switchScore,pivot,ray,endMark};
+  function scannerWidthProfile(mask,w,h,cx,cy,pw,ph,rot,bands=8,cols=10){
+    const profile=[];
+    for(let b=0;b<bands;b++){
+      const y0=-ph/2+(b/bands)*ph, y1=-ph/2+((b+1)/bands)*ph;
+      let filled=0;
+      for(let c=0;c<cols;c++){
+        const x0=-pw/2+(c/cols)*pw, x1=-pw/2+((c+1)/cols)*pw;
+        if(scannerRotatedDensity(mask,w,h,cx,cy,[x0,y0,x1,y1],rot)>0.5)filled++;
+      }
+      profile.push(filled/cols);
     }
-    const o=outletBest?.score||0,sw=switchBest?.score||0;
-    // Tveksam symbol = ingen träff. Precision prioriteras framför antal.
-    if(o>.70&&o>sw+.16)return {type:'outlet',score:Math.min(.99,o)};
-    if(sw>.70&&sw>o+.15)return {type:'switch',score:Math.min(.98,sw)};
-    return null;
+    return profile;
   }
+  function scannerProfileShape(profile){
+    const n=profile.length;
+    const band=(a,b)=>{const i0=Math.round(a*n),i1=Math.max(i0+1,Math.round(b*n));const s=profile.slice(i0,i1);return s.reduce((x,y)=>x+y,0)/s.length};
+    return {top:band(0,.28),mid:band(.36,.64),bot:band(.72,1)};
+  }
+  function scannerClassifyWindow(mask,w,h,cx,cy,pw,ph){
+    const domeScores=[],circleScores=[];
+    for(let r=0;r<4;r++){
+      const rot=r*Math.PI/2;
+      const s=scannerProfileShape(scannerWidthProfile(mask,w,h,cx,cy,pw,ph,rot));
+      domeScores.push(Math.max(
+        (s.top>.7&&s.bot<.35)?(s.top-s.bot):0,
+        (s.bot>.7&&s.top<.35)?(s.bot-s.top):0
+      ));
+      const bulge=Math.min(s.mid-s.top,s.mid-s.bot);
+      circleScores.push(bulge>.22?bulge:0);
+    }
+    // A circle bulges from every direction, including both members of a
+    // perpendicular pair. A line only bulges when cut ACROSS its width — cut
+    // along its length it reads as flat/full, so the paired min correctly
+    // collapses to ~0 for a line but stays high for a genuine circle.
+    const biaxialCircle=Math.max(
+      Math.min(circleScores[0],circleScores[1]),
+      Math.min(circleScores[1],circleScores[2]),
+      Math.min(circleScores[2],circleScores[3]),
+      Math.min(circleScores[3],circleScores[0])
+    );
+    return {domeScore:Math.max(...domeScores), circleScore:biaxialCircle};
+  }
+  function scannerHasArmStroke(mask,w,h,cx,cy,r){
+    // A real switch's circle always has a short diagonal "toggle arm" stroke
+    // touching or just outside it. Plain round dots elsewhere (floor-heating
+    // sensor points, callout number bubbles) don't have this.
+    for(let k=0;k<8;k++){
+      const d=scannerRotatedDensity(mask,w,h,cx,cy,[r*1.15,-1.5,r*2.6,1.5],k*Math.PI/4);
+      if(d>.18&&d<.75)return true;
+    }
+    return false;
+  }
+  function scannerLocalBlob(mask,w,h,sx,sy,visited,maxRadius){
+    const startIdx=sy*w+sx; if(visited[startIdx])return null;
+    const stack=[[sx,sy]]; visited[startIdx]=1;
+    let minX=sx,maxX=sx,minY=sy,maxY=sy,count=0;
+    while(stack.length){
+      const [x,y]=stack.pop(); count++;
+      const neigh=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
+      for(const [nx,ny] of neigh){
+        if(nx<0||ny<0||nx>=w||ny>=h)continue;
+        if(Math.abs(nx-sx)>maxRadius||Math.abs(ny-sy)>maxRadius)continue;
+        const ni=ny*w+nx; if(visited[ni]||!mask[ni])continue;
+        visited[ni]=1;
+        if(nx<minX)minX=nx; if(nx>maxX)maxX=nx; if(ny<minY)minY=ny; if(ny>maxY)maxY=ny;
+        stack.push([nx,ny]);
+      }
+    }
+    return {minX,maxX,minY,maxY,count};
+  }
+  function scannerCalibrateSize(mask,w,h,integral,textItems,viewport,legendBox,labelRegex,excludeRegex){
+    const visited=new Uint8Array(w*h), sizes=[];
+    const withPos=textItems.map(it=>{const p=viewport.convertToViewportPoint(it.transform[4],it.transform[5]);return {text:String(it.str||'').trim(),px:p[0],py:p[1]}}).filter(it=>it.text);
+    for(const it0 of withPos){
+      const text=it0.text; if(!labelRegex.test(text))continue;
+      const px=it0.px,py=it0.py;
+      if(legendBox&&(px<legendBox.x||px>legendBox.x+legendBox.w||py<legendBox.y||py>legendBox.y+legendBox.h))continue;
+      const nearbyText=withPos.filter(o=>Math.abs(o.px-px)<40&&o.py>py-2&&o.py<py+40).map(o=>o.text).join(' ');
+      if(excludeRegex&&excludeRegex.test(nearbyText))continue;
+      let best=null;
+      for(let y=Math.round(py-30);y<=Math.round(py+6);y+=2){
+        for(let x=Math.round(px-90);x<=Math.round(px-4);x+=2){
+          if(x<0||y<0||x>=w||y>=h||visited[y*w+x]||!mask[y*w+x])continue;
+          if(integralBoxDensity(integral,w,h,x-2,y-2,x+2,y+2)<.85)continue;
+          const blob=scannerLocalBlob(mask,w,h,x,y,visited,22);
+          if(blob&&(!best||blob.count>best.count))best=blob;
+        }
+      }
+      if(best)sizes.push({pw:best.maxX-best.minX+1,ph:best.maxY-best.minY+1});
+    }
+    return sizes;
+  }
+  function scannerMedian(nums){const s=[...nums].sort((a,b)=>a-b);return s.length?s[Math.floor(s.length/2)]:null}
 
   function scannerNms(cands,radius=14){
     const out=[]; for(const c of cands.sort((a,b)=>b.score-a.score)){if(out.some(o=>o.type===c.type&&Math.hypot(o.x-c.x,o.y-c.y)<radius))continue;out.push(c)}return out;
@@ -1995,26 +2132,68 @@
   }
   function scannerInHatch(x,y,hatch){const cx=Math.floor(x/hatch.cell),cy=Math.floor(y/hatch.cell);return cx>=0&&cy>=0&&cx<hatch.cols&&cy<hatch.rows&&!!hatch.keep[cy*hatch.cols+cx]}
 
+  function scannerFindLegendBox(tc,viewport){
+    for(const n of scannerTextNodes(tc)){
+      if(!/FÖRKLARINGAR/i.test(n.text))continue;
+      const p=viewport.convertToViewportPoint(n.x,n.y);
+      const right=p[0]>viewport.width*.52;
+      return {x:right?Math.max(0,p[0]-45):Math.max(0,p[0]-25),y:Math.max(0,p[1]-55),
+        w:right?viewport.width-p[0]+45:Math.min(viewport.width*.42,620),
+        h:Math.min(viewport.height-p[1]+55,viewport.height*.92)};
+    }
+    return null;
+  }
+
   async function scannerVisualSymbols(page,tc,areas,types){
     if(!types.outlets&&!types.switches)return [];
-    const base=page.getViewport({scale:1}); const scanScale=Math.min(1.35,2600/Math.max(1,base.width));
+    const base=page.getViewport({scale:1});
+    // Symbols are tiny on a full sheet — at the old 2600px cap a real symbol was
+    // only ~13x7 source pixels, too coarse for any shape test to work reliably.
+    const scanScale=Math.min(3.2,5200/Math.max(1,base.width));
     const viewport=page.getViewport({scale:scanScale});
     const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(viewport.width));canvas.height=Math.max(1,Math.round(viewport.height));
     const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
     await page.render({canvasContext:ctx,viewport}).promise;
     const img=ctx.getImageData(0,0,canvas.width,canvas.height),d=img.data,w=canvas.width,h=canvas.height,mask=new Uint8Array(w*h);
     for(let i=0,j=0;i<d.length;i+=4,j++){const lum=(d[i]*3+d[i+1]*6+d[i+2])/10;mask[j]=lum<92?1:0}
-    const boxes=scannerTextBoxes(tc,viewport), vpAreas=scannerToViewportAreas(areas,viewport), zones=scannerExclusionZones(tc,viewport), hatch=scannerHatchCells(mask,w,h), cand=[];
-    // Dense-anchor search. Text boxes and title/legend field are suppressed before classification.
-    for(let y=10;y<h-10;y+=2)for(let x=10;x<w-10;x+=2){
-      if(scannerInZone(x,y,zones)||scannerInHatch(x,y,hatch)||scannerPointInText(x,y,boxes))continue;
-      const core=scannerRegionDensity(mask,w,h,x,y,-3,-3,3,3,1); if(core<.16)continue;
-      const cls=scannerClassifyAnchor(mask,w,h,x,y); if(!cls)continue;
-      if(cls.type==='outlet'&&!types.outlets)continue;if(cls.type==='switch'&&!types.switches)continue;
-      const near=scannerNearestArea(x,y,vpAreas,w,h); cand.push({...cls,x,y,nx:x/Math.max(1,w),ny:y/Math.max(1,h),area:near?.area||null,score:cls.score*(near?.area?(.90+.10*near.confidence):.86)});
-    }
     canvas.width=1;canvas.height=1;
-    return scannerNms(cand,10);
+    const integral=buildIntegralImage(mask,w,h);
+    const boxes=scannerTextBoxes(tc,viewport), vpAreas=scannerToViewportAreas(areas,viewport), zones=scannerExclusionZones(tc,viewport), hatch=scannerHatchCells(mask,w,h);
+    const legendBox=scannerFindLegendBox(tc,viewport);
+
+    // Calibrate this drawing's own dome/circle pixel size from its own legend.
+    // The fused "switch in combination with outlet" line is excluded from both —
+    // it names both words together, so left in it would skew either size upward.
+    const domeSizes=legendBox?scannerCalibrateSize(mask,w,h,integral,tc.items,viewport,legendBox,/UTTAG/i,/VÄGGUTTAG\.|GOLVVÄRME|KOMBINATION/i):[];
+    const circleSizes=legendBox?scannerCalibrateSize(mask,w,h,integral,tc.items,viewport,legendBox,/STRÖMSTÄLLARE|BRYTARE/i,/KOMBINATION/i):[];
+    const domePw=scannerMedian(domeSizes.map(s=>s.pw))||Math.round(13*scanScale/1.09);
+    const domePh=scannerMedian(domeSizes.map(s=>s.ph))||Math.round(7*scanScale/1.09);
+    const circleD=scannerMedian(circleSizes.map(s=>Math.min(s.pw,s.ph)))||Math.round(8*scanScale/1.09);
+
+    const cand=[];
+    let scanned=0;
+    for(let y=6;y<h-6;y+=3){
+      for(let x=6;x<w-6;x+=3){
+        if(scannerInZone(x,y,zones)||scannerInHatch(x,y,hatch)||scannerPointInText(x,y,boxes))continue;
+        if(integralBoxDensity(integral,w,h,x-2,y-2,x+2,y+2)<.75)continue;
+        let isDome=false,isCircle=false,score=0;
+        if(types.outlets){
+          const cls=scannerClassifyWindow(mask,w,h,x,y,domePw*1.15,domePh*1.35);
+          if(cls.domeScore>.42){isDome=true;score=cls.domeScore}
+        }
+        if(types.switches&&!isDome){
+          const cls=scannerClassifyWindow(mask,w,h,x,y,circleD*1.5,circleD*1.5);
+          if(cls.circleScore>.30&&scannerHasArmStroke(mask,w,h,x,y,circleD/2)){isCircle=true;score=cls.circleScore}
+        }
+        if(!isDome&&!isCircle)continue;
+        const near=scannerNearestArea(x,y,vpAreas,w,h);
+        cand.push({type:isDome?'outlet':'switch',score:score*(near?.area?(.90+.10*near.confidence):.86),x,y,nx:x/Math.max(1,w),ny:y/Math.max(1,h),area:near?.area||null});
+      }
+      scanned++;
+      // Yield periodically so a large/dense sheet doesn't block the UI thread.
+      if((scanned&15)===0) await new Promise(r=>setTimeout(r,0));
+    }
+    return scannerNms(cand,Math.max(domePw,domePh)*.7);
   }
 
   function scannerBucket(map,name,kind='area',confidence=.8){
@@ -2327,6 +2506,21 @@
   $("#syncFloorBtn").onclick=startFloorSync;
   document.addEventListener("fullscreenchange",syncFullscreenUI);
   document.addEventListener("webkitfullscreenchange",syncFullscreenUI);
+  (function installViewportResizeHandler(){
+    let raf=null;
+    const recompute=()=>{
+      raf=null;
+      if(state.currentView!=="viewerView"||!state.baseCanvasWidth||!state.baseCanvasHeight)return;
+      const wasFit=isFullyZoomedOut();
+      state.fitZoom=computeFitZoom();
+      if(wasFit)state.viewZoom=state.fitZoom;
+      else state.viewZoom=clamp(state.viewZoom,state.fitZoom,Math.max(6,state.fitZoom*10));
+      applyZoom(false);
+    };
+    const schedule=()=>{if(raf)cancelAnimationFrame(raf);raf=requestAnimationFrame(recompute)};
+    window.addEventListener("resize",schedule);
+    window.addEventListener("orientationchange",()=>setTimeout(schedule,150));
+  })();
   $("#prevPageBtn").onclick=async()=>{if(state.pageNum>1){state.pageNum--;state.armatureHighlight=null;await renderPdfPage()}};
   $("#nextPageBtn").onclick=async()=>{if(state.pageNum<state.pageCount){state.pageNum++;state.armatureHighlight=null;await renderPdfPage()}};
   $("#scalePreset").onchange=async e=>{

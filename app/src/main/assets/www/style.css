@@ -562,3 +562,8 @@ button.file-tag{cursor:pointer}
 .viewer-view.fullscreen-ui .drawing-edge-left{left:5px!important}.viewer-view.fullscreen-ui .drawing-edge-right{right:62px!important}
 #canvasWrap{min-width:max-content;min-height:max-content}
 .pdf-viewport{overscroll-behavior:contain;touch-action:pan-x pan-y pinch-zoom}
+
+/* EKIS FIELD v5.1.4 Build 45 – fullscreen fit centering regression fix */
+#pdfViewport{position:relative!important}
+#pdfViewport.fit-centered{overflow:hidden!important}
+#pdfViewport.fit-centered #canvasWrap{margin:0!important}
