@@ -480,10 +480,22 @@ button.file-tag{cursor:pointer}
 
 /* EKIS FIELD v5.0 — viewer navigation + counter */
 .viewer-view{position:relative}
-.drawing-edge-arrow{position:fixed;z-index:32;top:50%;transform:translateY(-50%);width:34px;height:58px;border:1px solid rgba(255,255,255,.16);border-radius:12px;background:rgba(10,10,11,.56);backdrop-filter:blur(8px);color:#fff;font-size:30px;line-height:1;display:flex;align-items:center;justify-content:center;opacity:.72}
-.drawing-edge-arrow:active{opacity:1;transform:translateY(-50%) scale(.96)}
-.drawing-edge-left{left:5px}.drawing-edge-right{right:5px}
+/* EKIS FIELD v6.2 — drawing-switch arrows, redesigned + consolidated.
+   Previously this rule got overridden about eight separate times across older
+   builds (top:50%→69%→71%→76%→62%, right offset 5px→70px→72px→62px…) as one
+   fix after another chased the toolstrip around — the scattered !important
+   overrides further down this file are gone; this is the one place it's set.
+   New placement: small circular buttons anchored to the BOTTOM corners instead
+   of vertical-center, so they sit below the drawing content instead of on top
+   of it, while staying an easy thumb-reach away. */
+.drawing-edge-arrow{position:fixed;z-index:32;bottom:22px;top:auto;transform:none;width:46px;height:46px;border:1px solid rgba(255,255,255,.14);border-radius:50%;background:rgba(18,18,20,.62);backdrop-filter:blur(10px);color:#fff;font-size:22px;line-height:1;display:flex;align-items:center;justify-content:center;opacity:.82;box-shadow:0 6px 18px rgba(0,0,0,.28)}
+.drawing-edge-arrow:active{opacity:1;transform:scale(.94);background:rgba(255,106,0,.28);border-color:rgba(255,106,0,.5)}
+.drawing-edge-left{left:14px}.drawing-edge-right{right:14px}
 .viewer-view:not(.active) .drawing-edge-arrow{display:none}
+/* Fullscreen mode has the toolstrip running down the right edge, so the right
+   arrow needs extra clearance there; everything else (size, bottom offset,
+   shape) stays identical to normal mode for visual consistency. */
+.viewer-view.fullscreen-ui .drawing-edge-right{right:74px}
 .viewer-view.fullscreen-ui .toolstrip{left:auto!important;right:8px!important;top:74px!important;bottom:auto!important;width:52px!important;max-height:calc(100vh - 90px);display:flex!important;flex-direction:column!important;gap:5px!important;padding:6px!important;border-radius:14px!important;overflow-y:auto}
 .viewer-view.fullscreen-ui .toolstrip .tool{width:40px!important;min-width:40px!important;height:40px!important;padding:0!important;justify-content:center!important;font-size:16px!important}
 .viewer-view.fullscreen-ui .toolstrip .tool span{display:none!important}
@@ -492,7 +504,7 @@ button.file-tag{cursor:pointer}
 .counter-types{display:flex;gap:10px;flex-wrap:wrap}.counter-types label{border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:var(--panel2)}
 .counter-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.counter-drawing-list{display:grid;gap:7px;margin-top:10px}.counter-drawing{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:10px}.counter-drawing span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .counter-results{display:grid;gap:12px}.counter-card{border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:14px}.counter-card h3{margin:0 0 8px}.counter-table{width:100%;border-collapse:collapse}.counter-table td,.counter-table th{padding:7px;border-bottom:1px solid var(--line);text-align:left}.counter-warning{border-left:3px solid #ff6a00;padding:10px 12px;background:rgba(255,106,0,.08);border-radius:8px;margin-bottom:10px}
-@media(max-width:650px){.drawing-edge-arrow{width:30px;height:50px;font-size:26px}.bottom-nav .nav-btn{font-size:9px}.bottom-nav{gap:0}.viewer-view.fullscreen-ui .pdf-viewport{padding-right:62px!important}}
+@media(max-width:650px){.bottom-nav .nav-btn{font-size:9px}.bottom-nav{gap:0}.viewer-view.fullscreen-ui .pdf-viewport{padding-right:62px!important}}
 .ata-sessions{display:grid;gap:5px;margin:8px 0}.ata-session{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:11px}.ata-photo-wrap{position:relative;display:inline-block}.ata-photo-del{position:absolute;right:3px;top:3px;width:25px;height:25px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.72);color:#fff;font-weight:900}.ata-photo-wrap img{display:block}
 
 /* EKIS FIELD v5.0.1 — consolidated mobile fixes */
@@ -501,9 +513,6 @@ button.file-tag{cursor:pointer}
 .bottom-nav .nav-btn span{font-size:17px!important;line-height:18px!important}
 .bottom-nav .nav-btn[data-view="ataView"]{font-size:8.5px!important}
 .bottom-nav .nav-btn[data-view="ataView"] span{font-size:12px!important}
-.viewer-view.fullscreen-ui .drawing-edge-left{left:6px!important}
-.viewer-view.fullscreen-ui .drawing-edge-right{right:70px!important}
-.viewer-view.fullscreen-ui .drawing-edge-arrow{width:28px!important;height:46px!important;font-size:23px!important;opacity:.58!important}
 .viewer-view.fullscreen-ui .pdf-viewport{padding:0 64px 0 0!important;overflow:auto!important}
 .viewer-view.fullscreen-ui .canvas-wrap{margin:0!important}
 .counter-category-tabs{display:flex;gap:7px;overflow-x:auto;padding-top:8px;scrollbar-width:none}.counter-category-tabs .category-tab{flex:0 0 auto}
@@ -511,15 +520,10 @@ button.file-tag{cursor:pointer}
 @media(max-width:650px){.ata-hours-inline{grid-template-columns:1fr 1fr}.ata-hours-note{grid-column:1/-1}.bottom-nav{height:70px!important}}
 
 /* EKIS FIELD v5.0.2 build 33 — viewer geometry + scanner */
-.viewer-view.fullscreen-ui .drawing-edge-arrow{top:69%!important}
-.viewer-view.fullscreen-ui .drawing-edge-left{left:7px!important}
-.viewer-view.fullscreen-ui .drawing-edge-right{right:72px!important}
-.viewer-view.fullscreen-ui .canvas-wrap{margin:0!important}
 .counter-selection-summary{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0 12px}.counter-chip,.counter-pill{display:inline-flex;gap:5px;align-items:center;border:1px solid var(--line);border-radius:999px;padding:6px 9px;background:var(--panel2);font-size:11px}.counter-pills{display:flex;gap:6px;flex-wrap:wrap}.counter-scan-pending{padding:10px;border:1px dashed var(--line);border-radius:10px;background:var(--panel2)}
 
 /* EKIS FIELD v5.0.4 build 35 — Smart Scanner v2 + hard fullscreen centering */
 .viewer-view.fullscreen-ui .pdf-viewport{position:relative!important;padding:0 64px 0 0!important;box-sizing:border-box!important}
-.viewer-view.fullscreen-ui .drawing-edge-arrow{top:71%!important}
 .counter-smart-banner{display:grid;gap:4px;padding:12px 14px;border-left:3px solid #ff6a00;border-radius:10px;background:rgba(255,106,0,.085);margin-bottom:12px}.counter-smart-banner strong{font-size:14px}.counter-smart-banner span{font-size:11px;color:var(--muted);line-height:1.4}
 .counter-area-card,.counter-total-card{border:1px solid var(--line);background:var(--panel);border-radius:15px;padding:14px}.counter-area-title{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px}.counter-area-title h3{margin:0;font-size:19px}.counter-area-title small{color:var(--muted);font-size:10px}.counter-confidence{border:1px solid var(--line);border-radius:999px;padding:4px 7px;font-size:10px;font-weight:800}.counter-confidence.good{color:#8ee6ac}.counter-confidence.mid{color:#ffb261}.counter-confidence.low{color:var(--muted)}
 .counter-area-counts{display:grid;gap:6px}.counter-result-row,.counter-total-row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--text);padding:9px 2px;text-align:left;font:inherit}.counter-result-row:last-child,.counter-total-row:last-child{border-bottom:0}.counter-result-row strong,.counter-total-row strong{font-size:15px}.counter-total-card h3{margin:0 0 8px}.counter-total-card{border-color:rgba(255,106,0,.28)}
@@ -538,9 +542,6 @@ button.file-tag{cursor:pointer}
 .counter-source-chip:active{border-color:#ff6a00;color:#ff7a1a}
 
 /* v5.0.7 markup UX */
-.viewer-view.fullscreen-ui .drawing-edge-arrow{top:76%!important}
-.viewer-view.fullscreen-ui .drawing-edge-left{left:5px!important}
-.viewer-view.fullscreen-ui .drawing-edge-right{right:62px!important}
 .drawing-text-editor{box-shadow:0 10px 32px rgba(0,0,0,.45)}
 
 
@@ -555,11 +556,6 @@ button.file-tag{cursor:pointer}
 .bottom-nav .nav-btn .counter-nav-icon svg{width:22px;height:22px;display:block;fill:currentColor;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .bottom-nav .nav-btn .counter-nav-icon svg path{fill:none}
 
-/* EKIS FIELD v5.1.3 Build 44 – viewer stability */
-.drawing-edge-arrow{position:fixed!important;top:62%!important;transform:translateY(-50%)!important;z-index:90!important}
-.drawing-edge-left{left:5px!important}.drawing-edge-right{right:5px!important}
-.viewer-view.fullscreen-ui .drawing-edge-arrow{top:62%!important}
-.viewer-view.fullscreen-ui .drawing-edge-left{left:5px!important}.viewer-view.fullscreen-ui .drawing-edge-right{right:62px!important}
 #canvasWrap{min-width:max-content;min-height:max-content}
 .pdf-viewport{overscroll-behavior:contain;touch-action:pan-x pan-y pinch-zoom}
 

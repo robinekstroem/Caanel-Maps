@@ -930,6 +930,9 @@
     $("#measureHint").textContent=text;
   }
 
+  function roundRectPath(ctx,x,y,w,h,r){
+    ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
+  }
   function drawOverlay(){
     const c=$("#overlayCanvas"), dpr=Math.min(window.devicePixelRatio||1,2), ctx=c.getContext("2d");
     ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,c.width/dpr,c.height/dpr);
@@ -968,12 +971,34 @@
         [a.points[0],a.points[1]].forEach(pt=>{const q=toPx(pt);ctx.beginPath();ctx.arc(q.x,q.y,6,0,Math.PI*2);ctx.fill()});
         ctx.restore();
       }
-      if(a.type==='text'){const p=toPx(a.points[0]);const fs=Math.max(10,Math.min(48,Number(a.fontSize)||16));ctx.font=`bold ${fs}px sans-serif`;ctx.fillText(a.text,p.x,p.y);if(a.selected){const w=Math.max(44,String(a.text||'').length*fs*.62);ctx.save();ctx.strokeStyle='#ff4d4f';ctx.setLineDash([5,4]);ctx.strokeRect(p.x-5,p.y-fs-5,w+10,fs+12);ctx.restore()}}ctx.restore();
+      if(a.type==='text'){
+        const p=toPx(a.points[0]);const fs=Math.max(10,Math.min(64,Number(a.fontSize)||16));ctx.font=`bold ${fs}px system-ui,sans-serif`;
+        // A thin light halo behind the orange fill keeps text readable over dark
+        // linework or dense hatching, instead of flat color that can vanish into
+        // whatever's underneath it.
+        ctx.lineJoin='round';ctx.miterLimit=2;
+        ctx.strokeStyle='rgba(255,255,255,.88)';ctx.lineWidth=Math.max(3,fs*.22);ctx.strokeText(a.text,p.x,p.y);
+        ctx.fillStyle=a.selected?'#ff8a3d':'#ff6a00';ctx.fillText(a.text,p.x,p.y);
+        if(a.selected){
+          const w=Math.max(44,String(a.text||'').length*fs*.62);
+          ctx.save();ctx.strokeStyle='rgba(255,77,79,.9)';ctx.lineWidth=2;ctx.setLineDash([1,6]);ctx.lineCap='round';
+          roundRectPath(ctx,p.x-9,p.y-fs-8,w+18,fs+18,10);ctx.stroke();
+          ctx.restore();
+        }
+      }ctx.restore();
     }
     const review=state.scannerReview;
-    if(review?.pageHits?.length){
-      ctx.save();ctx.lineWidth=3;ctx.strokeStyle="#ff6a00";ctx.fillStyle="rgba(255,106,0,.15)";ctx.font="800 12px system-ui";
-      review.pageHits.forEach((hit,i)=>{if(!Number.isFinite(hit.nx)||!Number.isFinite(hit.ny))return;const x=hit.nx*state.baseCanvasWidth,y=hit.ny*state.baseCanvasHeight,r=13;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle="#ff6a00";ctx.fillText(String(i+1),x+r+4,y+4);ctx.fillStyle="rgba(255,106,0,.15)";});ctx.restore();
+    if(review?.hits?.length){
+      // Always recompute from the live file/page instead of trusting a cached
+      // pageHits snapshot — that snapshot only gets refreshed when navigating via
+      // the review bar's own prev/next. Any other navigation (swipe, floor
+      // switcher, page arrows) left it stale, so markers from a previously
+      // reviewed drawing kept showing up on whatever drawing you opened next.
+      const pageHits=review.hits.filter(x=>x.fileId===state.currentFileId&&x.page===state.pageNum);
+      if(pageHits.length){
+        ctx.save();ctx.lineWidth=3;ctx.strokeStyle="#ff6a00";ctx.fillStyle="rgba(255,106,0,.15)";ctx.font="800 12px system-ui";
+        pageHits.forEach((hit,i)=>{if(!Number.isFinite(hit.nx)||!Number.isFinite(hit.ny))return;const x=hit.nx*state.baseCanvasWidth,y=hit.ny*state.baseCanvasHeight,r=13;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle="#ff6a00";ctx.fillText(String(i+1),x+r+4,y+4);ctx.fillStyle="rgba(255,106,0,.15)";});ctx.restore();
+      }
     }
     if(state.tempPoints.length) drawPath(state.tempPoints,false,"");
   }
@@ -1394,7 +1419,12 @@
 
   function orderedProjectFiles(){
     const f=fileMeta(state.currentFileId); if(!f)return[];
-    const p=projectById(f.projectId); return (p?.files||[]).filter(id=>fileMeta(id));
+    const p=projectById(f.projectId);
+    // Swiping/arrow-navigating between drawings must follow the same logical
+    // order as the file browser (category → plan → del → revision), not
+    // whatever order the files happened to be uploaded in — otherwise "Belysning
+    // P18 Del 1" could swipe to an unrelated drawing instead of "... Del 2".
+    return (p?.files||[]).filter(id=>fileMeta(id)).map(fileMeta).sort(smartSortFiles).map(x=>x.id);
   }
 
   function populateFloorSwitcher(){
@@ -1481,10 +1511,23 @@
 
     state.viewZoom=targetZoom;
     applyZoom(false);
-    requestAnimationFrame(()=>{
+    // applyZoom(false) already schedules its own requestAnimationFrame that calls
+    // centerFullscreenDrawing() — when the target page happens to fit entirely in
+    // the viewport at this zoom (very common right after "Vy låst" carries a
+    // fit-level zoom over from the previous drawing), that function switches
+    // canvasWrap to centered absolute positioning and turns off scrolling. Setting
+    // scrollLeft/scrollTop in a SEPARATE, independently-scheduled frame right
+    // after that raced against it — depending on ordering, it could fire between
+    // centering's own size/position writes and leave the drawing sized correctly
+    // but stuck uncentered in a corner. Waiting two frames guarantees centering
+    // has already run, and skipping the manual scroll entirely in the fits case
+    // (nothing meaningful to scroll to — the whole page is already visible)
+    // removes the race instead of just narrowing it.
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      if(isFullyZoomedOut())return;
       viewport.scrollLeft=Math.max(0,targetCenter.x*state.renderScale*state.viewZoom-viewport.clientWidth/2);
       viewport.scrollTop=Math.max(0,targetCenter.y*state.renderScale*state.viewZoom-viewport.clientHeight/2);
-    });
+    }));
   }
 
   async function switchDrawingKeepView(id){
@@ -1698,13 +1741,22 @@
       if(e.touches.length===2){
         e.preventDefault();
         const a=e.touches[0],b=e.touches[1];
-        state.touchState={
-          mode:"pinch",
-          startDistance:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY),
-          startZoom:state.viewZoom,
-          midX:(a.clientX+b.clientX)/2,
-          midY:(a.clientY+b.clientY)/2
-        };
+        // If a text annotation is currently selected, a two-finger pinch resizes
+        // that text instead of the whole drawing — select it with a tap first,
+        // then pinch. Anything else selected (or nothing) pinch-zooms as usual.
+        const sel=state.selectedOverlay;
+        const selText=sel?.kind==='annotation'&&sel.obj.type==='text'?sel.obj:null;
+        if(selText){
+          state.touchState={mode:"textPinch",startDistance:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY),startFontSize:Number(selText.fontSize)||16,annotation:selText};
+        }else{
+          state.touchState={
+            mode:"pinch",
+            startDistance:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY),
+            startZoom:state.viewZoom,
+            midX:(a.clientX+b.clientX)/2,
+            midY:(a.clientY+b.clientY)/2
+          };
+        }
         state.suppressClickUntil=Date.now()+450;
       }else if(e.touches.length===1){
         const t=e.touches[0];
@@ -1757,10 +1809,19 @@
         e.preventDefault();
         const a=e.touches[0],b=e.touches[1];
         const d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
-        if(ts.mode!=="pinch"){
-          ts.mode="pinch";
-          ts.startDistance=d;
-          ts.startZoom=state.viewZoom;
+        if(ts.mode!=="pinch"&&ts.mode!=="textPinch"){
+          const sel=state.selectedOverlay;
+          const selText=sel?.kind==='annotation'&&sel.obj.type==='text'?sel.obj:null;
+          if(selText){ts.mode="textPinch";ts.startDistance=d;ts.startFontSize=Number(selText.fontSize)||16;ts.annotation=selText;}
+          else{ts.mode="pinch";ts.startDistance=d;ts.startZoom=state.viewZoom;}
+        }
+        if(ts.mode==="textPinch"){
+          if(ts.startDistance>4){
+            ts.annotation.fontSize=Math.max(10,Math.min(64,Math.round(ts.startFontSize*(d/ts.startDistance))));
+            drawOverlay();
+          }
+          state.suppressClickUntil=Date.now()+350;
+          return;
         }
         if(ts.startDistance>4){
           setZoom(ts.startZoom*(d/ts.startDistance),{
@@ -1801,6 +1862,7 @@
       const ts=state.touchState;if(!ts || e.touches.length>0)return;
       state.touchState=null;
       if(ts.longPressTimer)clearTimeout(ts.longPressTimer);
+      if(ts.mode==="textPinch"){saveMeta();drawOverlay();toast(`Textstorlek ${ts.annotation.fontSize}px`);return;}
       if(ts.mode!=="single")return;
       if(ts.handleDrag){saveMeta();drawOverlay();state.suppressClickUntil=Date.now()+500;toast("Ändpunkten flyttad");return;}
       if(ts.markupDrag){saveMeta();drawOverlay();state.suppressClickUntil=Date.now()+500;toast("Markeringen flyttad");return;}
@@ -2128,9 +2190,21 @@
       let n=0;for(let yy=Math.max(0,cy-3);yy<=Math.min(rows-1,cy+3);yy++)for(let xx=Math.max(0,cx-2);xx<=Math.min(cols-1,cx+2);xx++)n+=raw[yy*cols+xx];
       if(n>=9)keep[cy*cols+cx]=1;
     }
+    // NOTE: bridging small gaps (from a symbol sitting on the hatch) into a single
+    // excluded bounding box was tried here and reverted — on real drawings it also
+    // bridged across separate, legitimate rooms whenever a thick cable-route line
+    // happened to trip the same diagonal-density test along its own path, turning
+    // scattered single-cell false positives into whole-room false exclusions. A
+    // few real symbols sitting unexcluded right on a hatched reference area is a
+    // smaller problem than silently dropping a room's worth of real outlets, so
+    // this stays as a plain per-cell test until the underlying diagonal test can
+    // be made to stop firing on thick straight/angled lines.
     return {cell,cols,rows,keep};
   }
-  function scannerInHatch(x,y,hatch){const cx=Math.floor(x/hatch.cell),cy=Math.floor(y/hatch.cell);return cx>=0&&cy>=0&&cx<hatch.cols&&cy<hatch.rows&&!!hatch.keep[cy*hatch.cols+cx]}
+  function scannerInHatch(x,y,hatch){
+    const cx=Math.floor(x/hatch.cell),cy=Math.floor(y/hatch.cell);
+    return cx>=0&&cy>=0&&cx<hatch.cols&&cy<hatch.rows&&!!hatch.keep[cy*hatch.cols+cx];
+  }
 
   function scannerFindLegendBox(tc,viewport){
     for(const n of scannerTextNodes(tc)){
@@ -2471,7 +2545,7 @@
   $('#ataPhotoInput').onchange=e=>{const a=(state.meta.atas||[]).find(x=>x.id===state.ataPhotoTarget);if(!a)return;for(const f of [...e.target.files].slice(0,5)){const r=new FileReader();r.onload=()=>{a.photos=a.photos||[];a.photos.push(r.result);saveMeta();renderAtas()};r.readAsDataURL(f)}e.target.value=''};
   function selectedText(){const h=state.selectedOverlay;return h?.kind==='annotation'&&h.obj.type==='text'?h.obj:null}
   $('#textSmallerBtn').onclick=()=>{const a=selectedText();if(!a)return;a.fontSize=Math.max(10,(Number(a.fontSize)||16)-2);saveMeta();drawOverlay()};
-  $('#textLargerBtn').onclick=()=>{const a=selectedText();if(!a)return;a.fontSize=Math.min(48,(Number(a.fontSize)||16)+2);saveMeta();drawOverlay()};
+  $('#textLargerBtn').onclick=()=>{const a=selectedText();if(!a)return;a.fontSize=Math.min(64,(Number(a.fontSize)||16)+2);saveMeta();drawOverlay()};
   $('#editSelectedTextBtn').onclick=()=>{const a=selectedText();if(!a)return;const r=$('#overlayCanvas').getBoundingClientRect(),sc=state.renderScale*state.viewZoom,p=a.points[0];openDirectTextEditor(r.left+p.x*sc,r.top+p.y*sc,p,a)};
   $('#deleteSelectedBtn').onclick=async()=>{const h=state.selectedOverlay;if(!h)return;if(!await confirmDelete('Ta bort från ritning?','Vill du verkligen ta bort den markerade mätningen/markeringen?'))return;if(h.kind==='measure'){const arr=getMeasurements(),i=arr.findIndex(x=>x.id===h.obj.id);if(i>=0)arr.splice(i,1)}else{const arr=getAnnotations(),i=arr.findIndex(x=>x.id===h.obj.id);if(i>=0)arr.splice(i,1)}state.selectedOverlay=null;$('#deleteSelectedBtn').classList.add('hidden');$('#textSmallerBtn').classList.add('hidden');$('#textLargerBtn').classList.add('hidden');$('#editSelectedTextBtn').classList.add('hidden');saveMeta();drawOverlay()};
   $('#riserBtn').onclick=()=>setRiserMode(!state.riserMode);
