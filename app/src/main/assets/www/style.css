@@ -93,7 +93,7 @@ h1,h2,h3,p{margin:0}h1{font-size:clamp(28px,6vw,44px);line-height:1.02;letter-sp
   height:calc(100vh - 205px);
 }
 .viewer-view.fullscreen-ui .viewer-head{
-  padding-top:max(4px,env(safe-area-inset-top));
+  top:calc(10px + max(0px,env(safe-area-inset-top)));
 }
 #canvasWrap{
   transform-origin:top left;
@@ -230,9 +230,8 @@ button.file-tag{cursor:pointer}
 #deleteSelectedBtn{background:var(--danger);border-color:var(--danger)}
 .canvas-wrap{margin:14px;}
 .pdf-viewport{scroll-padding:40px}
-.viewer-view.fullscreen-ui .viewer-head{position:absolute;z-index:20;top:8px;left:8px;right:8px;background:rgba(11,11,12,.72);backdrop-filter:blur(12px);border-radius:14px;padding:6px}.viewer-view.fullscreen-ui .viewer-head .grow,.viewer-view.fullscreen-ui #renameDrawingBtn,.viewer-view.fullscreen-ui #prevDrawingBtn,.viewer-view.fullscreen-ui #nextDrawingBtn{display:none}.viewer-view.fullscreen-ui .viewer-controls{display:none}.viewer-view.fullscreen-ui .toolstrip{position:absolute;z-index:20;left:8px;right:8px;bottom:8px;background:rgba(11,11,12,.78);backdrop-filter:blur(12px);border-radius:14px;padding:6px}.viewer-view.fullscreen-ui .measure-summary{display:none}.viewer-view.fullscreen-ui .pdf-viewport{height:100vh!important;max-height:none!important;margin:0;border:0;border-radius:0}
 
-.pdf-viewport{padding:24px}.canvas-wrap{margin:0 auto}.viewer-view.fullscreen-ui .pdf-viewport{padding:28px}
+.pdf-viewport{padding:24px}.canvas-wrap{margin:0 auto}
 
 /* v4.0.4 premium project controls */
 .project-card-wrap{position:relative;min-width:0}
@@ -255,10 +254,8 @@ button.file-tag{cursor:pointer}
   margin:0 auto !important;
   flex:none;
 }
-.viewer-view.fullscreen-ui .pdf-viewport{padding:18px !important}
 @media(max-width:650px){
   .pdf-viewport{padding:12px !important;scroll-padding:12px}
-  .viewer-view.fullscreen-ui .pdf-viewport{padding:14px !important}
 }
 
 /* v4.0.7 destructive-action polish */
@@ -289,8 +286,7 @@ button.file-tag{cursor:pointer}
 @keyframes bulbFlashClinical{0%,22%{opacity:0;transform:scale(.55)}34%{opacity:.46;transform:scale(1.02)}43%{opacity:.08}55%{opacity:.34}100%{opacity:.22;transform:scale(1)}}
 @keyframes wordRevealClinical{0%{opacity:0;transform:translate(-50%,-48%) scale(.992)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
 .pdf-viewport{padding:18px 18px 110px 18px !important;box-sizing:border-box!important}
-.viewer-view.fullscreen-ui .pdf-viewport{padding:18px 18px 110px 18px !important}
-@media(max-width:650px){.pdf-viewport{padding:12px 12px 96px 12px !important}.viewer-view.fullscreen-ui .pdf-viewport{padding:14px 14px 100px 14px !important}}
+@media(max-width:650px){.pdf-viewport{padding:12px 12px 96px 12px !important}}
 
 /* EKIS FIELD v4.0.14 – selectable dark/light themes */
 .theme-picker{width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
@@ -336,12 +332,11 @@ button.file-tag{cursor:pointer}
 .project-menu-actions{display:grid;grid-template-columns:1fr 1fr}.project-menu-actions .btn{width:100%}
 #projectSearchModal .search{margin:14px 0;width:100%}
 .bottom-nav .nav-btn[data-view="ataView"]{font-size:11px;font-weight:750;letter-spacing:0}.bottom-nav .nav-btn[data-view="ataView"] span{font-size:15px;line-height:20px;font-weight:900;letter-spacing:.02em}
-.viewer-view.fullscreen-ui .pdf-viewport{min-height:calc(100vh - 190px);padding:18px 18px 0}
 .viewer-view.fullscreen-ui .canvas-wrap{margin-left:auto;margin-right:auto}
 /* cleaner clinical intro: restrained glow, pure black mask */
 .ekis-splash{background:#000!important}.bulb-cone{display:none}.launch-floor{opacity:.12!important}.bulb-aura{filter:blur(2px)}
 .launch-wire,.launch-drop{stroke-width:1.65;filter:drop-shadow(0 0 3px rgba(255,106,0,.42))}.launch-ekis{filter:drop-shadow(0 3px 3px rgba(0,0,0,.92)) drop-shadow(0 0 2px rgba(255,106,0,.12))}
-@media(max-width:650px){.project-menu-actions{grid-template-columns:1fr}.viewer-view.fullscreen-ui .pdf-viewport{padding:14px 14px 0}}
+@media(max-width:650px){.project-menu-actions{grid-template-columns:1fr}}
 
 /* EKIS FIELD v4.0.17 – clinical brand polish */
 .hero .eyebrow{font-size:11px;letter-spacing:.20em;opacity:.82;margin-bottom:9px}
@@ -496,15 +491,67 @@ button.file-tag{cursor:pointer}
    arrow needs extra clearance there; everything else (size, bottom offset,
    shape) stays identical to normal mode for visual consistency. */
 .viewer-view.fullscreen-ui .drawing-edge-right{right:74px}
-.viewer-view.fullscreen-ui .toolstrip{left:auto!important;right:8px!important;top:74px!important;bottom:auto!important;width:52px!important;max-height:calc(100vh - 90px);display:flex!important;flex-direction:column!important;gap:5px!important;padding:6px!important;border-radius:14px!important;overflow-y:auto}
-.viewer-view.fullscreen-ui .toolstrip .tool{width:40px!important;min-width:40px!important;height:40px!important;padding:0!important;justify-content:center!important;font-size:16px!important}
-.viewer-view.fullscreen-ui .toolstrip .tool span{display:none!important}
-.viewer-view.fullscreen-ui .pdf-viewport{height:100vh!important;min-height:100vh!important;max-height:none!important;padding:18px 66px 18px 18px!important;box-sizing:border-box!important}
+/* ===== Fullscreen ("immersive") viewer — EKIS FIELD v7.1 =====
+   The old layout kept the normal header in place and merely hid its contents,
+   leaving a large empty grey bar across the top and pushing the drawing down.
+   Now fullscreen gets purpose-built chrome: a compact pill with just the
+   drawing name and the two controls that matter, a slim icon rail, and a
+   single tap on the drawing to fade all of it away so the sheet is the only
+   thing on screen. */
+.viewer-view.fullscreen-ui .viewer-head{
+  position:absolute;z-index:24;top:10px;left:50%;transform:translateX(-50%);
+  width:auto;max-width:min(92vw,560px);
+  display:flex;align-items:center;gap:6px;
+  background:rgba(16,16,18,.66);backdrop-filter:blur(14px);
+  border:1px solid rgba(255,255,255,.09);border-radius:999px;padding:5px 7px;
+  box-shadow:0 6px 22px rgba(0,0,0,.34);
+  transition:opacity .25s ease,transform .25s ease
+}
+.viewer-view.fullscreen-ui .viewer-head .grow{display:flex!important;min-width:0;padding:0 4px}
+.viewer-view.fullscreen-ui .viewer-head h2{font-size:13px;font-weight:600;margin:0;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.viewer-view.fullscreen-ui .viewer-head p{display:none}
+.viewer-view.fullscreen-ui #renameDrawingBtn,
+.viewer-view.fullscreen-ui #prevDrawingBtn,
+.viewer-view.fullscreen-ui #nextDrawingBtn,
+.viewer-view.fullscreen-ui .viewer-controls,
+.viewer-view.fullscreen-ui .measure-summary{display:none}
+.viewer-view.fullscreen-ui .viewer-head .icon-btn{width:34px;height:34px;min-width:34px;border-radius:50%;font-size:15px;background:transparent;border:0}
+.viewer-view.fullscreen-ui .viewer-head .icon-btn:active{background:rgba(255,255,255,.12)}
+
+.viewer-view.fullscreen-ui .toolstrip{
+  position:absolute;z-index:24;right:10px;top:50%;transform:translateY(-50%);
+  left:auto;bottom:auto;width:50px;max-height:min(78vh,560px);
+  display:flex;flex-direction:column;gap:4px;padding:6px;
+  background:rgba(16,16,18,.66);backdrop-filter:blur(14px);
+  border:1px solid rgba(255,255,255,.09);border-radius:26px;
+  box-shadow:0 6px 22px rgba(0,0,0,.34);overflow-y:auto;scrollbar-width:none;
+  transition:opacity .25s ease,transform .25s ease
+}
+.viewer-view.fullscreen-ui .toolstrip::-webkit-scrollbar{display:none}
+.viewer-view.fullscreen-ui .toolstrip .tool{
+  width:38px;min-width:38px;height:38px;padding:0;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:transparent;border:0;color:#d6d6d9
+}
+.viewer-view.fullscreen-ui .toolstrip .tool span{display:none}
+.viewer-view.fullscreen-ui .toolstrip .tool.active{background:#ff6a00;color:#111}
+.viewer-view.fullscreen-ui .toolstrip .tool:active{background:rgba(255,255,255,.14)}
+.viewer-view.fullscreen-ui .toolstrip #deleteSelectedBtn{color:#ff6b6b}
+
+.viewer-view.fullscreen-ui .drawing-edge-right{right:70px}
+
+/* Single tap on the sheet fades the chrome out; tap again to bring it back. */
+.viewer-view.fullscreen-ui.chrome-hidden .viewer-head{opacity:0;transform:translateX(-50%) translateY(-10px);pointer-events:none}
+.viewer-view.fullscreen-ui.chrome-hidden .toolstrip{opacity:0;transform:translateY(-50%) translateX(14px);pointer-events:none}
+.viewer-view.fullscreen-ui.chrome-hidden .drawing-edge-arrow{opacity:0;pointer-events:none}
+@media(prefers-reduced-motion:reduce){
+  .viewer-view.fullscreen-ui .viewer-head,.viewer-view.fullscreen-ui .toolstrip{transition:none}
+}
 .viewer-view.fullscreen-ui .canvas-wrap{margin-left:auto!important;margin-right:auto!important}
 .counter-types{display:flex;gap:10px;flex-wrap:wrap}.counter-types label{border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:var(--panel2)}
 .counter-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.counter-drawing-list{display:grid;gap:7px;margin-top:10px}.counter-drawing{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:10px}.counter-drawing span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .counter-results{display:grid;gap:12px}.counter-card{border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:14px}.counter-card h3{margin:0 0 8px}.counter-table{width:100%;border-collapse:collapse}.counter-table td,.counter-table th{padding:7px;border-bottom:1px solid var(--line);text-align:left}.counter-warning{border-left:3px solid #ff6a00;padding:10px 12px;background:rgba(255,106,0,.08);border-radius:8px;margin-bottom:10px}
-@media(max-width:650px){.bottom-nav .nav-btn{font-size:9px}.bottom-nav{gap:0}.viewer-view.fullscreen-ui .pdf-viewport{padding-right:62px!important}}
+@media(max-width:650px){.bottom-nav .nav-btn{font-size:9px}.bottom-nav{gap:0}}
 .ata-sessions{display:grid;gap:5px;margin:8px 0}.ata-session{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:11px}.ata-photo-wrap{position:relative;display:inline-block}.ata-photo-del{position:absolute;right:3px;top:3px;width:25px;height:25px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.72);color:#fff;font-weight:900}.ata-photo-wrap img{display:block}
 
 /* EKIS FIELD v5.0.1 — consolidated mobile fixes */
@@ -513,7 +560,6 @@ button.file-tag{cursor:pointer}
 .bottom-nav .nav-btn span{font-size:17px!important;line-height:18px!important}
 .bottom-nav .nav-btn[data-view="ataView"]{font-size:8.5px!important}
 .bottom-nav .nav-btn[data-view="ataView"] span{font-size:12px!important}
-.viewer-view.fullscreen-ui .pdf-viewport{padding:0 64px 0 0!important;overflow:auto!important}
 .viewer-view.fullscreen-ui .canvas-wrap{margin:0!important}
 .counter-category-tabs{display:flex;gap:7px;overflow-x:auto;padding-top:8px;scrollbar-width:none}.counter-category-tabs .category-tab{flex:0 0 auto}
 .ata-inline-edit{display:grid;gap:10px;margin-top:6px}.ata-inline-edit label{display:grid;gap:5px;color:var(--muted);font-size:11px;font-weight:800}.ata-inline-edit input,.ata-inline-edit textarea,.ata-hours-inline input{width:100%;box-sizing:border-box;border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:10px;padding:10px;font:inherit}.ata-inline-edit textarea{resize:vertical;min-height:110px}.ata-inline-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ata-inline-actions{display:flex;gap:8px}.ata-hours-inline{display:grid;grid-template-columns:90px 135px 1fr auto auto;gap:6px;margin:9px 0;padding:9px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}.ata-title-direct,.ata-info-direct{cursor:text}
@@ -523,7 +569,6 @@ button.file-tag{cursor:pointer}
 .counter-selection-summary{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0 12px}.counter-chip,.counter-pill{display:inline-flex;gap:5px;align-items:center;border:1px solid var(--line);border-radius:999px;padding:6px 9px;background:var(--panel2);font-size:11px}.counter-pills{display:flex;gap:6px;flex-wrap:wrap}.counter-scan-pending{padding:10px;border:1px dashed var(--line);border-radius:10px;background:var(--panel2)}
 
 /* EKIS FIELD v5.0.4 build 35 — Smart Scanner v2 + hard fullscreen centering */
-.viewer-view.fullscreen-ui .pdf-viewport{position:relative!important;padding:0 64px 0 0!important;box-sizing:border-box!important}
 .counter-smart-banner{display:grid;gap:4px;padding:12px 14px;border-left:3px solid #ff6a00;border-radius:10px;background:rgba(255,106,0,.085);margin-bottom:12px}.counter-smart-banner strong{font-size:14px}.counter-smart-banner span{font-size:11px;color:var(--muted);line-height:1.4}
 .counter-area-card,.counter-total-card{border:1px solid var(--line);background:var(--panel);border-radius:15px;padding:14px}.counter-area-title{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px}.counter-area-title h3{margin:0;font-size:19px}.counter-area-title small{color:var(--muted);font-size:10px}.counter-confidence{border:1px solid var(--line);border-radius:999px;padding:4px 7px;font-size:10px;font-weight:800}.counter-confidence.good{color:#8ee6ac}.counter-confidence.mid{color:#ffb261}.counter-confidence.low{color:var(--muted)}
 .counter-area-counts{display:grid;gap:6px}.counter-result-row,.counter-total-row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--text);padding:9px 2px;text-align:left;font:inherit}.counter-result-row:last-child,.counter-total-row:last-child{border-bottom:0}.counter-result-row strong,.counter-total-row strong{font-size:15px}.counter-total-card h3{margin:0 0 8px}.counter-total-card{border-color:rgba(255,106,0,.28)}
@@ -557,9 +602,42 @@ button.file-tag{cursor:pointer}
 .bottom-nav .nav-btn .counter-nav-icon svg path{fill:none}
 
 #canvasWrap{min-width:max-content;min-height:max-content}
+#canvasWrap.fs-settling{transition:left .35s ease,top .35s ease,width .35s ease,height .35s ease}
+@media(prefers-reduced-motion:reduce){#canvasWrap.fs-settling{transition:none}}
 .pdf-viewport{overscroll-behavior:contain;touch-action:pan-x pan-y pinch-zoom}
 
 /* EKIS FIELD v5.1.4 Build 45 – fullscreen fit centering regression fix */
 #pdfViewport{position:relative!important}
 #pdfViewport.fit-centered{overflow:hidden!important}
 #pdfViewport.fit-centered #canvasWrap{margin:0!important}
+
+/* ===== Single authoritative fullscreen viewport rule (v7.1) =====
+   This replaced thirteen competing declarations that had accumulated across
+   builds (paddings of 14/18/24/28px, bottom paddings up to 110px, three
+   different height rules), each added to work around the previous one. The
+   drawing sitting too high with dead space below it was the visible result.
+   Reserve space only for the right-hand tool rail; vertical centring is done
+   in JS by centerFullscreenDrawing(), so no vertical padding is wanted here. */
+.viewer-view.fullscreen-ui .pdf-viewport{
+  position:relative!important;box-sizing:border-box!important;
+  height:100vh!important;min-height:100vh!important;max-height:none!important;
+  padding:0 66px 0 0!important;margin:0!important;border:0!important;border-radius:0!important;
+  overflow:auto!important
+}
+.viewer-view.fullscreen-ui.chrome-hidden .pdf-viewport{padding-right:0!important}
+@media(max-width:650px){.viewer-view.fullscreen-ui .pdf-viewport{padding-right:62px!important}
+  .viewer-view.fullscreen-ui.chrome-hidden .pdf-viewport{padding-right:0!important}}
+
+/* Tool icons (v7.1): one consistent stroked SVG set replacing the previous mix
+   of emoji (✋📏) and typographic glyphs (⌁ ▱ ✎ ➜ ⌫), which rendered at wildly
+   different sizes and weights — and differently again on each Android version,
+   since emoji come from the system font. */
+.toolstrip .tool svg{width:19px;height:19px;flex:0 0 auto;display:block}
+.toolstrip .tool{display:inline-flex;align-items:center;gap:7px}
+.viewer-view.fullscreen-ui .toolstrip .tool svg{width:20px;height:20px}
+
+/* Version history (Inställningar → Om appen) */
+.changelog{margin-top:12px;display:flex;flex-direction:column;gap:12px;max-height:52vh;overflow-y:auto}
+.changelog-item{border-left:2px solid #ff6a00;padding-left:11px}
+.changelog-item strong{display:block;font-size:13px;letter-spacing:.02em;margin-bottom:3px}
+.changelog-item p{margin:0;font-size:12.5px;line-height:1.45}

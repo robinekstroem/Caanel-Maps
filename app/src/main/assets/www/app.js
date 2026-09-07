@@ -28,7 +28,7 @@
     pinchStartDistance: 0,
     pinchStartZoom: 1,
     pinchAnchor: null,
-    lastTapAt: 0,
+    lastTapAt: 0, chromeTapTimer: null,
     suppressClickUntil: 0,
     fitZoom: 1,
     lockViewAcrossDrawings: true,
@@ -1683,12 +1683,13 @@
         if(document.exitFullscreen)await document.exitFullscreen();
         else if(document.webkitExitFullscreen)document.webkitExitFullscreen();
       }catch(e){}
-      viewer.classList.remove("fullscreen-ui"); $("#canvasWrap").style.marginTop=""; $("#canvasWrap").style.marginBottom=""; return;
+      viewer.classList.remove("fullscreen-ui","chrome-hidden"); clearTimeout(state.chromeTapTimer); $("#canvasWrap").style.marginTop=""; $("#canvasWrap").style.marginBottom=""; setTimeout(fitDrawing,120); return;
     }
     if(isPseudo){
-      viewer.classList.remove("pseudo-fullscreen","fullscreen-ui");
+      viewer.classList.remove("pseudo-fullscreen","fullscreen-ui","chrome-hidden");
+      clearTimeout(state.chromeTapTimer);
       $("#canvasWrap").style.marginTop=""; $("#canvasWrap").style.marginBottom="";
-      $("#fullscreenBtn").textContent="⛶"; return;
+      $("#fullscreenBtn").textContent="⛶"; setTimeout(fitDrawing,120); return;
     }
     try{
       if(viewer.requestFullscreen){await viewer.requestFullscreen();viewer.classList.add("fullscreen-ui")}
@@ -1703,13 +1704,30 @@
     // gets the whole screen). Only re-centering here — without also recomputing
     // "fit" for that new, much larger viewport — left the drawing at whatever
     // zoom level was correct for the SMALL pre-fullscreen viewport, which reads
-    // as "tiny in the corner" the instant fullscreen opens. On WebViews where the
-    // real Fullscreen API isn't available (the "pseudo-fullscreen" catch above,
-    // common on Android WebView), no fullscreenchange event ever fires either, so
-    // syncFullscreenUI()'s own fitDrawing() call below never runs to correct it —
-    // this was the only code path for that case, and it was missing the refit.
-    setTimeout(fitDrawing,120);
+    // as "tiny in the corner" the instant fullscreen opens.
+    // A single fixed delay before re-fitting turned out unreliable: on some
+    // devices the browser's own fullscreen transition (or the WebView's own
+    // relayout for the pseudo-fullscreen fallback) hadn't actually finished
+    // resizing pdf-viewport yet at 120ms, so fitDrawing() computed against the
+    // OLD, small dimensions and then never ran again — the drawing stayed
+    // pinned small at the top with no further correction. Retrying at a few
+    // increasing delays is self-correcting: whichever attempt lands after the
+    // real layout has settled produces the right size, and repeating a correct
+    // fit is harmless. A brief transition while these retries settle turns the
+    // corrections into one smooth motion instead of a jarring snap — removed
+    // again once they're done so it never slows down live pinch-zooming.
+    viewer.classList.remove("chrome-hidden");
+    $("#canvasWrap")?.classList.add("fs-settling");
+    setTimeout(()=>$("#canvasWrap")?.classList.remove("fs-settling"),900);
+    for(const delay of [80,200,400,700])setTimeout(fitDrawing,delay);
   }
+  // Belt-and-braces: whenever the window itself resizes while a drawing is open
+  // in fullscreen (the transition finishing, an orientation change, a
+  // navigation-bar showing/hiding), re-fit once more rather than trusting any
+  // single earlier timing guess.
+  window.addEventListener("resize",()=>{
+    if($("#viewerView")?.classList.contains("fullscreen-ui")&&state.currentFileId)fitDrawing();
+  });
 
   function syncFullscreenUI(){
     const active=!!(document.fullscreenElement||document.webkitFullscreenElement)||$("#viewerView").classList.contains("pseudo-fullscreen");
@@ -1717,7 +1735,55 @@
     $("#viewerView").classList.toggle("fullscreen-ui",active); if(active)setTimeout(()=>{fitDrawing();centerFullscreenDrawing()},80);
   }
 
-  window.ekisBack=function(){const viewer=$("#viewerView");const active=!!(document.fullscreenElement||document.webkitFullscreenElement)||viewer.classList.contains("pseudo-fullscreen");if(active){toggleFullscreen();return true}if(state.currentView==="viewerView"){showView("projectView",false);renderProject();return true}return false};
+  function toggleFullscreenChrome(force){
+    const viewer=$("#viewerView");
+    if(!viewer||!viewer.classList.contains("fullscreen-ui"))return;
+    const hidden=typeof force==="boolean"?force:!viewer.classList.contains("chrome-hidden");
+    viewer.classList.toggle("chrome-hidden",hidden);
+    // Hiding the rail gives back its 66px, so the sheet can grow into it.
+    setTimeout(fitDrawing,300);
+  }
+
+  function clearOverlaySelection(){
+    state.selectedOverlay=null;
+    for(const a of getAnnotations())a.selected=false;
+    $('#deleteSelectedBtn')?.classList.add('hidden');
+    $('#textSmallerBtn')?.classList.add('hidden');
+    $('#textLargerBtn')?.classList.add('hidden');
+    $('#editSelectedTextBtn')?.classList.add('hidden');
+    drawOverlay();
+  }
+
+  // Android's back button routes here. This used to handle only two cases
+  // (fullscreen, and viewer→project) and returned false for everything else,
+  // which meant back CLOSED THE WHOLE APP while a dialog was open or while a
+  // sub-view was showing. Ordering matters: transient overlays first, then
+  // in-view modes, then the view hierarchy, so back always undoes the most
+  // recent thing rather than jumping straight out.
+  window.ekisBack=function(){
+    // 1. Modal dialogs — cancel them rather than exiting the app. The app
+    // reuses one #modal element for both prompts and delete confirmations, so
+    // clicking its cancel button is the correct "undo" for either.
+    const modal=$("#modal");
+    if(modal&&!modal.classList.contains("hidden")){ $("#modalCancel")?.click(); return true; }
+    // 2. Transient overlays inside the viewer.
+    if(state.scannerReview){ closeScannerReview(); return true; }
+    if(document.querySelector('.drawing-text-editor')){ document.querySelector('.drawing-text-editor').remove(); return true; }
+    // 3. Modes within the viewer: step out one layer at a time.
+    const viewer=$("#viewerView");
+    const fs=!!(document.fullscreenElement||document.webkitFullscreenElement)||viewer?.classList.contains("pseudo-fullscreen");
+    if(fs){ toggleFullscreen(); return true; }
+    if(state.currentView==="viewerView"){
+      if(state.selectedOverlay){ clearOverlaySelection(); return true; }
+      if(state.tool&&state.tool!=="pan"){ setTool("pan"); return true; }
+      if(state.riserMode){ setRiserMode(false); return true; }
+      showView("projectView",false); renderProject(); return true;
+    }
+    // 4. View hierarchy: project detail → project list; any tab → home tab.
+    if(state.currentView==="projectView"){ showView("projectsView"); renderProjects?.(); return true; }
+    if(state.currentView&&state.currentView!=="projectsView"){ showView("projectsView"); renderProjects?.(); return true; }
+    return false;
+  };
 
   function installViewerGestures(){
     const viewport=$("#pdfViewport");
@@ -1911,9 +1977,21 @@
           const now=Date.now();
           if(now-state.lastTapAt<520){
             state.lastTapAt=0; state.suppressClickUntil=now+450;
+            clearTimeout(state.chromeTapTimer);
             const smart=await handleSmartDoubleTap(cx,cy);
             if(!smart) await toggleFullscreen();
-          }else state.lastTapAt=now;
+          }else{
+            state.lastTapAt=now;
+            // In fullscreen a lone tap on the sheet fades the chrome away.
+            // Deferred past the double-tap window so it never fires on the
+            // first half of a double-tap (which zooms / exits fullscreen).
+            if($("#viewerView")?.classList.contains("fullscreen-ui")&&!state.selectedOverlay){
+              clearTimeout(state.chromeTapTimer);
+              state.chromeTapTimer=setTimeout(()=>{
+                if(!state.selectedOverlay)toggleFullscreenChrome();
+              },540);
+            }
+          }
         }
       }
     },{passive:false});
@@ -2254,7 +2332,205 @@
     return null;
   }
 
+  // ===== Vector symbol scanning =====
+  // These drawings are vector PDFs: the file still contains the exact drawing
+  // commands (~150k paths on a typical sheet, of which under 1000 are FILLED
+  // shapes). Outlets and switches are filled shapes, so instead of rasterising
+  // the page and guessing shapes back out of a 0/1 pixel mask — which throws
+  // away everything about WHAT was drawn and is why hatching, thick cable runs
+  // and symbols all end up looking alike — we read the geometry directly and get
+  // exact positions and sizes. The pixel scanner below is kept as a fallback for
+  // scanned/raster PDFs that genuinely have no vector content.
+  const mtxMul=(m1,m2)=>[
+    m1[0]*m2[0]+m1[2]*m2[1], m1[1]*m2[0]+m1[3]*m2[1],
+    m1[0]*m2[2]+m1[2]*m2[3], m1[1]*m2[2]+m1[3]*m2[3],
+    m1[0]*m2[4]+m1[2]*m2[5]+m1[4], m1[1]*m2[4]+m1[3]*m2[5]+m1[5]
+  ];
+  const mtxApply=(p,m)=>[m[0]*p[0]+m[2]*p[1]+m[4], m[1]*p[0]+m[3]*p[1]+m[5]];
+
+  // pdf.js changed how constructPath reports its data between major versions:
+  // v3 emits [subOpArray, flatCoordArray] and the paint operator arrives as a
+  // SEPARATE following entry, while v5 emits [paintOp, subPathArrays, bbox].
+  // Parsing both keeps this working whichever build of pdf.js is loaded, and if
+  // neither shape parses we return null and let the pixel scanner take over.
+  function scannerReadPaths(ops,viewport,OPS){
+    let ctm=viewport.transform.slice(); const stack=[]; const out=[];
+    let pendingPts=null, pendingCurves=0;
+    const V3=(a)=>Array.isArray(a[0]);
+    const flush=(paintOp)=>{
+      if(!pendingPts||!pendingPts.length){pendingPts=null;return}
+      let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+      for(const q of pendingPts){if(q[0]<x0)x0=q[0];if(q[0]>x1)x1=q[0];if(q[1]<y0)y0=q[1];if(q[1]>y1)y1=q[1];}
+      out.push({paintOp,x0,y0,x1,y1,w:x1-x0,h:y1-y0,cx:(x0+x1)/2,cy:(y0+y1)/2,npts:pendingPts.length,pts:pendingPts,curves:pendingCurves});
+      pendingPts=null; pendingCurves=0;
+    };
+    for(let i=0;i<ops.fnArray.length;i++){
+      const fn=ops.fnArray[i], args=ops.argsArray[i];
+      if(fn===OPS.save){stack.push(ctm.slice());continue}
+      if(fn===OPS.restore){ctm=stack.pop()||viewport.transform.slice();continue}
+      if(fn===OPS.transform){ctm=mtxMul(ctm,args);continue}
+      if(fn===OPS.constructPath){
+        const pts=[]; let curves=0;
+        if(V3(args)){
+          const sub=args[0], co=args[1]; let k=0;
+          for(const op of sub){
+            if(op===OPS.moveTo||op===OPS.lineTo){pts.push(mtxApply([co[k],co[k+1]],ctm));k+=2}
+            else if(op===OPS.curveTo){pts.push(mtxApply([co[k],co[k+1]],ctm));pts.push(mtxApply([co[k+2],co[k+3]],ctm));pts.push(mtxApply([co[k+4],co[k+5]],ctm));curves++;k+=6}
+            else if(op===OPS.curveTo2||op===OPS.curveTo3){pts.push(mtxApply([co[k],co[k+1]],ctm));pts.push(mtxApply([co[k+2],co[k+3]],ctm));curves++;k+=4}
+            else if(op===OPS.rectangle){const x=co[k],y=co[k+1],rw=co[k+2],rh=co[k+3];
+              pts.push(mtxApply([x,y],ctm),mtxApply([x+rw,y],ctm),mtxApply([x+rw,y+rh],ctm),mtxApply([x,y+rh],ctm));k+=4}
+            else if(op===OPS.closePath){}
+          }
+          pendingPts=pts; pendingCurves=curves; // paint op arrives next in v3
+        }else{
+          const paths=args[1]||[];
+          for(const p of paths){
+            for(let k=0;k<p.length;){
+              const c=p[k];
+              if(c===0||c===1){pts.push(mtxApply([p[k+1],p[k+2]],ctm));k+=3}
+              else if(c===2){pts.push(mtxApply([p[k+1],p[k+2]],ctm));pts.push(mtxApply([p[k+3],p[k+4]],ctm));curves++;k+=5}
+              else if(c===3){pts.push(mtxApply([p[k+1],p[k+2]],ctm));pts.push(mtxApply([p[k+3],p[k+4]],ctm));pts.push(mtxApply([p[k+5],p[k+6]],ctm));curves++;k+=7}
+              else k+=1;
+            }
+          }
+          pendingPts=pts; pendingCurves=curves; flush(args[0]);
+        }
+        continue;
+      }
+      if(pendingPts&&(fn===OPS.fill||fn===OPS.eoFill||fn===OPS.fillStroke||fn===OPS.eoFillStroke||fn===OPS.closeFillStroke||fn===OPS.closeEOFillStroke||fn===OPS.stroke||fn===OPS.closeStroke||fn===OPS.endPath)){flush(fn);continue}
+    }
+    return out;
+  }
+
+  async function scannerVectorSymbols(page,tc,areas,types){
+    const OPS=(window.pdfjsLib&&window.pdfjsLib.OPS)||null;
+    if(!OPS)return null;
+    let ops; try{ops=await page.getOperatorList()}catch{return null}
+    if(!ops||!ops.fnArray||!ops.fnArray.length)return null;
+    const viewport=page.getViewport({scale:1});
+    let paths; try{paths=scannerReadPaths(ops,viewport,OPS)}catch{return null}
+    if(!paths.length)return null;
+    // Sanity check: mapped geometry must actually land on the page. If the
+    // operator format wasn't understood, coordinates come out nonsensical and we
+    // bail to the pixel scanner rather than reporting confident nonsense.
+    let gx0=Infinity,gy0=Infinity,gx1=-Infinity,gy1=-Infinity;
+    for(const p of paths){gx0=Math.min(gx0,p.x0);gy0=Math.min(gy0,p.y0);gx1=Math.max(gx1,p.x1);gy1=Math.max(gy1,p.y1)}
+    const covW=(gx1-gx0)/viewport.width, covH=(gy1-gy0)/viewport.height;
+    if(!(covW>0.35&&covW<1.6&&covH>0.35&&covH<1.6))return null;
+
+    const FILL=new Set([OPS.fill,OPS.eoFill,OPS.fillStroke,OPS.eoFillStroke,OPS.closeFillStroke,OPS.closeEOFillStroke]);
+    const fills=paths.filter(p=>FILL.has(p.paintOp)&&p.w>0.5&&p.h>0.5);
+    if(fills.length<8)return null;
+
+    const texts=(tc.items||[]).map(it=>{const p=viewport.convertToViewportPoint(it.transform[4],it.transform[5]);return {s:String(it.str||'').trim(),x:p[0],y:p[1]}}).filter(t=>t.s);
+    let legend=null;
+    for(const t of texts){
+      if(!/FÖRKLARINGAR|FORKLARINGAR|SYMBOLFÖRKLARING/i.test(t.s))continue;
+      const right=t.x>viewport.width*.52;
+      legend={x:right?t.x-45:t.x-25,y:t.y-55,w:right?viewport.width-t.x+45:Math.min(viewport.width*.42,620),h:Math.min(viewport.height-t.y+55,viewport.height*.92)};
+      break;
+    }
+    // Calibrate against THIS drawing's own legend so it adapts per project and
+    // per category (Kraft and Belysning legends define different symbols).
+    function legendFillNear(re,exclude){
+      for(const t of texts){
+        if(!re.test(t.s)||(exclude&&exclude.test(t.s)))continue;
+        if(legend&&(t.x<legend.x||t.x>legend.x+legend.w||t.y<legend.y||t.y>legend.y+legend.h))continue;
+        const near=fills.filter(f=>f.cx<t.x-2&&f.cx>t.x-60&&Math.abs(f.cy-t.y)<12&&f.w>2&&f.h>2).sort((a,b)=>(b.w*b.h)-(a.w*a.h));
+        if(near.length)return near[0];
+      }
+      return null;
+    }
+    const domeRef=legendFillNear(/UTTAG/i,/VÄGGUTTAG\.|GOLVVÄRME|KOMBINATION/i);
+    const circRef=legendFillNear(/STRÖMSTÄLLARE|BRYTARE/i,/KOMBINATION/i);
+    if(!domeRef&&!circRef)return null;
+    const domeLong=domeRef?Math.max(domeRef.w,domeRef.h):11.3;
+    const domeShort=domeRef?Math.min(domeRef.w,domeRef.h):5.6;
+    const circD=circRef?(circRef.w+circRef.h)/2:5.6;
+
+    // Hatched "belongs to another part of the drawing" areas are, in vector
+    // terms, a cluster of many long parallel diagonal lines — an exact signature,
+    // unlike the pixel-texture guess this used to rely on.
+    const diags=[];
+    for(const p of paths){
+      if(p.npts!==2)continue;
+      const [a,b]=p.pts, len=Math.hypot(b[0]-a[0],b[1]-a[1]);
+      if(len<80)continue;
+      let ang=Math.atan2(b[1]-a[1],b[0]-a[0])*180/Math.PI; if(ang<0)ang+=180;
+      if(ang<20||ang>160||(ang>70&&ang<110))continue;
+      diags.push(p);
+    }
+    const used=new Array(diags.length).fill(false), zones=[];
+    for(let i=0;i<diags.length;i++){
+      if(used[i])continue;
+      const group=[i]; used[i]=true;
+      for(let g=0;g<group.length;g++){
+        const A=diags[group[g]];
+        for(let j=0;j<diags.length;j++){
+          if(used[j])continue; const B=diags[j];
+          if(Math.abs(A.cx-B.cx)<90&&Math.abs(A.cy-B.cy)<90){used[j]=true;group.push(j)}
+        }
+      }
+      if(group.length<12)continue;
+      let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+      for(const k of group){const d=diags[k];x0=Math.min(x0,d.x0);y0=Math.min(y0,d.y0);x1=Math.max(x1,d.x1);y1=Math.max(y1,d.y1)}
+      zones.push({x0,y0,x1,y1});
+    }
+
+    // A switch's circle always has a short diagonal toggle-arm stroke touching
+    // it; plain filled dots (towel-rail outlets, junction dots) never do.
+    const arms=[];
+    for(const p of paths){
+      if(p.npts!==2)continue;
+      const [a,b]=p.pts, len=Math.hypot(b[0]-a[0],b[1]-a[1]);
+      if(len<3||len>40)continue;
+      let ang=Math.atan2(b[1]-a[1],b[0]-a[0])*180/Math.PI; if(ang<0)ang+=180;
+      if((ang>75&&ang<105)||ang<15||ang>165)continue;
+      arms.push({a,b});
+    }
+    const hasArm=f=>{
+      const r=Math.max(f.w,f.h)/2;
+      for(const s of arms)for(const q of [s.a,s.b]){
+        if(Math.hypot(q[0]-f.cx,q[1]-f.cy)<r*2.2){
+          const o=(q===s.a?s.b:s.a);
+          if(Math.hypot(o[0]-f.cx,o[1]-f.cy)>r*1.6)return true;
+        }
+      }
+      return false;
+    };
+
+    const inLegend=f=>legend&&f.cx>=legend.x&&f.cx<=legend.x+legend.w&&f.cy>=legend.y&&f.cy<=legend.y+legend.h;
+    const inHatch=f=>zones.some(z=>f.cx>=z.x0&&f.cx<=z.x1&&f.cy>=z.y0&&f.cy<=z.y1);
+    const inTitle=f=>f.cx>viewport.width*.80&&f.cy>viewport.height*.68;
+    const tol=.34, near=(v,ref)=>Math.abs(v-ref)<=ref*tol;
+    const vpAreas=scannerToViewportAreas(areas,viewport);
+
+    const hits=[];
+    for(const f of fills){
+      if(inLegend(f)||inHatch(f)||inTitle(f))continue;
+      const lo=Math.min(f.w,f.h), hi=Math.max(f.w,f.h), ratio=hi/Math.max(lo,.01);
+      let type=null;
+      if(types.outlets&&domeRef&&near(hi,domeLong)&&near(lo,domeShort)&&ratio>1.5)type='outlet';
+      else if(types.switches&&circRef&&near(hi,circD)&&near(lo,circD)&&ratio<1.45&&hasArm(f))type='switch';
+      if(!type)continue;
+      const nearArea=scannerNearestArea(f.cx,f.cy,vpAreas,viewport.width,viewport.height);
+      hits.push({type,score:.95,x:f.cx,y:f.cy,nx:f.cx/viewport.width,ny:f.cy/viewport.height,area:nearArea?.area||null});
+    }
+    return scannerNms(hits,Math.max(domeLong,domeShort)*.7);
+  }
+
   async function scannerVisualSymbols(page,tc,areas,types){
+    if(!types.outlets&&!types.switches)return [];
+    // Vector geometry first — exact, and far faster than rasterising. Falls back
+    // automatically for scanned/raster PDFs or an unrecognised operator format.
+    try{
+      const v=await scannerVectorSymbols(page,tc,areas,types);
+      if(v&&v.length)return v;
+    }catch(e){ /* fall through to pixel scanning */ }
+    return scannerPixelSymbols(page,tc,areas,types);
+  }
+
+  async function scannerPixelSymbols(page,tc,areas,types){
     if(!types.outlets&&!types.switches)return [];
     const base=page.getViewport({scale:1});
     // Symbols are tiny on a full sheet — at the old 2600px cap a real symbol was
@@ -2546,6 +2822,29 @@
   function showMeasureMagnifier(e){const mag=$("#measureMagnifier"),base=$("#pdfCanvas"),over=$("#overlayCanvas"),vp=$("#pdfViewport");if(!mag||!base)return;mag.classList.remove("hidden");const vr=vp.getBoundingClientRect();mag.style.left=Math.max(8,Math.min(vp.clientWidth-160,e.clientX-vr.left-75))+"px";mag.style.top=Math.max(8,e.clientY-vr.top-190)+"px";const ctx=mag.getContext("2d"),r=over.getBoundingClientRect(),sx=(e.clientX-r.left)*(over.width/r.width),sy=(e.clientY-r.top)*(over.height/r.height),crop=45;ctx.clearRect(0,0,180,180);ctx.drawImage(base,sx-crop,sy-crop,crop*2,crop*2,0,0,180,180);ctx.strokeStyle="#ff6a00";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(90,68);ctx.lineTo(90,112);ctx.moveTo(68,90);ctx.lineTo(112,90);ctx.stroke();}
   function hideMeasureMagnifier(){$("#measureMagnifier")?.classList.add("hidden")}
   $$(".nav-btn").forEach(b=>b.onclick=()=>{showView(b.dataset.view); if(b.dataset.view==="projectsView")renderProjects(); if(b.dataset.view==="drawingsView")renderAllDrawings(); if(b.dataset.view==="todoView")renderTodos(); if(b.dataset.view==="ataView")renderAtas(); if(b.dataset.view==="counterView")renderCounter()});
+  // Version history, shown in Inställningar → Om appen. Kept inline so it works
+  // offline on site (no network on a building site) and stays in step with the
+  // build it actually shipped with.
+  const CHANGELOG=[
+    {v:"7.1.0",d:"Helskärmsläget omgjort: tomma toppbaren borta, kompakt namn-pill, smal ikonrad och ett tryck på ritningen döljer all meny. Nya enhetliga verktygsikoner. Bakåtknappen stänger inte längre appen när en dialog är öppen."},
+    {v:"7.0.0",d:"Räknaren ombyggd på vektorgeometri: läser ritningens faktiska ritkommandon i stället för att gissa former ur pixlar. Skrafferade referensytor exkluderas nu exakt. 3–4× snabbare."},
+    {v:"6.5",  d:"Helskärmsläget räknar om anpassningen flera gånger tills layouten satt sig, i stället för en enda fast fördröjning."},
+    {v:"6.4",  d:"Förstoringsglaset följer fingret redan vid första mätpunkten, och även när pilen dras. Ny startanimation. Skrafferingstest känner igen tjocka kablar."},
+    {v:"6.3",  d:"Zoomen räknas om vid växling till helskärm."},
+    {v:"6.2",  d:"Bläddring följer logisk ritningsordning. Nya bläddringspilar. Text med halo. Nyp med två fingrar ändrar textstorlek."},
+    {v:"6.1",  d:"Räknarens träffmarkörer följer inte längre med till fel ritning."},
+    {v:"6.0",  d:"Ny symbolklassificering, dubblad skanningsupplösning och kalibrering mot ritningens egen förklaring."},
+    {v:"5.1.5",d:"Centrering av ritningen även i normalläget. Pilens ändpunkter kan justeras separat."}
+  ];
+  $("#changelogBtn")?.addEventListener("click",()=>{
+    const box=$("#changelogBox"); if(!box)return;
+    const open=!box.classList.contains("hidden");
+    if(open){box.classList.add("hidden");$("#changelogBtn").textContent="Visa versionshistorik";return}
+    box.innerHTML=CHANGELOG.map(c=>`<div class="changelog-item"><strong>${esc(c.v)}</strong><p class="muted">${esc(c.d)}</p></div>`).join("");
+    box.classList.remove("hidden");
+    $("#changelogBtn").textContent="Dölj versionshistorik";
+  });
+
   $$('[data-theme-choice]').forEach(b=>b.onclick=()=>{applyTheme(b.dataset.themeChoice,true);toast(b.dataset.themeChoice==='light'?'Ljust tema aktiverat':'Mörkt tema aktiverat')});
   $("#brandBtn").onclick=()=>{renderProjects();showView("projectsView")};
   $("#newProjectBtn").onclick=async()=>{
