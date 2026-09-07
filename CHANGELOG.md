@@ -2,6 +2,54 @@
 
 ---
 
+## 7.4.0 (build 49)
+
+**Nytt tema: Neon (svart & grönt)**
+- Tredje temat vid sidan av Svart och Vit. Djup svart bakgrund med grön ton, neongrön accent och diskret glöd på det som är i fokus — aktivt verktyg, rubriker, notiser och helskärmens flytande paneler.
+- Ett svagt lysande rutnät ligger i bakgrunden, uttonat mot kanterna.
+- Själva ritningen lämnas orörd (svart på vitt som i PDF:en) — bara ramen får en grön kantlinje, så läsbarheten på plats påverkas inte.
+
+**Ritningsmarkeringar följer temat**
+- Mått, markeringar och räknarens träffar ritades tidigare alltid i orange, hårdkodat på 15 ställen i koden, eftersom de målas på canvas och inte påverkas av CSS. De läser nu temats accentfärg och ritas om direkt när temat byts.
+
+**Versionshistoriken samlad**
+- Den äldre historiken låg utspridd i `README_ANDROID.txt` och `www/README.txt`. Den är nu inflyttad hit och finns även i appen under Inställningar → Om appen.
+
+---
+
+## 7.3.0 (build 48)
+
+**Occhio-armaturer går att trycka på**
+- Ritningar som använder en Occhio-produktförteckning märker armaturerna med `position.instans` — t.ex. `3.1` och `3.2` för första och andra enheten av position 03. Förteckningens poster indexerades däremot bara som `POS 03` / `POSITION 03`, vilket aldrig förekommer på ritningen. De två kunde alltså aldrig matcha varandra.
+- Matchningen förstår nu den punktnotationen. Verifierat mot projektets ritningar: 13 träffar på Plan 17 Del 3 (positionerna 02, 03 och 07) och noll på övriga ritningar.
+- Notationen matchas bara när den utgör hela etiketten. Rumsareor skrivs `A: 3.7 m²` och lästes annars som position 03.
+- Occhio-poster var dessutom uttryckligen undantagna från produktnamnsmatchningen, så armaturer som *bara* finns i Occhio-förteckningen (som i den lägenheten) var helt oåtkomliga. De ingår nu.
+
+---
+
+## 7.2.0 (build 47)
+
+**Ritningen centreras korrekt**
+- Centreringen gjordes i JS genom att mäta ytan och sätta absolut position på ritningen. Det motverkades av flera `margin:0 auto !important`-regler längre ned i CSS-filen, och gick även fel när mätningen skedde innan layouten satt sig. Resultatet var en ritning klistrad högst upp med svart yta under.
+- Ersatt med flexbox + `margin:auto`, vilket webbläsaren håller synkat automatiskt: centrerat när ritningen får plats, fullt scrollbart när den inte gör det.
+
+**Dialogrutor fungerar i helskärm**
+- I äkta helskärm ritas bara helskärmselementet och dess innehåll. Dialogrutorna ligger utanför ritningsvyn och öppnades därför *osynligt* — att trycka på X för att radera, eller på textverktyget, såg ut att inte göra någonting alls. I reservläget (pseudo-helskärm) låg vyn dessutom över dialogen i z-ordningen.
+- Dialoger och notiser flyttas nu automatiskt in i helskärmselementet när de visas.
+
+**Pennan**
+- Ritade tidigare en 4px-punkt vid varje sampelpunkt under draget, vilket gav ett spår av prickar i stället för en linje.
+- Ritar nu mjuka kurvor (kvadratiska bézier genom sampelpunkternas mittpunkter) och filtrerar bort skakningar under ~1px.
+
+**Räknaren**
+- Symboler som sitter på sneda väggar ritas roterade, vilket gör deras rätvinkliga ram bredare (11,3×5,6 upprätt blev 10,9×7,9 lutad) och gjorde att storlekstestet missade dem. Storleken mäts nu främst på ytan, som är oberoende av rotation.
+
+**Övrigt**
+- Bläddringspilarna sitter symmetriskt i båda nedre hörnen.
+- Tydligare ikoner för Avstånd, Sträcka, Area och Rensa.
+
+---
+
 ## 7.1.0 (build 46)
 
 **Helskärmsläget omgjort**
@@ -67,3 +115,54 @@ Räknaren läser nu PDF:ens faktiska ritkommandon istället för att gissa forme
 - Omräkning vid skärmrotation och när tangentbordet öppnas/stängs.
 - Pilens start- och slutpunkt kan justeras separat.
 - Skannern pausar periodiskt så gränssnittet inte fryser på stora ritningar.
+
+---
+
+## Tidigare versioner
+
+Historiken nedan är sammanförd från `README_ANDROID.txt` och `www/README.txt`, där den låg utspridd innan den här filen fanns.
+
+### 4
+- Åtgärdad touch-hantering särskilt för Android/Samsung Chrome.
+- Ritningen öppnas automatiskt i "Passa"-läge så hela sidan syns.
+- Swipe vänster/höger byter ritning endast när ritningen är helt utzoomad; inzoomad panorerar samma rörelse i stället.
+- Pinch-zoom med dynamisk minzoom och kraftig detaljzoom.
+- Våningsväljare med "Lås vy" som behåller samma område vid ritningsbyte.
+- Ny **Synka plan**: markera två gemensamma referenspunkter A och B på två plan, varefter appen kompenserar för förskjutning, skala och rotation mellan ritningarna. Använd punkter som ligger en bit isär för stabilare synkning.
+- Service worker uppdaterad så nya versioner ersätter gammal cache bättre.
+
+### 3.1
+- Rak A–B-mätning: A låses, B dras och släpps. Ingen böjd måttlinje.
+- Automatisk PDF-skala läses från "SKALA 1:xx" när den finns.
+- Area-kalibrering kan använda utskriven rumsarea (m²) som referens.
+- Smart armaturmatchning söker taggar även inuti PDF-text och korslänkar vanlig armaturförteckning mot Occhio produktöversikt med försiktig matchningspoäng.
+- Armaturinfo öppnas med enkel- eller dubbeltryck nära matchad beteckning.
+- Splash använder transparent, beskuren logga på exakt appbakgrund.
+
+### 3
+- Separat touch-implementation för Android/Samsung: tvåfingers pinch-zoom direkt på ritningsytan.
+- Utzoomad ritning: horisontell swipe byter ritning. Inzoomad: samma rörelse panorerar.
+- Ny Våning/ritning-väljare i ritningsvyn.
+- "Lås vy" på som standard — zoomnivå och relativt område följer med vid våningsbyte.
+- Dubbeltryck växlar helskärm.
+- EKIS FIELD-logga och appnamn, animerad startskärm, immersive Android-läge.
+- Ritningsanalys med Pxx + Del 1/2/3 ur ritningshuvud eller filnummer.
+- Vanlig armaturförteckning och Occhio product overview kan indexeras som smarta dokument.
+- Att göra-lista med prioritet, deadline och filter.
+
+### 2
+- Nyp/zoom med två fingrar; dra runt ritningen med ett finger när den är inzoomad.
+- Swipe mellan ritningar i samma projekt vid 100 %.
+- Föregående/nästa-knappar som reserv.
+- Dubbeltryck växlar helskärm; separat helskärmsknapp.
+- Zoomindikator och återställning till 100 %.
+
+### 1
+- Skapa projekt; importera PDF eller ZIP (behåller mappväg).
+- Byt visningsnamn utan att förstöra originalfilnamnet.
+- Sök och sortera; flersidiga PDF-ritningar; skala per sida.
+- Kalibrering mot känt mått, avståndsmätning, sträcka/kabelväg, area.
+- Projektexport som ZIP, full lokal backup och återställning.
+- Att-göra-lista, PWA-stöd.
+
+**Notera:** projektdata och PDF-filer sparas lokalt på enheten. Rensas webbläsarens/appens data kan lokala projekt försvinna — använd backup-funktionen.

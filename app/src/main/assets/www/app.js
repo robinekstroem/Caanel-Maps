@@ -62,14 +62,28 @@
   function saveMeta() {
     localStorage.setItem(META_KEY, JSON.stringify(state.meta));
   }
+  const THEMES={dark:"#0b0b0c",light:"#f3f4f6",neon:"#04070a"};
   function applyTheme(theme, persist=false){
-    const next=theme==="light"?"light":"dark";
+    const next=THEMES[theme]?theme:"dark";
     state.meta.theme=next;
     document.documentElement.dataset.theme=next;
     const metaTheme=document.querySelector('meta[name="theme-color"]');
-    if(metaTheme)metaTheme.setAttribute("content",next==="light"?"#f3f4f6":"#0b0b0c");
+    if(metaTheme)metaTheme.setAttribute("content",THEMES[next]);
     document.querySelectorAll('[data-theme-choice]').forEach(b=>b.classList.toggle('active',b.dataset.themeChoice===next));
+    // Markings drawn on the canvas are painted in JS, so they have to be told
+    // about the theme change explicitly — otherwise measurements and annotations
+    // would stay orange on the green theme.
+    accentColor.cache=null;
+    if(typeof drawOverlay==="function"&&state.currentFileId)try{drawOverlay()}catch{}
     if(persist)saveMeta();
+  }
+  // Accent used for canvas drawing, read from the active theme's CSS variable.
+  function accentColor(){
+    if(!accentColor.cache){
+      const v=getComputedStyle(document.documentElement).getPropertyValue("--orange").trim();
+      accentColor.cache=v||"#ff6a00";
+    }
+    return accentColor.cache;
   }
   const $ = s => document.querySelector(s);
   const $$ = s => [...document.querySelectorAll(s)];
@@ -200,6 +214,17 @@
     const re=/(?:^|[^A-Z0-9])(ARM\s*\d+|L\d+[A-Z]?|N\d+[A-Z]?|P\d+[A-Z]?|K\d+[A-Z]?|BL)(?=$|[^A-Z0-9])/g;
     let m; while((m=re.exec(t)))out.push(cleanTag(m[1]));
     const pos=/\b(?:POSITION|POS)\s*0*(\d{1,2})\b/g; while((m=pos.exec(t)))out.push(`POS ${String(Number(m[1])).padStart(2,"0")}`);
+    // Drawings that use an Occhio product overview label their fixtures
+    // "<position>.<instance>" — e.g. 3.1 and 3.2 are the first and second unit
+    // of position 03. Plain "POS 03" never appears on the drawing, which is why
+    // tapping these fixtures previously did nothing at all. The dotted form is
+    // specific enough to be safe: it occurs on the Occhio drawings and on no
+    // other sheet in the project, unlike bare digits (room numbers, dimensions,
+    // reference bubbles) which are far too common to match on.
+    // Must be the WHOLE label, not a number embedded in other text: room areas
+    // are written "A: 3.7 m2" and would otherwise be read as position 03.
+    const dotted=t.trim().match(/^(\d{1,2})\.(\d{1,2})$/);
+    if(dotted)out.push(`POS ${String(Number(dotted[1])).padStart(2,"0")}`);
     return [...new Set(out)];
   }
 
@@ -429,7 +454,26 @@
     window.scrollTo({top:0,behavior:"instant"});
   }
 
+  // Dialogs and toasts live outside #viewerView, so in fullscreen they were
+  // unreachable: in NATIVE fullscreen only the fullscreen element and its
+  // descendants paint at all (the dialog opened invisibly — tapping delete or
+  // the text tool appeared to do nothing), and in the pseudo-fullscreen
+  // fallback the viewer's z-index:999 covered the dialog's z-index:100.
+  // Re-parenting them into whatever element is currently fullscreen fixes both.
+  function fullscreenHost(){
+    return document.fullscreenElement||document.webkitFullscreenElement||
+           (document.querySelector(".viewer-view.pseudo-fullscreen"))||null;
+  }
+  function hoistOverlays(){
+    const host=fullscreenHost()||document.body;
+    for(const id of ["modal","toast"]){
+      const el=document.getElementById(id);
+      if(el&&el.parentNode!==host)host.appendChild(el);
+    }
+  }
+
   function toast(msg) {
+    hoistOverlays();
     const el=$("#toast"); el.textContent=msg; el.classList.remove("hidden");
     clearTimeout(el._t); el._t=setTimeout(()=>el.classList.add("hidden"),2400);
   }
@@ -437,7 +481,7 @@
   function promptModal(title, text, value="", type="text") {
     return new Promise(resolve=>{
       $("#modalTitle").textContent=title; $("#modalText").textContent=text || "";
-      const input=$("#modalInput"); input.type=type; input.value=value; $("#modal").classList.remove("hidden");
+      const input=$("#modalInput"); input.type=type; input.value=value; hoistOverlays(); $("#modal").classList.remove("hidden");
       setTimeout(()=>{input.focus();input.select()},30);
       const done = val => {
         $("#modal").classList.add("hidden");
@@ -456,7 +500,7 @@
       const input=$("#modalInput"); input.classList.add("hidden");
       const ok=$("#modalOk"), cancel=$("#modalCancel");
       ok.textContent="Ja, ta bort"; cancel.textContent="Nej";
-      $("#modal").classList.remove("hidden");
+      hoistOverlays(); $("#modal").classList.remove("hidden");
       setTimeout(()=>cancel.focus(),30);
       const done=val=>{ $("#modal").classList.add("hidden"); input.classList.remove("hidden"); ok.textContent="Spara"; cancel.textContent="Avbryt"; ok.onclick=null; cancel.onclick=null; resolve(val); };
       ok.onclick=()=>done(true); cancel.onclick=()=>done(false);
@@ -930,40 +974,64 @@
     $("#measureHint").textContent=text;
   }
 
+  // Freehand strokes are drawn as quadratic curves through the midpoints of
+  // consecutive samples, which removes the faceted/jagged look a raw lineTo
+  // polyline gives at the sampling rate a finger produces.
+  function strokeSmooth(ctx,q){
+    if(!q||!q.length)return;
+    ctx.save();ctx.lineJoin='round';ctx.lineCap='round';
+    ctx.beginPath();
+    if(q.length<3){
+      ctx.moveTo(q[0].x,q[0].y);
+      for(let i=1;i<q.length;i++)ctx.lineTo(q[i].x,q[i].y);
+    }else{
+      ctx.moveTo(q[0].x,q[0].y);
+      for(let i=1;i<q.length-1;i++){
+        const mx=(q[i].x+q[i+1].x)/2, my=(q[i].y+q[i+1].y)/2;
+        ctx.quadraticCurveTo(q[i].x,q[i].y,mx,my);
+      }
+      ctx.quadraticCurveTo(q[q.length-2].x,q[q.length-2].y,q[q.length-1].x,q[q.length-1].y);
+    }
+    ctx.stroke();ctx.restore();
+  }
+
   function roundRectPath(ctx,x,y,w,h,r){
     ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
   }
   function drawOverlay(){
     const c=$("#overlayCanvas"), dpr=Math.min(window.devicePixelRatio||1,2), ctx=c.getContext("2d");
     ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,c.width/dpr,c.height/dpr);
-    ctx.lineWidth=2.5;ctx.strokeStyle="#ff6a00";ctx.fillStyle="#ff6a00";ctx.font="700 13px system-ui";
+    ctx.lineWidth=2.5;ctx.strokeStyle=accentColor();ctx.fillStyle=accentColor();ctx.font="700 13px system-ui";
     const toPx=p=>({x:p.x*state.renderScale,y:p.y*state.renderScale});
     function drawPath(points,closed=false,label=""){
       if(points.length<1)return; const q=points.map(toPx);ctx.beginPath();ctx.moveTo(q[0].x,q[0].y);
       q.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));if(closed&&q.length>2)ctx.closePath();ctx.stroke();
-      q.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,4,0,Math.PI*2);ctx.fill()});
-      if(label&&q.length){const p=q[Math.floor(q.length/2)];ctx.fillStyle="rgba(11,11,12,.88)";ctx.fillRect(p.x+6,p.y-20,Math.max(70,label.length*7),22);ctx.fillStyle="#ff6a00";ctx.fillText(label,p.x+11,p.y-5)}
+      // The pen samples many points per second; drawing a dot at each one is
+      // what made a freehand stroke look like a trail of blobs. Vertex dots are
+      // only meaningful for the click-per-point tools (sträcka/area).
+      if(state.drawDraft?.type!=='pen'&&state.tool!=='pen')q.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,4,0,Math.PI*2);ctx.fill()});
+      if(label&&q.length){const p=q[Math.floor(q.length/2)];ctx.fillStyle="rgba(11,11,12,.88)";ctx.fillRect(p.x+6,p.y-20,Math.max(70,label.length*7),22);ctx.fillStyle=accentColor();ctx.fillText(label,p.x+11,p.y-5)}
     }
     getMeasurements().forEach(m=>{
       if(m.type==="distance" && m.points?.length===2){
         const a=toPx(m.points[0]),b=toPx(m.points[1]);
         ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
-        [a,b].forEach((q,i)=>{ctx.beginPath();ctx.arc(q.x,q.y,6,0,Math.PI*2);ctx.fill();ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(q.x+8,q.y-12,20,20);ctx.fillStyle="#ff6a00";ctx.fillText(i?"B":"A",q.x+13,q.y+3);ctx.fillStyle="#ff6a00";});
-        const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(mx+7,my-21,Math.max(74,m.label.length*7),23);ctx.fillStyle="#ff6a00";ctx.fillText(m.label,mx+12,my-6);
+        [a,b].forEach((q,i)=>{ctx.beginPath();ctx.arc(q.x,q.y,6,0,Math.PI*2);ctx.fill();ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(q.x+8,q.y-12,20,20);ctx.fillStyle=accentColor();ctx.fillText(i?"B":"A",q.x+13,q.y+3);ctx.fillStyle=accentColor();});
+        const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(mx+7,my-21,Math.max(74,m.label.length*7),23);ctx.fillStyle=accentColor();ctx.fillText(m.label,mx+12,my-6);
       } else drawPath(m.points,m.type==="area",m.label);
     });
     if(state.distanceDraft){
-      const a=toPx(state.distanceDraft.a),b=toPx(state.distanceDraft.b);ctx.save();ctx.setLineDash([7,5]);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.setLineDash([]);[a,b].forEach((q,i)=>{ctx.beginPath();ctx.arc(q.x,q.y,6,0,Math.PI*2);ctx.fill();ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(q.x+8,q.y-12,20,20);ctx.fillStyle="#ff6a00";ctx.fillText(i?"B":"A",q.x+13,q.y+3);ctx.fillStyle="#ff6a00";});ctx.restore();
+      const a=toPx(state.distanceDraft.a),b=toPx(state.distanceDraft.b);ctx.save();ctx.setLineDash([7,5]);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.setLineDash([]);[a,b].forEach((q,i)=>{ctx.beginPath();ctx.arc(q.x,q.y,6,0,Math.PI*2);ctx.fill();ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(q.x+8,q.y-12,20,20);ctx.fillStyle=accentColor();ctx.fillText(i?"B":"A",q.x+13,q.y+3);ctx.fillStyle=accentColor();});ctx.restore();
     }
     const f=fileMeta(state.currentFileId);
     const refs=f?.syncRefs?.[state.pageNum] || [];
     const live=state.syncCapture?.fileId===state.currentFileId ? state.syncCapture.points : [];
-    [...refs, ...live].forEach((p,i)=>{const q=toPx(p);ctx.beginPath();ctx.arc(q.x,q.y,7,0,Math.PI*2);ctx.stroke();ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(q.x+9,q.y-13,24,22);ctx.fillStyle="#ff6a00";ctx.fillText(i%2===0?"A":"B",q.x+15,q.y+3)});
+    [...refs, ...live].forEach((p,i)=>{const q=toPx(p);ctx.beginPath();ctx.arc(q.x,q.y,7,0,Math.PI*2);ctx.stroke();ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(q.x+9,q.y-13,24,22);ctx.fillStyle=accentColor();ctx.fillText(i%2===0?"A":"B",q.x+15,q.y+3)});
     const hi=state.armatureHighlight;
-    if(hi && hi.fileId===state.currentFileId && hi.page===state.pageNum){const e=hi.entry,q=toPx({x:e.x,y:e.y});const w=Math.max(42,(e.w||25)*state.renderScale),h=Math.max(26,(e.h||12)*state.renderScale);ctx.save();ctx.strokeStyle="#ff6a00";ctx.lineWidth=4;ctx.strokeRect(q.x-10,q.y-10,w+20,h+20);ctx.restore();}
+    if(hi && hi.fileId===state.currentFileId && hi.page===state.pageNum){const e=hi.entry,q=toPx({x:e.x,y:e.y});const w=Math.max(42,(e.w||25)*state.renderScale),h=Math.max(26,(e.h||12)*state.renderScale);ctx.save();ctx.strokeStyle=accentColor();ctx.lineWidth=4;ctx.strokeRect(q.x-10,q.y-10,w+20,h+20);ctx.restore();}
     for(const a of getAnnotations()){
-      ctx.save();ctx.strokeStyle=a.selected?'#ff4d4f':'#ff6a00';ctx.fillStyle='#ff6a00';ctx.lineWidth=a.selected?4:3;
-      if(a.type==='pen'){ctx.beginPath();a.points.forEach((p,i)=>{const q=toPx(p);i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y)});ctx.stroke()}
+      ctx.save();ctx.strokeStyle=a.selected?'#ff4d4f':accentColor();ctx.fillStyle=accentColor();ctx.lineWidth=a.selected?4:3;
+      if(a.type==='pen'){strokeSmooth(ctx,a.points.map(toPx))}
       if(a.type==='arrow'){const p=toPx(a.points[0]),q=toPx(a.points[1]);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();const an=Math.atan2(q.y-p.y,q.x-p.x);ctx.beginPath();ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-16*Math.cos(an-.5),q.y-16*Math.sin(an-.5));ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-16*Math.cos(an+.5),q.y-16*Math.sin(an+.5));ctx.stroke()}
       if(a.type==='circle'){const p=toPx(a.points[0]),q=toPx(a.points[1]);ctx.beginPath();ctx.ellipse((p.x+q.x)/2,(p.y+q.y)/2,Math.abs(q.x-p.x)/2,Math.abs(q.y-p.y)/2,0,0,Math.PI*2);ctx.stroke()}
       if(a.selected&&['arrow','circle'].includes(a.type)&&a.points?.length===2){
@@ -978,7 +1046,7 @@
         // whatever's underneath it.
         ctx.lineJoin='round';ctx.miterLimit=2;
         ctx.strokeStyle='rgba(255,255,255,.88)';ctx.lineWidth=Math.max(3,fs*.22);ctx.strokeText(a.text,p.x,p.y);
-        ctx.fillStyle=a.selected?'#ff8a3d':'#ff6a00';ctx.fillText(a.text,p.x,p.y);
+        ctx.fillStyle=a.selected?'#ff8a3d':accentColor();ctx.fillText(a.text,p.x,p.y);
         if(a.selected){
           const w=Math.max(44,String(a.text||'').length*fs*.62);
           ctx.save();ctx.strokeStyle='rgba(255,77,79,.9)';ctx.lineWidth=2;ctx.setLineDash([1,6]);ctx.lineCap='round';
@@ -996,8 +1064,8 @@
       // reviewed drawing kept showing up on whatever drawing you opened next.
       const pageHits=review.hits.filter(x=>x.fileId===state.currentFileId&&x.page===state.pageNum);
       if(pageHits.length){
-        ctx.save();ctx.lineWidth=3;ctx.strokeStyle="#ff6a00";ctx.fillStyle="rgba(255,106,0,.15)";ctx.font="800 12px system-ui";
-        pageHits.forEach((hit,i)=>{if(!Number.isFinite(hit.nx)||!Number.isFinite(hit.ny))return;const x=hit.nx*state.baseCanvasWidth,y=hit.ny*state.baseCanvasHeight,r=13;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle="#ff6a00";ctx.fillText(String(i+1),x+r+4,y+4);ctx.fillStyle="rgba(255,106,0,.15)";});ctx.restore();
+        ctx.save();ctx.lineWidth=3;ctx.strokeStyle=accentColor();ctx.fillStyle="rgba(255,106,0,.15)";ctx.font="800 12px system-ui";
+        pageHits.forEach((hit,i)=>{if(!Number.isFinite(hit.nx)||!Number.isFinite(hit.ny))return;const x=hit.nx*state.baseCanvasWidth,y=hit.ny*state.baseCanvasHeight,r=13;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle=accentColor();ctx.fillText(String(i+1),x+r+4,y+4);ctx.fillStyle="rgba(255,106,0,.15)";});ctx.restore();
       }
     }
     if(state.tempPoints.length) drawPath(state.tempPoints,false,"");
@@ -1079,7 +1147,14 @@
     return best;
   }
   $('#overlayCanvas').addEventListener('pointerdown',e=>{if(!['pen','arrow','circle'].includes(state.tool))return;const p=pdfPointFromEvent(e);state.drawDraft={type:state.tool,points:[p],pointerId:e.pointerId};if(state.tool==='arrow')showMeasureMagnifier(e);try{e.target.setPointerCapture(e.pointerId)}catch{}e.preventDefault()});
-  $('#overlayCanvas').addEventListener('pointermove',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;const p=pdfPointFromEvent(e);if(d.type==='pen')d.points.push(p);else d.points[1]=p;state.tempPoints=d.points;if(d.type==='arrow')showMeasureMagnifier(e);drawOverlay()});
+  $('#overlayCanvas').addEventListener('pointermove',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;const p=pdfPointFromEvent(e);
+    if(d.type==='pen'){
+      // Drop samples closer than ~1px on screen: finger jitter otherwise becomes
+      // permanent geometry and makes the saved stroke look shaky.
+      const last=d.points[d.points.length-1], sc=(state.renderScale*state.viewZoom)||1;
+      if(!last||Math.hypot(p.x-last.x,p.y-last.y)*sc>1.1)d.points.push(p);
+    }else d.points[1]=p;
+    state.tempPoints=d.points;if(d.type==='arrow')showMeasureMagnifier(e);drawOverlay()});
   $('#overlayCanvas').addEventListener('pointerup',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;if(d.type==='arrow')hideMeasureMagnifier();const p=pdfPointFromEvent(e);if(d.type!=='pen')d.points[1]=p;if(d.points.length>1){const a={id:uid(),type:d.type,points:d.points};getAnnotations().push(a);if(state.activeAtaMark){state.ataMarkAnnotationId=a.id; updateAtaMarkBar();}saveMeta()}state.drawDraft=null;state.tempPoints=[];setTool('pan');drawOverlay()});
   $('#overlayCanvas').addEventListener('pointercancel',()=>{if(state.drawDraft?.type==='arrow')hideMeasureMagnifier()});
   function openDirectTextEditor(clientX,clientY,pdfPoint,existing=null){
@@ -1174,7 +1249,11 @@
         if(added)continue;
         const txt=normalizeProductText(it.str);if(txt.length<5)continue;
         let best=null,bestScore=0;
-        for(const sch of schedules.filter(x=>x.documentType!=="occhioSchedule"))for(const e0 of(sch.armatureIndex||[])){const e=enrichEntryWithOcchio(f.projectId,e0);const cand=normalizeProductText([e.type,e.brand,e.occhioMatch?.type].filter(Boolean).join(" "));if(!cand)continue;const a=new Set(txt.split(" ").filter(x=>x.length>=3)),b=new Set(cand.split(" ").filter(x=>x.length>=3));let c=0;for(const x of a)if(b.has(x))c++;const score=c/Math.max(2,Math.min(a.size,b.size));if(score>bestScore){bestScore=score;best=e;}}
+        // Occhio schedules used to be excluded here, so an Occhio fixture could
+        // only ever be reached indirectly via an enriched entry in the ordinary
+        // armature schedule. Fixtures that exist ONLY in the Occhio overview
+        // (this project has an apartment like that) were unreachable entirely.
+        for(const sch of schedules)for(const e0 of(sch.armatureIndex||[])){const e=enrichEntryWithOcchio(f.projectId,e0);const cand=normalizeProductText([e.type,e.brand,e.occhioMatch?.type].filter(Boolean).join(" "));if(!cand)continue;const a=new Set(txt.split(" ").filter(x=>x.length>=3)),b=new Set(cand.split(" ").filter(x=>x.length>=3));let c=0;for(const x of a)if(b.has(x))c++;const score=c/Math.max(2,Math.min(a.size,b.size));if(score>bestScore){bestScore=score;best=e;}}
         if(best&&bestScore>=.6)state.smartHotspots.push({tag:best.tag,entry:best,x:it.x,y:it.y,w:Math.max(it.w,24),h:Math.max(it.h,10)});
       }
     }catch(err){console.warn("Hotspot scan failed",err)}
@@ -1639,39 +1718,19 @@
     return true;
   }
 
+  // Centring is done in CSS now (flexbox + margin:auto on #canvasWrap). This
+  // used to measure the viewport and set absolute left/top on the wrap, which
+  // fought a stack of `margin:0 auto !important` rules elsewhere in style.css
+  // and broke whenever it measured before layout had settled — the drawing
+  // ending up pinned to the top with dead space below it. Kept as a small
+  // no-op-ish hook because several call sites still call it; it only clears any
+  // stale inline positioning left over from older builds.
   function centerFullscreenDrawing(){
-    const viewer=$("#viewerView"), viewport=$("#pdfViewport"), wrap=$("#canvasWrap");
-    if(!viewer||!viewport||!wrap)return;
-    // This used to bail out here unless fullscreen-ui was active, which meant a
-    // zoomed-out drawing was NEVER centered in the normal (non-fullscreen) viewer —
-    // it just sat top-left inside pdf-viewport, leaving a big empty area below it.
-    // Centering must run in both modes; only the reserved header/rail space differs,
-    // because in fullscreen the head/toolstrip float as absolute overlays on top of
-    // pdfViewport, while in normal mode they sit in flow above/below it.
-    const isFs=viewer.classList.contains("fullscreen-ui");
-    const rail=isFs?76:0, topSafe=isFs?62:0, bottomSafe=isFs?18:0;
-    const w=parseFloat(wrap.style.width)||wrap.getBoundingClientRect().width;
-    const h=parseFloat(wrap.style.height)||wrap.getBoundingClientRect().height;
-    const availW=Math.max(80,viewport.clientWidth-rail);
-    const availH=Math.max(80,viewport.clientHeight-topSafe-bottomSafe);
-    const fits=w<=availW+1 && h<=availH+1;
-    wrap.style.transform="none";
-    if(fits){
-      const x=Math.max(0,(availW-w)/2);
-      const y=Math.max(topSafe,topSafe+(availH-h)/2);
-      viewport.classList.add("fit-centered");
-      wrap.style.position="absolute";
-      wrap.style.left=x+"px";
-      wrap.style.top=y+"px";
-      viewport.style.overflow="hidden";
-      viewport.scrollLeft=0; viewport.scrollTop=0;
-    }else{
-      viewport.classList.remove("fit-centered");
-      wrap.style.position="relative";
-      wrap.style.left="0px";
-      wrap.style.top="0px";
-      viewport.style.overflow="auto";
+    const wrap=$("#canvasWrap"); if(!wrap)return;
+    if(wrap.style.position||wrap.style.left||wrap.style.top){
+      wrap.style.position=""; wrap.style.left=""; wrap.style.top="";
     }
+    wrap.style.transform="none";
   }
 
   async function toggleFullscreen(){
@@ -2503,6 +2562,13 @@
     const inHatch=f=>zones.some(z=>f.cx>=z.x0&&f.cx<=z.x1&&f.cy>=z.y0&&f.cy<=z.y1);
     const inTitle=f=>f.cx>viewport.width*.80&&f.cy>viewport.height*.68;
     const tol=.34, near=(v,ref)=>Math.abs(v-ref)<=ref*tol;
+    // A symbol placed on an angled wall is drawn rotated, which fattens its
+    // axis-aligned bounding box (a dome measuring 11.3x5.6 upright came out as
+    // 10.9x7.9 tilted) and made a strict width/height match miss it. Polygon
+    // AREA is unaffected by rotation, so it is used as the primary size test
+    // with the bbox only sanity-checking the overall footprint.
+    const polyArea=f=>{const q=f.pts;let a=0;for(let i=0,j=q.length-1;i<q.length;j=i++)a+=(q[j][0]+q[i][0])*(q[j][1]-q[i][1]);return Math.abs(a/2)};
+    const domeArea=domeRef?polyArea(domeRef):0;
     const vpAreas=scannerToViewportAreas(areas,viewport);
 
     const hits=[];
@@ -2510,7 +2576,8 @@
       if(inLegend(f)||inHatch(f)||inTitle(f))continue;
       const lo=Math.min(f.w,f.h), hi=Math.max(f.w,f.h), ratio=hi/Math.max(lo,.01);
       let type=null;
-      if(types.outlets&&domeRef&&near(hi,domeLong)&&near(lo,domeShort)&&ratio>1.5)type='outlet';
+      const ar=domeArea?polyArea(f)/domeArea:0;
+      if(types.outlets&&domeRef&&ar>.62&&ar<1.62&&hi>domeLong*.6&&hi<domeLong*1.5&&ratio>1.15)type='outlet';
       else if(types.switches&&circRef&&near(hi,circD)&&near(lo,circD)&&ratio<1.45&&hasArm(f))type='switch';
       if(!type)continue;
       const nearArea=scannerNearestArea(f.cx,f.cy,vpAreas,viewport.width,viewport.height);
@@ -2768,11 +2835,11 @@
   }
   function drawAtaAnnotationSnapshot(ctx,a,scale){
     const px=p=>({x:p.x*scale,y:p.y*scale});
-    ctx.save();ctx.strokeStyle='#ff6a00';ctx.fillStyle='#ff6a00';ctx.lineWidth=3;ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.save();ctx.strokeStyle=accentColor();ctx.fillStyle=accentColor();ctx.lineWidth=3;ctx.lineCap='round';ctx.lineJoin='round';
     if(a.type==='pen'&&a.points?.length){ctx.beginPath();a.points.forEach((p,i)=>{const q=px(p);i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y)});ctx.stroke()}
     if(a.type==='arrow'&&a.points?.length>=2){const p=px(a.points[0]),q=px(a.points[1]);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();const an=Math.atan2(q.y-p.y,q.x-p.x);ctx.beginPath();ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-10*Math.cos(an-.48),q.y-10*Math.sin(an-.48));ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-10*Math.cos(an+.48),q.y-10*Math.sin(an+.48));ctx.stroke()}
     if(a.type==='circle'&&a.points?.length>=2){const p=px(a.points[0]),q=px(a.points[1]);ctx.beginPath();ctx.ellipse((p.x+q.x)/2,(p.y+q.y)/2,Math.max(3,Math.abs(q.x-p.x)/2),Math.max(3,Math.abs(q.y-p.y)/2),0,0,Math.PI*2);ctx.stroke()}
-    if(a.type==='text'&&a.points?.length){const p=px(a.points[0]);ctx.font='bold 18px Arial,sans-serif';ctx.lineWidth=4;ctx.strokeStyle='rgba(255,255,255,.92)';ctx.strokeText(a.text||'',p.x,p.y);ctx.fillStyle='#ff6a00';ctx.fillText(a.text||'',p.x,p.y)}
+    if(a.type==='text'&&a.points?.length){const p=px(a.points[0]);ctx.font='bold 18px Arial,sans-serif';ctx.lineWidth=4;ctx.strokeStyle='rgba(255,255,255,.92)';ctx.strokeText(a.text||'',p.x,p.y);ctx.fillStyle=accentColor();ctx.fillText(a.text||'',p.x,p.y)}
     ctx.restore();
   }
   function captureAtaMarkSnapshot(annotations){
@@ -2819,13 +2886,16 @@
     const id=state.activeAtaMark,base=state.ataMarkBaseIds instanceof Set?state.ataMarkBaseIds:new Set();
     state.meta.annotations[pageKey()]=getAnnotations().filter(a=>base.has(a.id));saveMeta();returnToAta(id);state.activeAtaMark=null;state.ataMarkAnnotationId=null;state.ataMarkBaseIds=null;updateAtaMarkBar();
   }
-  function showMeasureMagnifier(e){const mag=$("#measureMagnifier"),base=$("#pdfCanvas"),over=$("#overlayCanvas"),vp=$("#pdfViewport");if(!mag||!base)return;mag.classList.remove("hidden");const vr=vp.getBoundingClientRect();mag.style.left=Math.max(8,Math.min(vp.clientWidth-160,e.clientX-vr.left-75))+"px";mag.style.top=Math.max(8,e.clientY-vr.top-190)+"px";const ctx=mag.getContext("2d"),r=over.getBoundingClientRect(),sx=(e.clientX-r.left)*(over.width/r.width),sy=(e.clientY-r.top)*(over.height/r.height),crop=45;ctx.clearRect(0,0,180,180);ctx.drawImage(base,sx-crop,sy-crop,crop*2,crop*2,0,0,180,180);ctx.strokeStyle="#ff6a00";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(90,68);ctx.lineTo(90,112);ctx.moveTo(68,90);ctx.lineTo(112,90);ctx.stroke();}
+  function showMeasureMagnifier(e){const mag=$("#measureMagnifier"),base=$("#pdfCanvas"),over=$("#overlayCanvas"),vp=$("#pdfViewport");if(!mag||!base)return;mag.classList.remove("hidden");const vr=vp.getBoundingClientRect();mag.style.left=Math.max(8,Math.min(vp.clientWidth-160,e.clientX-vr.left-75))+"px";mag.style.top=Math.max(8,e.clientY-vr.top-190)+"px";const ctx=mag.getContext("2d"),r=over.getBoundingClientRect(),sx=(e.clientX-r.left)*(over.width/r.width),sy=(e.clientY-r.top)*(over.height/r.height),crop=45;ctx.clearRect(0,0,180,180);ctx.drawImage(base,sx-crop,sy-crop,crop*2,crop*2,0,0,180,180);ctx.strokeStyle=accentColor();ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(90,68);ctx.lineTo(90,112);ctx.moveTo(68,90);ctx.lineTo(112,90);ctx.stroke();}
   function hideMeasureMagnifier(){$("#measureMagnifier")?.classList.add("hidden")}
   $$(".nav-btn").forEach(b=>b.onclick=()=>{showView(b.dataset.view); if(b.dataset.view==="projectsView")renderProjects(); if(b.dataset.view==="drawingsView")renderAllDrawings(); if(b.dataset.view==="todoView")renderTodos(); if(b.dataset.view==="ataView")renderAtas(); if(b.dataset.view==="counterView")renderCounter()});
   // Version history, shown in Inställningar → Om appen. Kept inline so it works
   // offline on site (no network on a building site) and stays in step with the
   // build it actually shipped with.
   const CHANGELOG=[
+    {v:"7.4.0",d:"Nytt tema \"Neon\" — svart och grönt med diskret glöd och rutnätsbakgrund. Markeringar och mått på ritningen följer nu temats färg i stället för att alltid vara orange. Versionshistoriken samlad: den äldre historiken från README-filerna är inflyttad hit."},
+    {v:"7.3.0",d:"Armaturer från Occhio-förteckningen går nu att trycka på. Ritningar som använder Occhio märker armaturerna \"position.instans\" (t.ex. 3.1, 3.2) medan förteckningens poster hette \"POS 03\" — de kunde därför aldrig matcha varandra. Occhio-poster ingår nu även i produktnamnsmatchningen."},
+    {v:"7.2.0",d:"Ritningen centreras nu korrekt (flexbox i stället för JS-mätning som motverkades av gamla CSS-regler). Dialogrutor fungerar i helskärm — tidigare öppnades de osynligt bakom helskärmsvyn, så radering och textverktyg verkade inte göra något. Pennan ritar mjuka linjer utan punktspår. Bläddringspilarna symmetriska. Roterade symboler hittas nu av räknaren."},
     {v:"7.1.0",d:"Helskärmsläget omgjort: tomma toppbaren borta, kompakt namn-pill, smal ikonrad och ett tryck på ritningen döljer all meny. Nya enhetliga verktygsikoner. Bakåtknappen stänger inte längre appen när en dialog är öppen."},
     {v:"7.0.0",d:"Räknaren ombyggd på vektorgeometri: läser ritningens faktiska ritkommandon i stället för att gissa former ur pixlar. Skrafferade referensytor exkluderas nu exakt. 3–4× snabbare."},
     {v:"6.5",  d:"Helskärmsläget räknar om anpassningen flera gånger tills layouten satt sig, i stället för en enda fast fördröjning."},
@@ -2834,7 +2904,12 @@
     {v:"6.2",  d:"Bläddring följer logisk ritningsordning. Nya bläddringspilar. Text med halo. Nyp med två fingrar ändrar textstorlek."},
     {v:"6.1",  d:"Räknarens träffmarkörer följer inte längre med till fel ritning."},
     {v:"6.0",  d:"Ny symbolklassificering, dubblad skanningsupplösning och kalibrering mot ritningens egen förklaring."},
-    {v:"5.1.5",d:"Centrering av ritningen även i normalläget. Pilens ändpunkter kan justeras separat."}
+    {v:"5.1.5",d:"Centrering av ritningen även i normalläget. Pilens ändpunkter kan justeras separat."},
+    {v:"4",    d:"Ritningen öppnas i Passa-läge. Swipe byter ritning endast utzoomad. Synka plan: två referenspunkter kompenserar för förskjutning, skala och rotation mellan våningsplan."},
+    {v:"3.1",  d:"Rak A–B-mätning. Automatisk skala från SKALA 1:xx. Area-kalibrering mot utskriven rumsarea. Smart armaturmatchning mot Occhio-översikt."},
+    {v:"3",    d:"Pinch-zoom direkt på ritningsytan. Våningsväljare och Lås vy. Ritningsanalys med plan och del. Armaturförteckningar som smarta dokument. Att göra-lista."},
+    {v:"2",    d:"Nyp/zoom med två fingrar, panorering, swipe mellan ritningar, helskärm och zoomindikator."},
+    {v:"1",    d:"Projekt, PDF- och ZIP-import, skala per sida, kalibrering, avstånd, sträcka och area, export och backup."}
   ];
   $("#changelogBtn")?.addEventListener("click",()=>{
     const box=$("#changelogBox"); if(!box)return;

@@ -490,7 +490,7 @@ button.file-tag{cursor:pointer}
 /* Fullscreen mode has the toolstrip running down the right edge, so the right
    arrow needs extra clearance there; everything else (size, bottom offset,
    shape) stays identical to normal mode for visual consistency. */
-.viewer-view.fullscreen-ui .drawing-edge-right{right:74px}
+.viewer-view.fullscreen-ui .drawing-edge-right{right:14px}
 /* ===== Fullscreen ("immersive") viewer — EKIS FIELD v7.1 =====
    The old layout kept the normal header in place and merely hid its contents,
    leaving a large empty grey bar across the top and pushing the drawing down.
@@ -538,7 +538,7 @@ button.file-tag{cursor:pointer}
 .viewer-view.fullscreen-ui .toolstrip .tool:active{background:rgba(255,255,255,.14)}
 .viewer-view.fullscreen-ui .toolstrip #deleteSelectedBtn{color:#ff6b6b}
 
-.viewer-view.fullscreen-ui .drawing-edge-right{right:70px}
+
 
 /* Single tap on the sheet fades the chrome out; tap again to bring it back. */
 .viewer-view.fullscreen-ui.chrome-hidden .viewer-head{opacity:0;transform:translateX(-50%) translateY(-10px);pointer-events:none}
@@ -641,3 +641,84 @@ button.file-tag{cursor:pointer}
 .changelog-item{border-left:2px solid #ff6a00;padding-left:11px}
 .changelog-item strong{display:block;font-size:13px;letter-spacing:.02em;margin-bottom:3px}
 .changelog-item p{margin:0;font-size:12.5px;line-height:1.45}
+
+/* ===== v7.2: centrering via flexbox i stället för JS-mätning =====
+   Ritningen centrerades tidigare genom att JS mätte ytan och satte absolut
+   position på #canvasWrap. Det gick sönder så fort någon av de många
+   `margin:0 auto !important`-reglerna nedanför i filen vann över den, eller
+   när mätningen skedde innan layouten hunnit sätta sig — resultatet blev en
+   ritning klistrad högst upp med svart yta under. Flexbox + `margin:auto` på
+   barnet gör samma sak i webbläsaren: centrerat när det får plats, och fullt
+   scrollbart (inklusive upp till kanten) när det inte gör det. */
+.pdf-viewport{display:flex!important;align-items:center!important;justify-content:center!important}
+#canvasWrap,.canvas-wrap{margin:auto!important}
+.viewer-view.fullscreen-ui .pdf-viewport{align-items:center!important;justify-content:center!important}
+.viewer-view.fullscreen-ui #canvasWrap,
+.viewer-view.fullscreen-ui .canvas-wrap{margin:auto!important;position:relative!important;left:auto!important;top:auto!important}
+#pdfViewport.fit-centered{overflow:auto!important}
+#pdfViewport.fit-centered #canvasWrap{margin:auto!important;position:relative!important;left:auto!important;top:auto!important}
+
+/* Dialogs must sit above the pseudo-fullscreen viewer (z-index:999). */
+.modal{z-index:100000!important}
+.toast{z-index:100001!important}
+
+/* The right arrow sat at right:70-74px to clear the old full-width toolstrip,
+   which left it visibly off-centre against the left arrow at right:14px. The
+   rail is now vertically centred, so the bottom corners are free and both
+   arrows can sit symmetrically. */
+.viewer-view.fullscreen-ui .drawing-edge-left{left:14px}
+.viewer-view.fullscreen-ui .drawing-edge-right{right:14px}
+
+/* ===================================================================
+   TEMA 3: "NEON" — svart & grönt (v7.4)
+   Alla accenter i appen går redan via --orange, så temat byter den mot
+   en neongrön och lägger till diskret glöd på de element som är i fokus.
+   =================================================================== */
+:root[data-theme="neon"]{
+  --bg:#04070a; --panel:#0a1311; --panel2:#0e1a16; --line:#17362c;
+  --text:#e8fff5; --muted:#6e9c8b;
+  --orange:#00ff9c; --orange2:#5effc0;
+  --danger:#ff4d6d; --ok:#00ff9c;
+  --neon-glow:0 0 12px rgba(0,255,156,.42);
+}
+:root[data-theme="neon"] html,:root[data-theme="neon"] body{background:var(--bg);color:var(--text)}
+
+/* Svagt lysande rutnät i bakgrunden — syns knappt, men ger djup. */
+:root[data-theme="neon"] body:before{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(0,255,156,.045) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(0,255,156,.045) 1px,transparent 1px);
+  background-size:44px 44px;
+  mask-image:radial-gradient(ellipse at 50% 0%,#000 0%,transparent 78%);
+  -webkit-mask-image:radial-gradient(ellipse at 50% 0%,#000 0%,transparent 78%);
+}
+:root[data-theme="neon"] #app{position:relative;z-index:1}
+
+:root[data-theme="neon"] .topbar{background:rgba(4,7,10,.92);box-shadow:0 1px 0 rgba(0,255,156,.14)}
+:root[data-theme="neon"] .bottom-nav{background:rgba(6,12,10,.96);box-shadow:0 -8px 26px rgba(0,255,156,.07)}
+:root[data-theme="neon"] .nav-btn.active{color:var(--orange);text-shadow:var(--neon-glow)}
+:root[data-theme="neon"] .card,
+:root[data-theme="neon"] .settings-card,
+:root[data-theme="neon"] .file-row{border-color:var(--line)}
+:root[data-theme="neon"] .btn.primary,
+:root[data-theme="neon"] .tool.active{background:var(--orange);color:#00160e;box-shadow:var(--neon-glow)}
+:root[data-theme="neon"] .toolstrip .tool.active svg{filter:drop-shadow(0 0 3px rgba(0,0,0,.4))}
+:root[data-theme="neon"] .badge{border-color:var(--line);color:var(--orange)}
+:root[data-theme="neon"] .drawing-edge-arrow{border-color:rgba(0,255,156,.26);background:rgba(6,16,13,.66)}
+:root[data-theme="neon"] .drawing-edge-arrow:active{background:rgba(0,255,156,.24);border-color:var(--orange)}
+:root[data-theme="neon"] .viewer-view.fullscreen-ui .viewer-head,
+:root[data-theme="neon"] .viewer-view.fullscreen-ui .toolstrip{
+  background:rgba(6,16,13,.72);border-color:rgba(0,255,156,.18);
+  box-shadow:0 6px 22px rgba(0,0,0,.5),0 0 22px rgba(0,255,156,.09)
+}
+:root[data-theme="neon"] .changelog-item{border-left-color:var(--orange)}
+:root[data-theme="neon"] .modal-card{border-color:var(--line);box-shadow:0 0 40px rgba(0,255,156,.10)}
+:root[data-theme="neon"] .toast{border-color:rgba(0,255,156,.3);box-shadow:var(--neon-glow)}
+:root[data-theme="neon"] .eyebrow{color:var(--orange);text-shadow:0 0 9px rgba(0,255,156,.30)}
+:root[data-theme="neon"] h1{text-shadow:0 0 18px rgba(0,255,156,.13)}
+/* Ritningen är svart-på-vitt i PDF:en och lämnas orörd — bara ramen färgas. */
+:root[data-theme="neon"] .canvas-wrap{box-shadow:0 8px 35px rgba(0,0,0,.6),0 0 0 1px rgba(0,255,156,.20)}
+
+.preview-neon{background:#04070a;border-color:#17362c}
+.preview-neon i{background:#0e1a16}
+.preview-neon i:nth-child(3){background:#0a1311}
