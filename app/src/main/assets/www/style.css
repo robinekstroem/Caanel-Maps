@@ -650,13 +650,17 @@ button.file-tag{cursor:pointer}
    ritning klistrad högst upp med svart yta under. Flexbox + `margin:auto` på
    barnet gör samma sak i webbläsaren: centrerat när det får plats, och fullt
    scrollbart (inklusive upp till kanten) när det inte gör det. */
-.pdf-viewport{display:flex!important;align-items:center!important;justify-content:center!important}
-#canvasWrap,.canvas-wrap{margin:auto!important}
-.viewer-view.fullscreen-ui .pdf-viewport{align-items:center!important;justify-content:center!important}
-.viewer-view.fullscreen-ui #canvasWrap,
-.viewer-view.fullscreen-ui .canvas-wrap{margin:auto!important;position:relative!important;left:auto!important;top:auto!important}
+/* Blocklayout, INTE flex. En centrerad flex-/grid-item i en scrollcontainer
+   går inte att scrolla till sin egen startkant: överskottet till vänster hamnar
+   på negativ scrollposition som scrollLeft aldrig kan nå, så inzoomad ritning
+   tog stopp mot en osynlig vägg innan vänsterkanten. Med blocklayout och
+   `margin-inline:auto` centreras ritningen när den får plats, och auto-marginalen
+   blir 0 så snart den är bredare än ytan — då börjar den vid scroll 0 och hela
+   bredden går att nå. Vertikal centrering sätts som margin-top i JS, vilket är
+   scrollbart på samma sätt. */
+.pdf-viewport{display:block!important}
+#canvasWrap,.canvas-wrap{margin-left:auto!important;margin-right:auto!important;position:relative!important;left:auto!important;top:auto!important}
 #pdfViewport.fit-centered{overflow:auto!important}
-#pdfViewport.fit-centered #canvasWrap{margin:auto!important;position:relative!important;left:auto!important;top:auto!important}
 
 /* Dialogs must sit above the pseudo-fullscreen viewer (z-index:999). */
 .modal{z-index:100000!important}
@@ -683,16 +687,7 @@ button.file-tag{cursor:pointer}
 }
 :root[data-theme="neon"] html,:root[data-theme="neon"] body{background:var(--bg);color:var(--text)}
 
-/* Svagt lysande rutnät i bakgrunden — syns knappt, men ger djup. */
-:root[data-theme="neon"] body:before{
-  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
-  background-image:linear-gradient(rgba(0,255,156,.045) 1px,transparent 1px),
-                   linear-gradient(90deg,rgba(0,255,156,.045) 1px,transparent 1px);
-  background-size:44px 44px;
-  mask-image:radial-gradient(ellipse at 50% 0%,#000 0%,transparent 78%);
-  -webkit-mask-image:radial-gradient(ellipse at 50% 0%,#000 0%,transparent 78%);
-}
-:root[data-theme="neon"] #app{position:relative;z-index:1}
+/* Rutnätet ligger nu i ALLA teman (se --grid-line längre ned). */
 
 :root[data-theme="neon"] .topbar{background:rgba(4,7,10,.92);box-shadow:0 1px 0 rgba(0,255,156,.14)}
 :root[data-theme="neon"] .bottom-nav{background:rgba(6,12,10,.96);box-shadow:0 -8px 26px rgba(0,255,156,.07)}
@@ -722,3 +717,80 @@ button.file-tag{cursor:pointer}
 .preview-neon{background:#04070a;border-color:#17362c}
 .preview-neon i{background:#0e1a16}
 .preview-neon i:nth-child(3){background:#0a1311}
+
+/* ===== Rutnätsbakgrund i alla teman (v7.5) =====
+   Låg opacitet och uttonad mot kanterna, så den ger djup utan att konkurrera
+   med innehållet. Färgen kommer från temat via --grid-line. */
+:root{--grid-line:rgba(255,255,255,.035)}
+:root[data-theme="light"]{--grid-line:rgba(20,22,26,.045)}
+:root[data-theme="neon"]{--grid-line:rgba(0,255,156,.055)}
+body:before{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),
+                   linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
+  background-size:44px 44px;
+  mask-image:radial-gradient(ellipse at 50% 0%,#000 0%,transparent 80%);
+  -webkit-mask-image:radial-gradient(ellipse at 50% 0%,#000 0%,transparent 80%);
+}
+#app{position:relative;z-index:1}
+
+/* ===== Neon: full täckning (v7.5) =====
+   Loggan är en vit PNG, så den kan inte färgas med filter. Den används i
+   stället som mask och färgas av bakgrunden — då blir hela "EKIS FIELD" grön. */
+:root[data-theme="neon"] .brand{
+  -webkit-mask-image:url(logo-transparent.png);mask-image:url(logo-transparent.png);
+  -webkit-mask-size:contain;mask-size:contain;
+  -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
+  -webkit-mask-position:center;mask-position:center;
+  background:var(--orange);
+  filter:drop-shadow(0 0 10px rgba(0,255,156,.45))
+}
+:root[data-theme="neon"] .brand img{visibility:hidden}
+:root[data-theme="neon"] .splash-logo,
+:root[data-theme="neon"] #ekisSplash .s24-ekis{
+  background:linear-gradient(180deg,#d9ffef 0%,var(--orange) 45%,#0b8f5c 100%)!important;
+  -webkit-background-clip:text!important;background-clip:text!important;
+  -webkit-text-fill-color:transparent!important;
+  text-shadow:0 0 26px rgba(0,255,156,.35)!important
+}
+:root[data-theme="neon"] #ekisSplash .s24-field span,
+:root[data-theme="neon"] #ekisSplash .s24-tagline b{color:var(--orange)!important}
+:root[data-theme="neon"] #ekisSplash .s24-field i{background:var(--orange)!important}
+:root[data-theme="neon"] #ekisSplash .s24-glow{
+  background:radial-gradient(circle,rgba(0,255,156,.22) 0%,rgba(0,255,156,.07) 38%,transparent 68%)!important}
+
+/* Ytor och kanter som annars behöll den mörka standardpaletten. */
+:root[data-theme="neon"] .btn,
+:root[data-theme="neon"] .icon-btn,
+:root[data-theme="neon"] .tool,
+:root[data-theme="neon"] .chip,
+:root[data-theme="neon"] select,
+:root[data-theme="neon"] input,
+:root[data-theme="neon"] textarea,
+:root[data-theme="neon"] .theme-option,
+:root[data-theme="neon"] .smart-doc,
+:root[data-theme="neon"] .modal-card,
+:root[data-theme="neon"] .statusline,
+:root[data-theme="neon"] .counter-results,
+:root[data-theme="neon"] .ata-card,
+:root[data-theme="neon"] .todo-item{
+  background:var(--panel);border-color:var(--line);color:var(--text)
+}
+:root[data-theme="neon"] .btn.ghost{background:transparent;border-color:var(--line);color:var(--orange)}
+:root[data-theme="neon"] .btn:active,
+:root[data-theme="neon"] .icon-btn:active{border-color:var(--orange);box-shadow:var(--neon-glow)}
+:root[data-theme="neon"] .theme-option.active{border-color:var(--orange);box-shadow:var(--neon-glow)}
+:root[data-theme="neon"] a,
+:root[data-theme="neon"] .link,
+:root[data-theme="neon"] strong.accent,
+:root[data-theme="neon"] .file-icon{color:var(--orange)}
+:root[data-theme="neon"] .file-icon{border-color:var(--line);background:var(--panel2)}
+:root[data-theme="neon"] .muted,
+:root[data-theme="neon"] small{color:var(--muted)}
+:root[data-theme="neon"] progress::-webkit-progress-value{background:var(--orange)}
+:root[data-theme="neon"] ::selection{background:rgba(0,255,156,.28);color:#eafff6}
+:root[data-theme="neon"] input:focus,
+:root[data-theme="neon"] select:focus,
+:root[data-theme="neon"] textarea:focus{outline:none;border-color:var(--orange);box-shadow:var(--neon-glow)}
+:root[data-theme="neon"] .scanner-review-bar{background:rgba(6,16,13,.92);border-color:rgba(0,255,156,.24)}
+:root[data-theme="neon"] .measure-summary{color:var(--orange)}

@@ -1449,8 +1449,12 @@
     if(!state.baseCanvasWidth || !state.baseCanvasHeight)return;
     const oldW=parseFloat(wrap.style.width)||state.baseCanvasWidth*state.viewZoom;
     const oldH=parseFloat(wrap.style.height)||state.baseCanvasHeight*state.viewZoom;
-    const centerX=viewport.scrollLeft+viewport.clientWidth/2;
-    const centerY=viewport.scrollTop+viewport.clientHeight/2;
+    // Convert the on-screen centre into CONTENT coordinates. When the drawing is
+    // centred it sits at an offset inside the scroll area, so using raw scroll
+    // coordinates made zoom drift sideways.
+    const offX0=wrap.offsetLeft||0, offY0=wrap.offsetTop||0;
+    const centerX=viewport.scrollLeft+viewport.clientWidth/2-offX0;
+    const centerY=viewport.scrollTop+viewport.clientHeight/2-offY0;
     const fx=oldW?centerX/oldW:.5, fy=oldH?centerY/oldH:.5;
 
     const min=state.fitZoom||.1;
@@ -1462,9 +1466,10 @@
     $("#zoomResetBtn").textContent=isFullyZoomedOut()?"Passa":Math.round(state.viewZoom/state.fitZoom*100)+"%";
     if(keepCenter){
       requestAnimationFrame(()=>{
-        viewport.scrollLeft=Math.max(0,fx*w-viewport.clientWidth/2);
-        viewport.scrollTop=Math.max(0,fy*h-viewport.clientHeight/2);
         centerFullscreenDrawing();
+        const offX=wrap.offsetLeft||0, offY=wrap.offsetTop||0;
+        viewport.scrollLeft=Math.max(0,fx*w+offX-viewport.clientWidth/2);
+        viewport.scrollTop=Math.max(0,fy*h+offY-viewport.clientHeight/2);
       });
     }else requestAnimationFrame(centerFullscreenDrawing);
   }
@@ -1726,11 +1731,16 @@
   // no-op-ish hook because several call sites still call it; it only clears any
   // stale inline positioning left over from older builds.
   function centerFullscreenDrawing(){
-    const wrap=$("#canvasWrap"); if(!wrap)return;
-    if(wrap.style.position||wrap.style.left||wrap.style.top){
-      wrap.style.position=""; wrap.style.left=""; wrap.style.top="";
-    }
-    wrap.style.transform="none";
+    const viewport=$("#pdfViewport"), wrap=$("#canvasWrap"); if(!viewport||!wrap)return;
+    wrap.style.position=""; wrap.style.left=""; wrap.style.top=""; wrap.style.transform="none";
+    // Horizontal centring is CSS (margin-inline:auto). Vertical centring has no
+    // block-layout equivalent, so it is applied as a top margin — which, unlike
+    // flex/grid centring, keeps every part of an overflowing drawing reachable
+    // by scrolling.
+    const h=parseFloat(wrap.style.height)||wrap.getBoundingClientRect().height;
+    const pad=Math.max(0,(viewport.clientHeight-h)/2);
+    wrap.style.marginTop=pad+"px";
+    wrap.style.marginBottom=pad+"px";
   }
 
   async function toggleFullscreen(){
@@ -2893,6 +2903,7 @@
   // offline on site (no network on a building site) and stays in step with the
   // build it actually shipped with.
   const CHANGELOG=[
+    {v:"7.5.0",d:"Panorering inzoomad når nu hela ritningen — den centrerade layouten lade vänsterkanten på negativ scrollposition som inte gick att nå. Neon-temat täcker nu hela appen inklusive loggan. Rutnätsbakgrunden finns i alla tre teman."},
     {v:"7.4.0",d:"Nytt tema \"Neon\" — svart och grönt med diskret glöd och rutnätsbakgrund. Markeringar och mått på ritningen följer nu temats färg i stället för att alltid vara orange. Versionshistoriken samlad: den äldre historiken från README-filerna är inflyttad hit."},
     {v:"7.3.0",d:"Armaturer från Occhio-förteckningen går nu att trycka på. Ritningar som använder Occhio märker armaturerna \"position.instans\" (t.ex. 3.1, 3.2) medan förteckningens poster hette \"POS 03\" — de kunde därför aldrig matcha varandra. Occhio-poster ingår nu även i produktnamnsmatchningen."},
     {v:"7.2.0",d:"Ritningen centreras nu korrekt (flexbox i stället för JS-mätning som motverkades av gamla CSS-regler). Dialogrutor fungerar i helskärm — tidigare öppnades de osynligt bakom helskärmsvyn, så radering och textverktyg verkade inte göra något. Pennan ritar mjuka linjer utan punktspår. Bläddringspilarna symmetriska. Roterade symboler hittas nu av räknaren."},

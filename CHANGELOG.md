@@ -2,6 +2,23 @@
 
 ---
 
+## 7.5.0 (build 50)
+
+**Panorering når hela ritningen igen**
+- Inzoomad gick det inte att panorera hela vägen ut till vänsterkanten — det tog stopp mot en osynlig vägg. Orsaken var centreringen som infördes i 7.2: en centrerad flex-item i en scrollcontainer kan inte scrollas till sin egen startkant, eftersom överskottet hamnar på negativ scrollposition och `scrollLeft` aldrig kan bli mindre än noll.
+- Centreringen görs nu med blocklayout: `margin-inline:auto` horisontellt (blir automatiskt 0 när ritningen är bredare än ytan, så den börjar vid scroll 0) och margin-top vertikalt. Ritningen är fortfarande centrerad när den får plats, men varje del går att nå när den är inzoomad.
+- Zoomankaret räknar nu med centreringens offset, så inzoomning inte glider i sidled.
+
+**Neon-temat utökat**
+- Loggan "EKIS FIELD" är nu grön. PNG:n är vit och går inte att färga med filter, så den används som mask och färgas av bakgrunden.
+- Startskärmens EKIS-text, linjer och glöd följer temat.
+- Knappar, fält, listor, dialoger, fokusramar, markeringar och statusrader som tidigare behöll den mörka standardpaletten är nu gröna.
+
+**Rutnätet i alla teman**
+- Bakgrundsrutnätet låg bara i Neon. Det finns nu i Svart, Vit och Neon, med färg efter temat (vitt, mörkt respektive grönt) och uttonat mot kanterna.
+
+---
+
 ## 7.4.0 (build 49)
 
 **Nytt tema: Neon (svart & grönt)**
