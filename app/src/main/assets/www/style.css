@@ -251,7 +251,7 @@ button.file-tag{cursor:pointer}
   display:block;
   max-width:none;
   max-height:none;
-  margin:0 auto !important;
+  margin-left:auto !important;margin-right:auto !important;
   flex:none;
 }
 @media(max-width:650px){
@@ -285,7 +285,7 @@ button.file-tag{cursor:pointer}
 @keyframes coreIgniteClinical{0%,18%{opacity:0;transform:scale(.35)}31%{opacity:1;transform:scale(1.08)}39%{opacity:.18;transform:scale(.92)}52%{opacity:1;transform:scale(1.02)}100%{opacity:.58;transform:scale(1)}}
 @keyframes bulbFlashClinical{0%,22%{opacity:0;transform:scale(.55)}34%{opacity:.46;transform:scale(1.02)}43%{opacity:.08}55%{opacity:.34}100%{opacity:.22;transform:scale(1)}}
 @keyframes wordRevealClinical{0%{opacity:0;transform:translate(-50%,-48%) scale(.992)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
-.pdf-viewport{padding:18px 18px 110px 18px !important;box-sizing:border-box!important}
+.pdf-viewport{padding:16px!important;box-sizing:border-box!important}
 @media(max-width:650px){.pdf-viewport{padding:12px 12px 96px 12px !important}}
 
 /* EKIS FIELD v4.0.14 – selectable dark/light themes */
@@ -679,51 +679,54 @@ button.file-tag{cursor:pointer}
    en neongrön och lägger till diskret glöd på de element som är i fokus.
    =================================================================== */
 :root[data-theme="neon"]{
-  --bg:#04070a; --panel:#0a1311; --panel2:#0e1a16; --line:#17362c;
-  --text:#e8fff5; --muted:#6e9c8b;
-  --orange:#00ff9c; --orange2:#5effc0;
-  --danger:#ff4d6d; --ok:#00ff9c;
-  --neon-glow:0 0 12px rgba(0,255,156,.42);
+  /* Djup, mättad grönska snarare än mintgrönt: mörkgrön bas med en varmare,
+     gräsgrön accent — mer "gamma"/Hulk än neon-cyan. */
+  --bg:#050b06; --panel:#0c1a0e; --panel2:#122415; --line:#20481f;
+  --text:#e4ffe4; --muted:#7ba97c;
+  --orange:#4ade4a; --orange2:#86ff7a;
+  --danger:#ff4d5e; --ok:#4ade4a;
+  --neon-glow:0 0 14px rgba(74,222,74,.40);
+  --grid-line:rgba(74,222,74,.055);
 }
 :root[data-theme="neon"] html,:root[data-theme="neon"] body{background:var(--bg);color:var(--text)}
 
 /* Rutnätet ligger nu i ALLA teman (se --grid-line längre ned). */
 
-:root[data-theme="neon"] .topbar{background:rgba(4,7,10,.92);box-shadow:0 1px 0 rgba(0,255,156,.14)}
-:root[data-theme="neon"] .bottom-nav{background:rgba(6,12,10,.96);box-shadow:0 -8px 26px rgba(0,255,156,.07)}
+:root[data-theme="neon"] .topbar{background:rgba(4,7,10,.92);box-shadow:0 1px 0 rgba(74,222,74,.14)}
+:root[data-theme="neon"] .bottom-nav{background:rgba(6,12,10,.96);box-shadow:0 -8px 26px rgba(74,222,74,.07)}
 :root[data-theme="neon"] .nav-btn.active{color:var(--orange);text-shadow:var(--neon-glow)}
 :root[data-theme="neon"] .card,
 :root[data-theme="neon"] .settings-card,
 :root[data-theme="neon"] .file-row{border-color:var(--line)}
 :root[data-theme="neon"] .btn.primary,
-:root[data-theme="neon"] .tool.active{background:var(--orange);color:#00160e;box-shadow:var(--neon-glow)}
+:root[data-theme="neon"] .tool.active{background:var(--orange);color:#04140a;box-shadow:var(--neon-glow)}
 :root[data-theme="neon"] .toolstrip .tool.active svg{filter:drop-shadow(0 0 3px rgba(0,0,0,.4))}
 :root[data-theme="neon"] .badge{border-color:var(--line);color:var(--orange)}
-:root[data-theme="neon"] .drawing-edge-arrow{border-color:rgba(0,255,156,.26);background:rgba(6,16,13,.66)}
-:root[data-theme="neon"] .drawing-edge-arrow:active{background:rgba(0,255,156,.24);border-color:var(--orange)}
+:root[data-theme="neon"] .drawing-edge-arrow{border-color:rgba(74,222,74,.26);background:rgba(8,20,10,.66)}
+:root[data-theme="neon"] .drawing-edge-arrow:active{background:rgba(74,222,74,.24);border-color:var(--orange)}
 :root[data-theme="neon"] .viewer-view.fullscreen-ui .viewer-head,
 :root[data-theme="neon"] .viewer-view.fullscreen-ui .toolstrip{
-  background:rgba(6,16,13,.72);border-color:rgba(0,255,156,.18);
-  box-shadow:0 6px 22px rgba(0,0,0,.5),0 0 22px rgba(0,255,156,.09)
+  background:rgba(8,20,10,.72);border-color:rgba(74,222,74,.18);
+  box-shadow:0 6px 22px rgba(0,0,0,.5),0 0 22px rgba(74,222,74,.09)
 }
 :root[data-theme="neon"] .changelog-item{border-left-color:var(--orange)}
-:root[data-theme="neon"] .modal-card{border-color:var(--line);box-shadow:0 0 40px rgba(0,255,156,.10)}
-:root[data-theme="neon"] .toast{border-color:rgba(0,255,156,.3);box-shadow:var(--neon-glow)}
-:root[data-theme="neon"] .eyebrow{color:var(--orange);text-shadow:0 0 9px rgba(0,255,156,.30)}
-:root[data-theme="neon"] h1{text-shadow:0 0 18px rgba(0,255,156,.13)}
+:root[data-theme="neon"] .modal-card{border-color:var(--line);box-shadow:0 0 40px rgba(74,222,74,.10)}
+:root[data-theme="neon"] .toast{border-color:rgba(74,222,74,.3);box-shadow:var(--neon-glow)}
+:root[data-theme="neon"] .eyebrow{color:var(--orange);text-shadow:0 0 9px rgba(74,222,74,.30)}
+:root[data-theme="neon"] h1{text-shadow:0 0 18px rgba(74,222,74,.13)}
 /* Ritningen är svart-på-vitt i PDF:en och lämnas orörd — bara ramen färgas. */
-:root[data-theme="neon"] .canvas-wrap{box-shadow:0 8px 35px rgba(0,0,0,.6),0 0 0 1px rgba(0,255,156,.20)}
+:root[data-theme="neon"] .canvas-wrap{box-shadow:0 8px 35px rgba(0,0,0,.6),0 0 0 1px rgba(74,222,74,.20)}
 
-.preview-neon{background:#04070a;border-color:#17362c}
-.preview-neon i{background:#0e1a16}
-.preview-neon i:nth-child(3){background:#0a1311}
+.preview-neon{background:#050b06;border-color:#20481f}
+.preview-neon i{background:#122415}
+.preview-neon i:nth-child(3){background:#0c1a0e}
 
 /* ===== Rutnätsbakgrund i alla teman (v7.5) =====
    Låg opacitet och uttonad mot kanterna, så den ger djup utan att konkurrera
    med innehållet. Färgen kommer från temat via --grid-line. */
 :root{--grid-line:rgba(255,255,255,.035)}
 :root[data-theme="light"]{--grid-line:rgba(20,22,26,.045)}
-:root[data-theme="neon"]{--grid-line:rgba(0,255,156,.055)}
+:root[data-theme="neon"]{--grid-line:rgba(74,222,74,.055)}
 body:before{
   content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
   background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),
@@ -743,21 +746,21 @@ body:before{
   -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
   -webkit-mask-position:center;mask-position:center;
   background:var(--orange);
-  filter:drop-shadow(0 0 10px rgba(0,255,156,.45))
+  filter:drop-shadow(0 0 10px rgba(74,222,74,.45))
 }
 :root[data-theme="neon"] .brand img{visibility:hidden}
 :root[data-theme="neon"] .splash-logo,
 :root[data-theme="neon"] #ekisSplash .s24-ekis{
-  background:linear-gradient(180deg,#d9ffef 0%,var(--orange) 45%,#0b8f5c 100%)!important;
+  background:linear-gradient(180deg,#d6ffd0 0%,var(--orange) 42%,#12651a 100%)!important;
   -webkit-background-clip:text!important;background-clip:text!important;
   -webkit-text-fill-color:transparent!important;
-  text-shadow:0 0 26px rgba(0,255,156,.35)!important
+  text-shadow:0 0 26px rgba(74,222,74,.35)!important
 }
 :root[data-theme="neon"] #ekisSplash .s24-field span,
 :root[data-theme="neon"] #ekisSplash .s24-tagline b{color:var(--orange)!important}
 :root[data-theme="neon"] #ekisSplash .s24-field i{background:var(--orange)!important}
 :root[data-theme="neon"] #ekisSplash .s24-glow{
-  background:radial-gradient(circle,rgba(0,255,156,.22) 0%,rgba(0,255,156,.07) 38%,transparent 68%)!important}
+  background:radial-gradient(circle,rgba(74,222,74,.22) 0%,rgba(74,222,74,.07) 38%,transparent 68%)!important}
 
 /* Ytor och kanter som annars behöll den mörka standardpaletten. */
 :root[data-theme="neon"] .btn,
@@ -788,9 +791,170 @@ body:before{
 :root[data-theme="neon"] .muted,
 :root[data-theme="neon"] small{color:var(--muted)}
 :root[data-theme="neon"] progress::-webkit-progress-value{background:var(--orange)}
-:root[data-theme="neon"] ::selection{background:rgba(0,255,156,.28);color:#eafff6}
+:root[data-theme="neon"] ::selection{background:rgba(74,222,74,.28);color:#e4ffe4}
 :root[data-theme="neon"] input:focus,
 :root[data-theme="neon"] select:focus,
 :root[data-theme="neon"] textarea:focus{outline:none;border-color:var(--orange);box-shadow:var(--neon-glow)}
-:root[data-theme="neon"] .scanner-review-bar{background:rgba(6,16,13,.92);border-color:rgba(0,255,156,.24)}
+:root[data-theme="neon"] .scanner-review-bar{background:rgba(8,20,10,.92);border-color:rgba(74,222,74,.24)}
 :root[data-theme="neon"] .measure-summary{color:var(--orange)}
+
+/* ===== v7.6: ramen hugger ritningen =====
+   Viewporten hade fast höjd (min-height 320px, max-height 68vh) plus 110px
+   bottenpadding kvar från när verktygsraden låg där. En liggande ritning tog
+   bara en del av höjden, så ramen fortsatte långt under ritningen. Nu växer
+   höjden med innehållet upp till taket — ramen ligger tätt om ritningen, och
+   först när man zoomar in fylls ytan och scrollning tar vid. */
+.pdf-viewport{height:auto!important;min-height:0!important;max-height:min(68vh,720px)!important}
+.viewer-view.fullscreen-ui .pdf-viewport{height:100vh!important;max-height:none!important}
+
+/* Kryssrutor och reglage följde systemets blå färg i stället för temat. */
+input[type=checkbox],input[type=radio],input[type=range],progress{accent-color:var(--orange)}
+
+/* Ikonerna i ÄTA-korten ärver textfärgen och följer därmed temat. */
+svg.mi{width:16px;height:16px;vertical-align:-3px;flex:0 0 auto}
+
+/* Extra djup i Neon: mättad kant-vinjett och lite mörkare panelgradient,
+   så gränssnittet känns tyngre än en platt neonyta. */
+:root[data-theme="neon"] .card,
+:root[data-theme="neon"] .settings-card,
+:root[data-theme="neon"] .ata-card,
+:root[data-theme="neon"] .modal-card{
+  background:linear-gradient(180deg,rgba(24,52,26,.34) 0%,var(--panel) 62%);
+  box-shadow:inset 0 1px 0 rgba(134,255,122,.07),0 10px 30px rgba(0,0,0,.55)
+}
+:root[data-theme="neon"] .hero,
+:root[data-theme="neon"] .page-head{
+  background:radial-gradient(120% 90% at 82% 0%,rgba(74,222,74,.13) 0%,transparent 62%),var(--panel)
+}
+:root[data-theme="neon"] .btn.primary{
+  background:linear-gradient(180deg,var(--orange2) 0%,var(--orange) 55%,#2fae2f 100%);
+  color:#04140a;border:0
+}
+:root[data-theme="neon"] .nav-btn.active svg{filter:drop-shadow(0 0 6px rgba(74,222,74,.55))}
+.counter-hero-note{margin:8px 2px 0;font-size:12px}
+
+/* AR-mätning: knapp i ritningsvyn */
+.ar-measure-row{display:flex;align-items:center;gap:10px;padding:0 10px 8px;flex-wrap:wrap}
+.ar-measure-btn{display:inline-flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);color:var(--text)}
+.ar-measure-btn svg{width:18px;height:18px}
+.ar-measure-btn:active{border-color:var(--orange);color:var(--orange)}
+.ar-measure-note{font-size:12px}
+.viewer-view.fullscreen-ui .ar-measure-row{display:none}
+
+/* ===================================================================
+   TEMA 4: "HIMMELSBLÅ" — azurblå himmel med moln (v8.2)
+   Djup azurbas i stället för svart, ljus himmelsblå accent och mjuka
+   molnslöjor i bakgrunden. Ritningen lämnas orörd, som i övriga teman.
+   =================================================================== */
+:root[data-theme="sky"]{
+  --bg:#071a33; --panel:#0e2748; --panel2:#143156; --line:#245084;
+  --text:#eaf4ff; --muted:#8fb2d6;
+  --orange:#4db8ff; --orange2:#8fd4ff;
+  --danger:#ff5d73; --ok:#4de0a8;
+  --sky-glow:0 0 16px rgba(77,184,255,.40);
+  --grid-line:rgba(150,205,255,.075);
+}
+:root[data-theme="sky"] html,:root[data-theme="sky"] body{background:var(--bg);color:var(--text)}
+
+/* Molnslöjor: tre mjuka, olika stora vitaktiga ljus högt upp i bilden.
+   Ligger i ett eget lager under #app precis som rutnätet, så de aldrig
+   lägger sig över innehåll eller ritning. */
+:root[data-theme="sky"] body:after{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(58% 34% at 16% 4%, rgba(226,242,255,.20) 0%, rgba(226,242,255,.07) 42%, transparent 72%),
+    radial-gradient(46% 28% at 84% 10%, rgba(198,229,255,.16) 0%, rgba(198,229,255,.05) 46%, transparent 74%),
+    radial-gradient(70% 40% at 50% 0%, rgba(120,190,255,.16) 0%, transparent 68%),
+    linear-gradient(180deg, rgba(11,43,80,.30) 0%, transparent 55%);
+}
+:root[data-theme="sky"] .topbar{background:linear-gradient(180deg,rgba(10,32,60,.96) 0%,rgba(7,26,51,.92) 100%);box-shadow:0 1px 0 rgba(77,184,255,.20)}
+:root[data-theme="sky"] .bottom-nav{background:rgba(9,29,55,.96);box-shadow:0 -8px 26px rgba(77,184,255,.10)}
+:root[data-theme="sky"] .nav-btn.active{color:var(--orange);text-shadow:var(--sky-glow)}
+:root[data-theme="sky"] .nav-btn.active svg{filter:drop-shadow(0 0 6px rgba(77,184,255,.55))}
+
+/* Loggan får en himmelsgradient i stället för platt färg. */
+:root[data-theme="sky"] .brand{
+  -webkit-mask-image:url(logo-transparent.png);mask-image:url(logo-transparent.png);
+  -webkit-mask-size:contain;mask-size:contain;
+  -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
+  -webkit-mask-position:center;mask-position:center;
+  background:linear-gradient(160deg,#ffffff 0%,#bfe4ff 38%,var(--orange) 78%,#1f7fd0 100%);
+  filter:drop-shadow(0 0 11px rgba(77,184,255,.45))
+}
+:root[data-theme="sky"] .brand img{visibility:hidden}
+:root[data-theme="sky"] #ekisSplash .s24-ekis{
+  background:linear-gradient(180deg,#ffffff 0%,#cfe9ff 40%,var(--orange) 74%,#1a6fb8 100%)!important;
+  -webkit-background-clip:text!important;background-clip:text!important;
+  -webkit-text-fill-color:transparent!important;
+  text-shadow:0 0 28px rgba(77,184,255,.38)!important
+}
+:root[data-theme="sky"] #ekisSplash .s24-field span,
+:root[data-theme="sky"] #ekisSplash .s24-tagline b{color:var(--orange)!important}
+:root[data-theme="sky"] #ekisSplash .s24-field i{background:var(--orange)!important}
+:root[data-theme="sky"] #ekisSplash .s24-glow{
+  background:radial-gradient(circle,rgba(77,184,255,.26) 0%,rgba(190,228,255,.09) 40%,transparent 70%)!important}
+:root[data-theme="sky"] #ekisSplash{background:linear-gradient(180deg,#04122a 0%,#071a33 55%,#0a2545 100%)!important}
+
+/* Ytor: svag molnljusning uppifrån ger djup utan att bli plottrigt. */
+:root[data-theme="sky"] .card,
+:root[data-theme="sky"] .settings-card,
+:root[data-theme="sky"] .ata-card,
+:root[data-theme="sky"] .modal-card{
+  background:linear-gradient(180deg,rgba(120,185,255,.14) 0%,var(--panel) 62%);
+  border-color:var(--line);
+  box-shadow:inset 0 1px 0 rgba(210,236,255,.12),0 10px 30px rgba(2,12,28,.55)
+}
+:root[data-theme="sky"] .hero,
+:root[data-theme="sky"] .page-head{
+  background:radial-gradient(120% 90% at 80% 0%,rgba(77,184,255,.20) 0%,transparent 62%),var(--panel)
+}
+:root[data-theme="sky"] .btn,
+:root[data-theme="sky"] .icon-btn,
+:root[data-theme="sky"] .tool,
+:root[data-theme="sky"] .chip,
+:root[data-theme="sky"] select,
+:root[data-theme="sky"] input,
+:root[data-theme="sky"] textarea,
+:root[data-theme="sky"] .theme-option,
+:root[data-theme="sky"] .smart-doc,
+:root[data-theme="sky"] .statusline,
+:root[data-theme="sky"] .counter-results,
+:root[data-theme="sky"] .todo-item{background:var(--panel);border-color:var(--line);color:var(--text)}
+:root[data-theme="sky"] .btn.primary,
+:root[data-theme="sky"] .tool.active{
+  background:linear-gradient(180deg,var(--orange2) 0%,var(--orange) 55%,#1d86d8 100%);
+  color:#052039;border:0;box-shadow:var(--sky-glow)
+}
+:root[data-theme="sky"] .btn.ghost{background:transparent;border-color:var(--line);color:var(--orange)}
+:root[data-theme="sky"] .btn:active,
+:root[data-theme="sky"] .icon-btn:active{border-color:var(--orange);box-shadow:var(--sky-glow)}
+:root[data-theme="sky"] .theme-option.active{border-color:var(--orange);box-shadow:var(--sky-glow)}
+:root[data-theme="sky"] .badge{border-color:var(--line);color:var(--orange)}
+:root[data-theme="sky"] a,:root[data-theme="sky"] .link,:root[data-theme="sky"] .file-icon{color:var(--orange)}
+:root[data-theme="sky"] .file-icon{border-color:var(--line);background:var(--panel2)}
+:root[data-theme="sky"] .muted,:root[data-theme="sky"] small{color:var(--muted)}
+:root[data-theme="sky"] .eyebrow{color:var(--orange);text-shadow:0 0 10px rgba(77,184,255,.32)}
+:root[data-theme="sky"] h1{text-shadow:0 0 20px rgba(77,184,255,.16)}
+:root[data-theme="sky"] ::selection{background:rgba(77,184,255,.32);color:#f2faff}
+:root[data-theme="sky"] input:focus,
+:root[data-theme="sky"] select:focus,
+:root[data-theme="sky"] textarea:focus{outline:none;border-color:var(--orange);box-shadow:var(--sky-glow)}
+:root[data-theme="sky"] .changelog-item{border-left-color:var(--orange)}
+:root[data-theme="sky"] .toast{border-color:rgba(77,184,255,.35);box-shadow:var(--sky-glow)}
+:root[data-theme="sky"] .drawing-edge-arrow{border-color:rgba(77,184,255,.28);background:rgba(10,32,60,.66)}
+:root[data-theme="sky"] .drawing-edge-arrow:active{background:rgba(77,184,255,.26);border-color:var(--orange)}
+:root[data-theme="sky"] .viewer-view.fullscreen-ui .viewer-head,
+:root[data-theme="sky"] .viewer-view.fullscreen-ui .toolstrip{
+  background:rgba(10,32,60,.74);border-color:rgba(77,184,255,.22);
+  box-shadow:0 6px 22px rgba(0,0,0,.45),0 0 24px rgba(77,184,255,.12)
+}
+:root[data-theme="sky"] .scanner-review-bar{background:rgba(10,32,60,.94);border-color:rgba(77,184,255,.28)}
+:root[data-theme="sky"] .measure-summary{color:var(--orange)}
+:root[data-theme="sky"] .ar-measure-btn{background:var(--panel2)}
+/* Ritningen ska förbli svart på vitt; bara ramen färgas. */
+:root[data-theme="sky"] .canvas-wrap{box-shadow:0 8px 35px rgba(2,12,28,.6),0 0 0 1px rgba(77,184,255,.24)}
+:root[data-theme="sky"] .pdf-viewport{background:#04122a}
+
+.preview-sky{background:#071a33;border-color:#245084}
+.preview-sky i{background:#143156}
+.preview-sky i:nth-child(3){background:#0e2748}

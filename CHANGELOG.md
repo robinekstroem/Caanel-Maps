@@ -2,6 +2,81 @@
 
 ---
 
+## 8.2.0 (build 56)
+
+**Nytt tema: Himmelsblå**
+- Fjärde temat vid sidan av Svart, Vit och Neon. Djup azurblå bas i stället för svart, ljus himmelsblå accent och vitt.
+- Mjuka molnslöjor ligger som ett eget lager i bakgrunden — tre olika stora, suddiga ljus högt upp i bilden, tillsammans med rutnätet. De ligger under innehållet och kan aldrig lägga sig över en ritning.
+- Loggan och startskärmens EKIS-text får en himmelsgradient från vitt genom ljusblått ner i djupblått, i stället för en platt färg.
+- Panelerna har en svag molnljusning uppifrån och inre kantljus, knapparna en gradient.
+- Temat följer med hela vägen ut i AR-mätvyn, som sedan 8.0.1 hämtar sina färger från appens tema.
+- Ritningen lämnas som i övriga teman orörd, svart på vitt — bara ramen och ritningsytans bakgrund färgas.
+
+---
+
+## 8.1.0 (build 55)
+
+**Strömställare skiljs från dosor (Belysning)**
+- Testet krävde bara "ett streck som rör cirkeln". En dosa är också en fylld prick — med en ledning ut ur sig — och passerade därför som strömställare.
+- I vektordatan är skillnaden exakt: strömställaren har en manöverarm (≈2× symbolens diameter) och ett kort **tvärstreck vinkelrätt mot armens yttre ände** (≈0,8× diametern). En ledning från en dosa saknar det tvärstrecket. Kravet är nu ställt på just det.
+- Kalibreringen väljer den **runda** symbolen vid legendens brytar-rad i stället för den största fyllningen. Tidigare kunde fel glyf plockas, vilket gav både fel referensstorlek och fel resultat.
+
+**Känd begränsning: Kraft-ritningar**
+- Kraft använder en annan brytarsymbol (kupa + diagonaler + två prickar), inte cirkel med arm. Regeln ovan gäller den symbolen och överräknar på Kraft-ritningar — bland annat ringas pilar vid "ANSL. TAKDOSA" och GV-punkter in.
+- Kraft-symbolen behöver mätas upp separat på samma sätt som gjordes för Belysning. Räkna tills vidare strömställare på Belysningsritningarna.
+
+---
+
+## 8.0.1 (build 54)
+
+**AR-vyn följer temat fullt ut**
+- Accentfärgen följde redan med sedan 8.0.0 (mätpunkter, linje, hårkors och "Använd mått").
+- Bakgrunder, hintrad, sekundärknappar och måttetikett var däremot hårdkodade mörka. I Svart och Neon syntes det inte, men i Vit-temat blev AR-vyn fortfarande mörk. De härleds nu ur temat, som skickas med när vyn startas.
+- Texten på accentknappen väljer svart eller vitt efter accentfärgens ljushet, så den är läsbar på både den orange och den ljusgröna.
+
+---
+
+## 8.0.0 (build 53)
+
+**AR-mätning med kameran**
+- Ny knapp i ritningsvyn: **Mät med kameran**. Sikta med hårkorset, tryck för punkt A, gå till punkt B och tryck igen. Avståndet visas direkt och kan tas in i appen.
+- Bygger på ARCore, som spårar rummet i 3D med kameran och rörelsesensorerna tillsammans. Punkterna får därför verkliga koordinater och sitter kvar när telefonen rör sig — det är den avgörande skillnaden mot ett foto, som saknar egen skala.
+- Punkterna sätts i första hand mot ytor ARCore kartlagt (plan eller djupdata där telefonen stödjer det) och bara i sista hand mot enstaka featurepunkter, eftersom de senare är betydligt ostadigare på en kal vägg.
+- Träffen sätts vid hårkorset i mitten, inte vid fingret, så tummen aldrig skymmer punkten — samma princip som förstoringsglaset vid mätning på ritning.
+- Vyn följer appens tema: accentfärgen skickas in till AR-vyn.
+- Knappen visas bara på telefoner som faktiskt stödjer ARCore. Övriga enheter ser den inte alls i stället för att mötas av ett fel. AR är märkt som valfri funktion i manifestet, så appen installeras och fungerar som vanligt utan den.
+
+**Notering om iPhone:** ARCore är Android-specifikt. Motsvarande på iOS kräver ARKit och därmed en nativ iOS-app, som inte finns ännu.
+
+---
+
+## 7.7.0 (build 52)
+
+**Räknaren: total kontra per lägenhet**
+- Den stora rutan högst upp visade summan för *alla* valda ritningar, men var rubricerad med den första lägenhetens namn. Trycket på den öppnade dessutom en granskning filtrerad till just den lägenheten — så rutan kunde stå på "72 st" och sedan ringa in en handfull symboler. Det var samma orsak bakom både "uttagen ringas inte in" och "antalet per lägenhet stämmer inte".
+- Totalen är nu märkt som total, visar antal områden, och trycket på den visar *alla* träffar.
+- Fördelningen per lägenhet/område ligger som tidigare i korten under, nu med en rad som pekar dit.
+- "Visa markeringar" visar också allt i stället för bara första träffens område.
+
+---
+
+## 7.6.0 (build 51)
+
+**Ramen runt ritningen hugger ritningen**
+- Viewporten hade fast höjd (min 320px, max 68vh) plus 110px bottenpadding som låg kvar från när verktygsraden satt längst ned. En liggande ritning fyllde bara en del av höjden, så ramen fortsatte långt under den.
+- Höjden växer nu med innehållet upp till ett tak. Ramen ligger tätt om ritningen, och först när man zoomar in fylls ytan och scrollningen tar vid.
+- Rättade också en `margin:0 auto !important` som blockerade den vertikala centreringen.
+
+**Neon-temat omgjort**
+- Djupare och mer mättad grönska i stället för mintgrönt: mörkgrön bas med gräsgrön accent.
+- Panelerna har fått en svag gradient och inre kantljus, och rubrikytorna en grön glödvinjett, så gränssnittet känns tyngre än en platt neonyta.
+
+**Färger som inte följde temat**
+- Kryssrutor och reglage ritades i systemets blå färg. De använder nu temats accentfärg.
+- Ikonerna i ÄTA-korten (redigera, foto, galleri, datum, timmar, platsmarkering) var emoji och renderades därför i systemets egna färger, olika på olika Android-versioner. De är nu SVG som ärver textfärgen.
+
+---
+
 ## 7.5.0 (build 50)
 
 **Panorering når hela ritningen igen**

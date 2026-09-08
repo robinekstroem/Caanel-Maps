@@ -13,6 +13,8 @@ import android.provider.MediaStore;
 import android.util.Base64;
 import android.view.View;
 import android.webkit.JavascriptInterface;
+
+import com.google.ar.core.ArCoreApk;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -33,6 +35,7 @@ import java.io.OutputStream;
 public class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 501;
     private static final int CAMERA_REQUEST = 502;
+    private static final int AR_MEASURE_REQUEST = 4712;
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
     private Uri pendingCameraUri;
@@ -152,6 +155,20 @@ public class MainActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
+        if (requestCode == AR_MEASURE_REQUEST) {
+            if (resultCode == Activity.RESULT_OK && data != null && webView != null) {
+                double meters = data.getDoubleExtra(se.caanel.field.ar.MeasureActivity.RESULT_METERS, -1);
+                if (meters > 0) {
+                    webView.evaluateJavascript(
+                            "window.ekisArMeasureResult&&window.ekisArMeasureResult(" + meters + ")", null);
+                }
+            } else if (webView != null) {
+                webView.evaluateJavascript("window.ekisArMeasureCancelled&&window.ekisArMeasureCancelled()", null);
+            }
+            applyImmersiveMode();
+            return;
+        }
+
         if (requestCode == CAMERA_REQUEST) {
             if (resultCode == Activity.RESULT_OK && pendingCameraUri != null) {
                 deliverCameraPhoto(pendingCameraUri);
@@ -231,6 +248,30 @@ public class MainActivity extends Activity {
     }
 
     public class AndroidBridge {
+        /** True only when this device can actually run ARCore, so the web UI can
+         *  hide the measure button instead of offering something that will fail. */
+        @JavascriptInterface
+        public boolean arMeasureAvailable() {
+            try {
+                ArCoreApk.Availability a = ArCoreApk.getInstance().checkAvailability(MainActivity.this);
+                return a == ArCoreApk.Availability.SUPPORTED_INSTALLED
+                        || a == ArCoreApk.Availability.SUPPORTED_APK_TOO_OLD
+                        || a == ArCoreApk.Availability.SUPPORTED_NOT_INSTALLED;
+            } catch (Throwable t) {
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public void startArMeasure(String accentColor, String theme) {
+            runOnUiThread(() -> {
+                Intent intent = new Intent(MainActivity.this, se.caanel.field.ar.MeasureActivity.class);
+                intent.putExtra(se.caanel.field.ar.MeasureActivity.EXTRA_ACCENT, accentColor);
+                intent.putExtra(se.caanel.field.ar.MeasureActivity.EXTRA_THEME, theme);
+                startActivityForResult(intent, AR_MEASURE_REQUEST);
+            });
+        }
+
         @JavascriptInterface
         public void capturePhoto() {
             runOnUiThread(() -> launchNativeCamera());

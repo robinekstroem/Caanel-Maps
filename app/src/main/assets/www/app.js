@@ -62,7 +62,7 @@
   function saveMeta() {
     localStorage.setItem(META_KEY, JSON.stringify(state.meta));
   }
-  const THEMES={dark:"#0b0b0c",light:"#f3f4f6",neon:"#04070a"};
+  const THEMES={dark:"#0b0b0c",light:"#f3f4f6",neon:"#050b06"};
   function applyTheme(theme, persist=false){
     const next=THEMES[theme]?theme:"dark";
     state.meta.theme=next;
@@ -789,7 +789,7 @@
     if(state.todoFilter==="open")items=items.filter(t=>!t.done);
     if(state.todoFilter==="today")items=items.filter(t=>!t.done && t.due===today);
     if(!items.length){list.innerHTML='<div class="empty">Inga punkter här.</div>';return}
-    list.innerHTML=items.map(t=>{const p=projectById(t.projectId);return `<div class="todo-row ${t.done?"done":""}" data-todo="${t.id}"><input type="checkbox" ${t.done?"checked":""}><div class="todo-text"><strong>${esc(t.text)}</strong><div class="todo-meta"><span class="prio ${esc((t.priority||"Normal").toLowerCase())}">${esc(t.priority||"Normal")}</span>${t.due?`<span>📅 ${esc(t.due)}</span>`:""}${p?`<span>▦ ${esc(p.name)}</span>`:""}</div></div><button class="row-btn">×</button></div>`}).join("");
+    list.innerHTML=items.map(t=>{const p=projectById(t.projectId);return `<div class="todo-row ${t.done?"done":""}" data-todo="${t.id}"><input type="checkbox" ${t.done?"checked":""}><div class="todo-text"><strong>${esc(t.text)}</strong><div class="todo-meta"><span class="prio ${esc((t.priority||"Normal").toLowerCase())}">${esc(t.priority||"Normal")}</span>${t.due?`<span><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3.5v3M16 3.5v3"/></svg> ${esc(t.due)}</span>`:""}${p?`<span>▦ ${esc(p.name)}</span>`:""}</div></div><button class="row-btn">×</button></div>`}).join("");
     list.querySelectorAll("[data-todo]").forEach(row=>{const id=row.dataset.todo,t=state.meta.todos.find(x=>x.id===id);row.querySelector("input").onchange=e=>{t.done=e.target.checked;saveMeta();renderTodos()};row.querySelector("button").onclick=async()=>{if(!await confirmDelete("Ta bort uppgift?",`Vill du verkligen ta bort “${t.text}”?`))return;state.meta.todos=state.meta.todos.filter(x=>x.id!==id);saveMeta();renderTodos()}});
   }
 
@@ -804,9 +804,9 @@
     $('#ataSelectedCount').textContent=state.ataSelected.size;
     if(!items.length){list.innerHTML='<div class="empty">Inga avvikelser här.</div>';return}
     list.innerHTML=items.map(a=>{const p=projectById(a.projectId), editing=state.ataEditingId===a.id, hourEdit=state.ataHoursEditingId===a.id;
-      const body=editing?`<div class="ata-inline-edit"><label>Titel<input class="ata-inline-title" value="${esc(a.title||'')}"></label><label>Info ÄTA<textarea class="ata-inline-info" rows="5">${esc(a.description||'')}</textarea></label><div class="ata-inline-grid"><label>Datum<input class="ata-inline-date" type="date" value="${esc(a.date||'')}"></label><label>Est. timmar<input class="ata-inline-est" type="number" step="0.5" min="0" value="${Number(a.estimate||0)}"></label></div><div class="ata-inline-actions"><button class="btn primary ata-inline-save">Spara</button><button class="btn ata-inline-cancel">Avbryt</button></div></div>`:`<strong class="ata-title-direct" title="Tryck för att redigera">${esc(a.title)}</strong><div class="ata-meta"><span class="ata-status ${a.status==='Utförd'?'done':''}">${esc(a.status)}</span><span>📅 ${esc(a.date||'')}</span><span>⏱ ${ataHours(a).toFixed(1)} h${a.estimate?` / est. ${Number(a.estimate).toFixed(1)} h`:''}</span>${p?`<span>▦ ${esc(p.name)}</span>`:''}</div>${a.description?`<p class="muted ata-info-direct" title="Tryck för att redigera" style="margin-top:7px">${esc(a.description)}</p>`:'<p class="muted ata-info-direct" style="margin-top:7px">+ Lägg till info</p>'}`;
+      const body=editing?`<div class="ata-inline-edit"><label>Titel<input class="ata-inline-title" value="${esc(a.title||'')}"></label><label>Info ÄTA<textarea class="ata-inline-info" rows="5">${esc(a.description||'')}</textarea></label><div class="ata-inline-grid"><label>Datum<input class="ata-inline-date" type="date" value="${esc(a.date||'')}"></label><label>Est. timmar<input class="ata-inline-est" type="number" step="0.5" min="0" value="${Number(a.estimate||0)}"></label></div><div class="ata-inline-actions"><button class="btn primary ata-inline-save">Spara</button><button class="btn ata-inline-cancel">Avbryt</button></div></div>`:`<strong class="ata-title-direct" title="Tryck för att redigera">${esc(a.title)}</strong><div class="ata-meta"><span class="ata-status ${a.status==='Utförd'?'done':''}">${esc(a.status)}</span><span><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3.5v3M16 3.5v3"/></svg> ${esc(a.date||'')}</span><span><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 7.6V12l3 1.8"/></svg> ${ataHours(a).toFixed(1)} h${a.estimate?` / est. ${Number(a.estimate).toFixed(1)} h`:''}</span>${p?`<span>▦ ${esc(p.name)}</span>`:''}</div>${a.description?`<p class="muted ata-info-direct" title="Tryck för att redigera" style="margin-top:7px">${esc(a.description)}</p>`:'<p class="muted ata-info-direct" style="margin-top:7px">+ Lägg till info</p>'}`;
       const hours=hourEdit?`<div class="ata-hours-inline"><input class="ata-hours-value" type="number" min="0.1" step="0.25" placeholder="Timmar"><input class="ata-hours-date" type="date" value="${new Date().toISOString().slice(0,10)}"><input class="ata-hours-note" placeholder="Beskrivning"><button class="mini-btn ata-hours-save">Spara</button><button class="mini-btn ata-hours-cancel">Avbryt</button></div>`:'';
-      return `<div class="ata-card ${a.status==='Utförd'?'done':''}" data-ata="${a.id}"><div class="ata-top"><input class="ata-select" type="checkbox" ${state.ataSelected.has(a.id)?'checked':''}><div class="ata-main"><div class="ata-num">${esc(a.number)}</div>${body}${a.drawingNote?`<p class="muted" style="margin-top:5px">📍 ${esc(a.drawingNote)}</p>`:''}${(a.sessions||[]).length?`<div class="ata-sessions">${a.sessions.map((x,i)=>`<div class="ata-session"><span>${esc(x.date||'')} · <b>${Number(x.hours||0).toFixed(1)} h</b>${x.note?` · ${esc(x.note)}`:''}</span><button class="mini-btn ata-session-del" data-session="${i}">✕</button></div>`).join('')}</div>`:''}${hours}<div class="ata-photos">${(a.photos||[]).map((x,i)=>`<span class="ata-photo-wrap"><img src="${x}" alt="ÄTA-bild"><button class="ata-photo-del" data-photo="${i}">✕</button></span>`).join('')}</div></div></div>${editing?'':`<div class="ata-card-actions"><button class="mini-btn ata-edit-btn">✏️ Redigera</button><button class="mini-btn ata-status-btn">${a.status==='Utförd'?'↺ Öppna':'✓ Utförd'}</button><button class="mini-btn ata-hours-btn">+ Timmar</button><button class="mini-btn ata-camera-btn">📷 Ta foto</button><button class="mini-btn ata-photo-btn">🖼 Galleri</button><button class="mini-btn ata-mark-btn">⌖ Markera på ritning</button><button class="mini-btn ata-delete-btn">✕</button></div>`}</div>`}).join('');
+      return `<div class="ata-card ${a.status==='Utförd'?'done':''}" data-ata="${a.id}"><div class="ata-top"><input class="ata-select" type="checkbox" ${state.ataSelected.has(a.id)?'checked':''}><div class="ata-main"><div class="ata-num">${esc(a.number)}</div>${body}${a.drawingNote?`<p class="muted" style="margin-top:5px"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s6.5-6.1 6.5-10.4A6.5 6.5 0 0 0 5.5 10.6C5.5 14.9 12 21 12 21z"/><circle cx="12" cy="10.4" r="2.3"/></svg> ${esc(a.drawingNote)}</p>`:''}${(a.sessions||[]).length?`<div class="ata-sessions">${a.sessions.map((x,i)=>`<div class="ata-session"><span>${esc(x.date||'')} · <b>${Number(x.hours||0).toFixed(1)} h</b>${x.note?` · ${esc(x.note)}`:''}</span><button class="mini-btn ata-session-del" data-session="${i}">✕</button></div>`).join('')}</div>`:''}${hours}<div class="ata-photos">${(a.photos||[]).map((x,i)=>`<span class="ata-photo-wrap"><img src="${x}" alt="ÄTA-bild"><button class="ata-photo-del" data-photo="${i}">✕</button></span>`).join('')}</div></div></div>${editing?'':`<div class="ata-card-actions"><button class="mini-btn ata-edit-btn"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19z"/><path d="M14.5 6.5l3 3"/></svg> Redigera</button><button class="mini-btn ata-status-btn">${a.status==='Utförd'?'↺ Öppna':'<svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5 10 18 19.5 6.5"/></svg> Utförd'}</button><button class="mini-btn ata-hours-btn"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg> Timmar</button><button class="mini-btn ata-camera-btn"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5h3.2l1.4-2.2h7.8l1.4 2.2h3.2v11H3.5z"/><circle cx="12" cy="14" r="3.6"/></svg> Ta foto</button><button class="mini-btn ata-photo-btn">🖼 Galleri</button><button class="mini-btn ata-mark-btn">⌖ Markera på ritning</button><button class="mini-btn ata-delete-btn">✕</button></div>`}</div>`}).join('');
     list.querySelectorAll('[data-ata]').forEach(row=>{const a=all.find(x=>x.id===row.dataset.ata); const q=x=>row.querySelector(x);
       q('.ata-select').onchange=e=>{e.target.checked?state.ataSelected.add(a.id):state.ataSelected.delete(a.id);renderAtas()};
       q('.ata-edit-btn')?.addEventListener('click',()=>{state.ataEditingId=a.id;renderAtas()}); q('.ata-title-direct')?.addEventListener('click',()=>{state.ataEditingId=a.id;renderAtas()}); q('.ata-info-direct')?.addEventListener('click',()=>{state.ataEditingId=a.id;renderAtas()});
@@ -2501,17 +2501,28 @@
     }
     // Calibrate against THIS drawing's own legend so it adapts per project and
     // per category (Kraft and Belysning legends define different symbols).
-    function legendFillNear(re,exclude){
+    // `want` picks WHICH fill beside the legend label is the symbol: the outlet
+    // row wants the widest shape, the switch row wants the roundest one. Taking
+    // simply the largest fill picked the wrong glyph on the switch row, which
+    // then gave both a wrong reference size and a failed self-check below.
+    function legendFillNear(re,exclude,want){
       for(const t of texts){
         if(!re.test(t.s)||(exclude&&exclude.test(t.s)))continue;
         if(legend&&(t.x<legend.x||t.x>legend.x+legend.w||t.y<legend.y||t.y>legend.y+legend.h))continue;
-        const near=fills.filter(f=>f.cx<t.x-2&&f.cx>t.x-60&&Math.abs(f.cy-t.y)<12&&f.w>2&&f.h>2).sort((a,b)=>(b.w*b.h)-(a.w*a.h));
-        if(near.length)return near[0];
+        const near=fills.filter(f=>f.cx<t.x-2&&f.cx>t.x-60&&Math.abs(f.cy-t.y)<12&&f.w>2&&f.h>2);
+        if(!near.length)continue;
+        if(want==='round'){
+          const round=near.filter(f=>Math.max(f.w,f.h)/Math.max(.01,Math.min(f.w,f.h))<1.35)
+                          .sort((a,b)=>(b.w*b.h)-(a.w*a.h));
+          if(round.length)return round[0];
+          continue;
+        }
+        return near.sort((a,b)=>(b.w*b.h)-(a.w*a.h))[0];
       }
       return null;
     }
     const domeRef=legendFillNear(/UTTAG/i,/VÄGGUTTAG\.|GOLVVÄRME|KOMBINATION/i);
-    const circRef=legendFillNear(/STRÖMSTÄLLARE|BRYTARE/i,/KOMBINATION/i);
+    const circRef=legendFillNear(/STRÖMSTÄLLARE|BRYTARE/i,/KOMBINATION/i,'round');
     if(!domeRef&&!circRef)return null;
     const domeLong=domeRef?Math.max(domeRef.w,domeRef.h):11.3;
     const domeShort=domeRef?Math.min(domeRef.w,domeRef.h):5.6;
@@ -2546,27 +2557,56 @@
       zones.push({x0,y0,x1,y1});
     }
 
-    // A switch's circle always has a short diagonal toggle-arm stroke touching
-    // it; plain filled dots (towel-rail outlets, junction dots) never do.
-    const arms=[];
+    // Telling a switch from a junction box ("dosa") needs more than "there is a
+    // line touching the dot" — a dosa is a filled dot WITH a wire running out of
+    // it, which is exactly what that test accepted, so dosor were counted as
+    // switches. In the vector data the real difference is precise: a switch is
+    // circle + operating arm + a short tick stroke roughly PERPENDICULAR to the
+    // arm at its far end (the legend's own symbol measures arm ≈2×Ø and tick
+    // ≈0.8×Ø at 90° to it). A plain wire leaving a dosa has no such tick.
+    const segs=[];
     for(const p of paths){
       if(p.npts!==2)continue;
       const [a,b]=p.pts, len=Math.hypot(b[0]-a[0],b[1]-a[1]);
-      if(len<3||len>40)continue;
-      let ang=Math.atan2(b[1]-a[1],b[0]-a[0])*180/Math.PI; if(ang<0)ang+=180;
-      if((ang>75&&ang<105)||ang<15||ang>165)continue;
-      arms.push({a,b});
+      if(len<1.2||len>60)continue;
+      segs.push({a,b,len,ang:Math.atan2(b[1]-a[1],b[0]-a[0])*180/Math.PI});
     }
+    const angDiff=(u,v)=>{let d=Math.abs(u-v)%180;return d>90?180-d:d};
     const hasArm=f=>{
-      const r=Math.max(f.w,f.h)/2;
-      for(const s of arms)for(const q of [s.a,s.b]){
-        if(Math.hypot(q[0]-f.cx,q[1]-f.cy)<r*2.2){
-          const o=(q===s.a?s.b:s.a);
-          if(Math.hypot(o[0]-f.cx,o[1]-f.cy)>r*1.6)return true;
+      const d=Math.max(f.w,f.h), r=d/2;
+      for(const arm of segs){
+        if(arm.len<d*1.15||arm.len>d*3.6)continue;
+        // one end of the arm must touch the circle, the other must reach away
+        let nearEnd=null,farEnd=null;
+        for(const q of [arm.a,arm.b]){
+          const dist=Math.hypot(q[0]-f.cx,q[1]-f.cy);
+          if(dist<r*2.4)nearEnd=q; else farEnd=q;
+        }
+        if(!nearEnd||!farEnd)continue;
+        // a tick, roughly square to the arm, sitting at the arm's far end
+        for(const t of segs){
+          if(t===arm)continue;
+          if(t.len<d*0.35||t.len>d*1.35)continue;
+          if(angDiff(t.ang,arm.ang)<58)continue;
+          const closest=Math.min(
+            Math.hypot(t.a[0]-farEnd[0],t.a[1]-farEnd[1]),
+            Math.hypot(t.b[0]-farEnd[0],t.b[1]-farEnd[1]));
+          if(closest<d*1.15)return true;
         }
       }
       return false;
     };
+
+    // Self-check: the arm+tick rule describes the "circle with operating arm"
+    // switch glyph. Some categories (Kraft here) draw switches as something else
+    // entirely — dome plus diagonals plus two dots. Running the circle rule on
+    // those drawings produced confident nonsense (ceiling-box leader arrows and
+    // floor-heating sensor dots counted as switches). So the rule is validated
+    // against the drawing's OWN legend symbol first: if the legend's switch icon
+    // does not itself pass the test, this glyph is not what we can recognise and
+    // no switches are reported for that sheet. Precision before count — a clear
+    // zero is honest, an inflated number is not.
+    const switchRuleValid=!!(circRef&&hasArm(circRef));
 
     const inLegend=f=>legend&&f.cx>=legend.x&&f.cx<=legend.x+legend.w&&f.cy>=legend.y&&f.cy<=legend.y+legend.h;
     const inHatch=f=>zones.some(z=>f.cx>=z.x0&&f.cx<=z.x1&&f.cy>=z.y0&&f.cy<=z.y1);
@@ -2588,7 +2628,7 @@
       let type=null;
       const ar=domeArea?polyArea(f)/domeArea:0;
       if(types.outlets&&domeRef&&ar>.62&&ar<1.62&&hi>domeLong*.6&&hi<domeLong*1.5&&ratio>1.15)type='outlet';
-      else if(types.switches&&circRef&&near(hi,circD)&&near(lo,circD)&&ratio<1.45&&hasArm(f))type='switch';
+      else if(types.switches&&switchRuleValid&&near(hi,circD)&&near(lo,circD)&&ratio<1.45&&hasArm(f))type='switch';
       if(!type)continue;
       const nearArea=scannerNearestArea(f.cx,f.cy,vpAreas,viewport.width,viewport.height);
       hits.push({type,score:.95,x:f.cx,y:f.cy,nx:f.cx/viewport.width,ny:f.cy/viewport.height,area:nearArea?.area||null});
@@ -2682,14 +2722,20 @@
       else if(k==='Strömställare')switchTotal+=n;
       else armatureTotal+=n;
     }
-    const mainArea=entries.find(b=>/^B\d+/i.test(b.name))?.name||entries[0]?.name||'Alla valda';
+    // The hero shows totals across every selected drawing. It used to be headed
+    // with the FIRST apartment's name while displaying those project-wide
+    // totals, and its tiles opened a review filtered to that one apartment — so
+    // the tile could read "72 st" and then circle four symbols. Totals are now
+    // labelled as totals, and the tiles review every matching hit ("*").
+    const areaCount=entries.filter(b=>b.name!=='Ej områdesbestämt').length;
     const hero=`<section class="counter-symbol-panel">
-      <div class="counter-symbol-head"><div><small>Räknare – symboler</small><h2>${esc(mainArea)}</h2></div><span class="counter-scan-badge">${pages} sidor</span></div>
+      <div class="counter-symbol-head"><div><small>Totalt – alla valda ritningar</small><h2>${areaCount} ${areaCount===1?'område':'områden'}</h2></div><span class="counter-scan-badge">${pages} sidor</span></div>
       <div class="counter-symbol-grid">
-        <button class="counter-symbol-tile" data-review-area="${esc(mainArea)}" data-review-symbol="Uttag"><span class="counter-symbol-icon">◉</span><span>Uttag</span><strong>${outletTotal} st</strong></button>
-        <button class="counter-symbol-tile" data-review-area="${esc(mainArea)}" data-review-symbol="Strömställare"><span class="counter-symbol-icon">⌁</span><span>Strömställare</span><strong>${switchTotal} st</strong></button>
-        <div class="counter-symbol-tile static"><span class="counter-symbol-icon">✣</span><span>Armaturer</span><strong>${armatureTotal} st</strong></div>
+        <button class="counter-symbol-tile" data-review-area="*" data-review-symbol="Uttag"><span class="counter-symbol-icon">◉</span><span>Uttag totalt</span><strong>${outletTotal} st</strong></button>
+        <button class="counter-symbol-tile" data-review-area="*" data-review-symbol="Strömställare"><span class="counter-symbol-icon">⌁</span><span>Strömställare totalt</span><strong>${switchTotal} st</strong></button>
+        <div class="counter-symbol-tile static"><span class="counter-symbol-icon">✣</span><span>Armaturer totalt</span><strong>${armatureTotal} st</strong></div>
       </div>
+      <p class="counter-hero-note muted">Fördelningen per lägenhet/område står i korten nedan.</p>
       <div class="counter-symbol-actions"><button type="button" id="counterShowHits">◎ Visa markeringar</button><button type="button" id="counterZoomHits">⌖ Kontrollera i ritning</button></div>
     </section>`;
     const cards=entries.map(b=>{
@@ -2746,7 +2792,11 @@
   }
 
   function scannerReviewMatching(areaName,symbol,category=''){
-    return (state.scannerSession?.hits||[]).filter(h=>String(h.areaName)===String(areaName)&&String(h.symbol)===String(symbol)&&(!category||String(h.category)===String(category)));
+    const all=String(areaName)==='*';
+    return (state.scannerSession?.hits||[]).filter(h=>
+      (all||String(h.areaName)===String(areaName))&&
+      String(h.symbol)===String(symbol)&&
+      (!category||String(h.category)===String(category)));
   }
 
   async function openScannerReview(areaName,symbol,category=''){
@@ -2763,7 +2813,7 @@
     const samePage=r.hits.filter(x=>x.fileId===h.fileId&&x.page===h.page);
     state.scannerReview.pageHits=samePage;
     const bar=scannerReviewBar();bar.classList.remove('hidden');
-    bar.querySelector('#scannerReviewTitle').textContent=`${r.areaName} · ${r.symbol}`;
+    bar.querySelector('#scannerReviewTitle').textContent=`${r.areaName==='*'?'Alla områden':r.areaName} · ${r.symbol}`;
     const pageNo=[...new Set(r.hits.map(x=>`${x.fileId}:${x.page}`))].indexOf(`${h.fileId}:${h.page}`)+1;
     const pageCount=new Set(r.hits.map(x=>`${x.fileId}:${x.page}`)).size;
     bar.querySelector('#scannerReviewMeta').textContent=`${r.hits.length} träffar · visar ${samePage.length} på denna sida · ${pageNo}/${pageCount}`;
@@ -2790,7 +2840,9 @@
     const row=e.target.closest('[data-review-area][data-review-symbol]');
     if(row){openScannerReview(row.dataset.reviewArea,row.dataset.reviewSymbol,row.dataset.reviewCategory||'');return}
     if(e.target.closest('#counterShowHits')||e.target.closest('#counterZoomHits')){
-      const h=state.scannerSession?.hits?.[0];if(h)openScannerReview(h.areaName,h.symbol);else toast('Inga scannerträffar att visa');
+      // "Visa markeringar" should show everything found, not just whichever area
+      // the first hit happened to belong to.
+      const h=state.scannerSession?.hits?.[0];if(h)openScannerReview('*',h.symbol);else toast('Inga scannerträffar att visa');
     }
   });
 
@@ -2903,6 +2955,12 @@
   // offline on site (no network on a building site) and stays in step with the
   // build it actually shipped with.
   const CHANGELOG=[
+    {v:"8.2.0",d:"Nytt tema \"Himmelsblå\": djup azurbas, ljus himmelsblå accent och mjuka molnslöjor i bakgrunden. Loggan och startskärmen får en himmelsgradient. Temat följer med hela vägen ut i AR-mätvyn."},
+    {v:"8.1.0",d:"Strömställare skiljs nu från dosor. Testet krävde bara ett streck vid cirkeln — men en dosa är också en prick med en ledning. Nu krävs det korta tvärstrecket vinkelrätt mot manöverarmens yttre ände, som bara strömställaren har. Kalibreringen tar den runda symbolen ur legenden i stället för den största."},
+    {v:"8.0.1",d:"AR-vyn följer nu temat fullt ut. Accentfärgen följde redan med, men bakgrunder, knappar och måttetikett var hårdkodade mörka och blev därför fel i Vit-temat."},
+    {v:"8.0.0",d:"AR-mätning med kameran (ARCore). Sikta med hårkorset, tryck för punkt A, gå till punkt B och tryck igen — ARCore spårar rummet i 3D så punkterna sitter kvar i verkligheten och avståndet blir ett riktigt mått i meter. Knappen visas bara på telefoner som stödjer ARCore."},
+    {v:"7.7.0",d:"Räknarens översta ruta visade projektets totalsumma men var rubricerad med en enda lägenhets namn, och trycket på den visade bara den lägenhetens markeringar. Totalen är nu tydligt märkt som total och visar alla träffar; fördelningen per lägenhet står i korten nedanför."},
+    {v:"7.6.0",d:"Ramen runt ritningen hugger nu ritningen i stället för att fortsätta långt under den. Neon-temat omgjort till en djupare, mättad grönska. Kryssrutor och ÄTA-ikoner följer temat — de var systemblå respektive emoji."},
     {v:"7.5.0",d:"Panorering inzoomad når nu hela ritningen — den centrerade layouten lade vänsterkanten på negativ scrollposition som inte gick att nå. Neon-temat täcker nu hela appen inklusive loggan. Rutnätsbakgrunden finns i alla tre teman."},
     {v:"7.4.0",d:"Nytt tema \"Neon\" — svart och grönt med diskret glöd och rutnätsbakgrund. Markeringar och mått på ritningen följer nu temats färg i stället för att alltid vara orange. Versionshistoriken samlad: den äldre historiken från README-filerna är inflyttad hit."},
     {v:"7.3.0",d:"Armaturer från Occhio-förteckningen går nu att trycka på. Ritningar som använder Occhio märker armaturerna \"position.instans\" (t.ex. 3.1, 3.2) medan förteckningens poster hette \"POS 03\" — de kunde därför aldrig matcha varandra. Occhio-poster ingår nu även i produktnamnsmatchningen."},
@@ -2930,6 +2988,34 @@
     box.classList.remove("hidden");
     $("#changelogBtn").textContent="Dölj versionshistorik";
   });
+
+  // ---- AR-mätning (ARCore) ----
+  // Only shown where it can actually work: the native bridge reports whether
+  // this device supports ARCore. On anything else (or in a plain browser) the
+  // button stays hidden rather than offering a feature that would fail.
+  (function initArMeasure(){
+    const row=$("#arMeasureRow"), btn=$("#arMeasureBtn");
+    if(!row||!btn)return;
+    let available=false;
+    try{available=!!(window.Android&&typeof Android.arMeasureAvailable==="function"&&Android.arMeasureAvailable())}catch{available=false}
+    row.classList.toggle("hidden",!available);
+    if(!available)return;
+    btn.addEventListener("click",()=>{
+      try{Android.startArMeasure(accentColor(),state.meta.theme||"dark")}
+      catch(e){toast("Kunde inte starta AR-mätning")}
+    });
+  })();
+
+  // Called from the native measure view when the user accepts a measurement.
+  window.ekisArMeasureResult=function(meters){
+    const m=Number(meters);
+    if(!isFinite(m)||m<=0)return;
+    state.lastArMeasure=m;
+    const txt=m<1?`${Math.round(m*1000)} mm`:`${m.toFixed(2)} m`;
+    const res=$("#measureResult"); if(res)res.textContent=txt;
+    toast(`Uppmätt: ${txt}`);
+  };
+  window.ekisArMeasureCancelled=function(){};
 
   $$('[data-theme-choice]').forEach(b=>b.onclick=()=>{applyTheme(b.dataset.themeChoice,true);toast(b.dataset.themeChoice==='light'?'Ljust tema aktiverat':'Mörkt tema aktiverat')});
   $("#brandBtn").onclick=()=>{renderProjects();showView("projectsView")};
