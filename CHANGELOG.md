@@ -2,6 +2,61 @@
 
 ---
 
+## 8.3.1 (build 60)
+
+**Ritningen centreras i helskärm**
+- Fixen i 8.2.1 satte centreringen som en inline margin-top, men en CSS-regel längre ned i filen nollställde marginalen med `!important` — och `!important` i CSS vinner över inline-stilar. Centreringen räknades alltså ut korrekt och kastades sedan bort. Regeln styr nu bara sidmarginalerna.
+
+**AR-mätaren: trolig grundorsak till de vilda måtten**
+- ARCore måste få veta ytans geometri innan en träffkontroll betyder något — `hitTest()` tolkar sina koordinater i den geometri ARCore senast fick. Den sattes bara från `onSurfaceChanged`, som körs på GL-tråden och kan hinna före att sessionen finns (t.ex. första starten, när ARCore installeras). Då sattes den aldrig igen, ARCore behöll sin standardgeometri, och varje tryck träffade fel del av scenen — vilket ger punkter på i praktiken godtyckligt djup.
+- Värdena sparas nu och läggs på så snart sessionen finns, och igen om geometrin ändras.
+- Rimlighetskontrollen gällde bara avståndet från kameran till punkten. Själva mätsträckan kontrolleras nu också: över 15 m avvisas med en förklaring, eftersom ingenting som mäts inomhus spänner så långt.
+
+---
+
+## 8.3.0 (build 59)
+
+**AR-mätaren stabiliserad**
+
+*Felaktiga mått (t.ex. 24,5 m i ett kök):*
+- Råa featurepunkter godtogs som sista utväg när ingen yta hittades. En featurepunkt kan ligga på nästan vilket djup som helst, och var därför den enskilt största orsaken till vilt fel mått. Endast ytor ARCore är säker på accepteras nu: en kartlagd plan yta, eller en djupdatapunkt på telefoner som stödjer det.
+- Träffar under 5 cm eller över 12 m avvisas som spårningsartefakter med ett tydligt meddelande i stället för att bli en mätpunkt.
+- Punkterna förankras nu i själva ytan i stället för fritt i sessionen, så de ligger kvar när ARCore förfinar sin kartläggning.
+
+*Flimret:*
+- Hela textpanelen skrevs om vid varje bildruta — 60 uppdateringar i sekunden av text, synlighet och knapplägen. Överlägget går fortfarande i full bildfrekvens, men panelen uppdateras nu några gånger i sekunden och bara när innehållet faktiskt ändrats.
+
+*Hoppande siffror:*
+- Avståndet medianfiltreras över de senaste mätningarna. ARCore justerar löpande sina punkter, så råvärdet rör sig centimetervis varje bildruta; medianen dämpar det och slänger dessutom enstaka kraftiga avvikare.
+
+*Övrigt:*
+- Knappraden hamnade delvis bakom systemets navigeringsrad. Den tar nu hänsyn till systemets marginaler.
+- "Ångra" nollställer även mätvärdet, som annars låg kvar.
+- Tryck medan spårningen inte låst ger nu ett meddelande i stället för att tyst ignoreras.
+
+---
+
+## 8.2.2 (build 58)
+
+**Dosor räknas inte längre som strömställare**
+- Kravet från 8.1.0 — arm in i punkten plus ett vinkelrätt streck i armens yttre ände — visade sig beskriva även en helt vanlig **kabelböj**. Kabelvägar ritas med räta vinklar, så varje dosa med en ledning som svänger fick en "arm" och ett "tvärstreck". Därför fortsatte HT-dosor och kopplingspunkter att räknas.
+- Strömställarens symbol har i själva verket **två** korta, nära parallella streck där (återfjädringsmärket). En kabelböj har bara det ena fortsättande segmentet. Ett par krävs nu, vilket skiljer dem åt.
+- Verifierat mot de punkter som räknades fel: samtliga HT3- och HT-dosor är nu uteslutna, medan riktiga strömställare är kvar.
+
+---
+
+## 8.2.1 (build 57)
+
+**Himmelsblå gick inte att välja**
+- Temat fanns i CSS och i väljaren, men saknades i kodens lista över giltiga teman. Okända värden faller tillbaka på mörkt, så knappen såg ut att inte göra någonting.
+- Orsaken var en tidigare textersättning som aldrig träffade, eftersom neon-färgen ändrats efteråt och mönstret därför inte matchade. Bekräftelserutan namnger nu också temat korrekt i stället för att bara säga "Mörkt tema aktiverat".
+
+**Ritningen låg för långt ned i ramen**
+- Sedan 7.6 anpassar ramen sin höjd efter ritningen. Den vertikala centreringen lades ändå på som marginal — vilket både tryckte ned ritningen och fick ramen att växa lika mycket, så ritningen hamnade lågt med en hög tom yta över.
+- Marginalen läggs nu bara på i helskärm, där ytan har fast höjd. I den vanliga vyn ligger ramen tätt om ritningen.
+
+---
+
 ## 8.2.0 (build 56)
 
 **Nytt tema: Himmelsblå**

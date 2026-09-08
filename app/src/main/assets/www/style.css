@@ -560,7 +560,10 @@ button.file-tag{cursor:pointer}
 .bottom-nav .nav-btn span{font-size:17px!important;line-height:18px!important}
 .bottom-nav .nav-btn[data-view="ataView"]{font-size:8.5px!important}
 .bottom-nav .nav-btn[data-view="ataView"] span{font-size:12px!important}
-.viewer-view.fullscreen-ui .canvas-wrap{margin:0!important}
+/* Denna nollställde marginalen med !important, vilket slår ut den inline-satta
+   margin-top som centrerar ritningen vertikalt i helskärm — därav att ritningen
+   klistrades högst upp. Endast sidmarginalerna ska styras här. */
+.viewer-view.fullscreen-ui .canvas-wrap{margin-left:auto!important;margin-right:auto!important}
 .counter-category-tabs{display:flex;gap:7px;overflow-x:auto;padding-top:8px;scrollbar-width:none}.counter-category-tabs .category-tab{flex:0 0 auto}
 .ata-inline-edit{display:grid;gap:10px;margin-top:6px}.ata-inline-edit label{display:grid;gap:5px;color:var(--muted);font-size:11px;font-weight:800}.ata-inline-edit input,.ata-inline-edit textarea,.ata-hours-inline input{width:100%;box-sizing:border-box;border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:10px;padding:10px;font:inherit}.ata-inline-edit textarea{resize:vertical;min-height:110px}.ata-inline-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ata-inline-actions{display:flex;gap:8px}.ata-hours-inline{display:grid;grid-template-columns:90px 135px 1fr auto auto;gap:6px;margin:9px 0;padding:9px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}.ata-title-direct,.ata-info-direct{cursor:text}
 @media(max-width:650px){.ata-hours-inline{grid-template-columns:1fr 1fr}.ata-hours-note{grid-column:1/-1}.bottom-nav{height:70px!important}}

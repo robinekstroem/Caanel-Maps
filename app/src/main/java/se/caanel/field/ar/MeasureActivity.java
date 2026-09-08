@@ -29,7 +29,6 @@ import com.google.ar.core.Config;
 import com.google.ar.core.Frame;
 import com.google.ar.core.HitResult;
 import com.google.ar.core.Plane;
-import com.google.ar.core.Point;
 import com.google.ar.core.Pose;
 import com.google.ar.core.Session;
 import com.google.ar.core.TrackingState;
@@ -78,6 +77,26 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
     private boolean lightTheme = false;
     private int chromeBg, chromeBgSoft, chromeText, chromeBtn, chromeBtnText;
     private volatile double lastMeters = -1;
+    // Smoothing + UI throttling state. The readout is recomputed every GL frame,
+    // and every frame used to push text, visibility and enabled-state into the
+    // views — 60 UI updates a second, which is what made the whole panel flicker.
+    private final java.util.ArrayDeque<Double> samples = new java.util.ArrayDeque<>();
+    private double smoothed = -1;
+    private long lastUiPush = 0;
+    private long hintHoldUntil = 0;
+    private String lastHintShown = "", lastReadoutShown = "";
+
+    // Display geometry has to reach ARCore before any hit test is meaningful:
+    // hitTest() interprets its x/y in the geometry ARCore was last told about.
+    // It used to be set only from onSurfaceChanged, which runs on the GL thread
+    // and can fire while `session` is still null (first launch, when ARCore is
+    // being installed). Then it was never set again — ARCore kept its default
+    // geometry, every tap hit-tested the wrong part of the scene, and the
+    // resulting points landed at essentially arbitrary depth. That is a very
+    // good candidate for the wild readings. Now the values are remembered and
+    // re-applied whenever they change or the session appears.
+    private int viewW = 0, viewH = 0, viewRot = -1;
+    private boolean geometryApplied = false;
 
     private final float[] viewMatrix = new float[16];
     private final float[] projMatrix = new float[16];
@@ -150,13 +169,19 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
         hint.setBackgroundColor(withAlpha(chromeBgSoft, 0xB3));
         FrameLayout.LayoutParams hp = new FrameLayout.LayoutParams(-1, -2);
         hp.gravity = Gravity.TOP;
-        hp.setMargins((int) (14 * d), (int) (44 * d), (int) (14 * d), 0);
+        hp.setMargins((int) (14 * d), (int) (52 * d), (int) (14 * d), 0);
         root.addView(hint, hp);
 
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.VERTICAL);
         bar.setGravity(Gravity.CENTER_HORIZONTAL);
         bar.setPadding((int) (18 * d), (int) (16 * d), (int) (18 * d), (int) (28 * d));
+        bar.setOnApplyWindowInsetsListener((v, insets) -> {
+            int bottom = insets.getSystemWindowInsetBottom();
+            v.setPadding(v.getPaddingLeft(), v.getPaddingTop(), v.getPaddingRight(),
+                    (int) (16 * d) + bottom);
+            return insets;
+        });
         bar.setBackgroundColor(withAlpha(chromeBg, 0xCC));
 
         readout = new TextView(this);
@@ -178,6 +203,8 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
             if (!anchors.isEmpty()) {
                 anchors.remove(anchors.size() - 1).detach();
                 lastMeters = -1;
+                smoothed = -1;
+                samples.clear();
             }
         });
         row.addView(undoBtn, buttonParams(d));
@@ -313,9 +340,10 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
     @Override
     public void onSurfaceChanged(GL10 gl, int width, int height) {
         GLES20.glViewport(0, 0, width, height);
-        if (session != null) {
-            session.setDisplayGeometry(getWindowManager().getDefaultDisplay().getRotation(), width, height);
-        }
+        viewW = width;
+        viewH = height;
+        viewRot = getWindowManager().getDefaultDisplay().getRotation();
+        geometryApplied = false;
     }
 
     @Override
@@ -324,6 +352,10 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
         if (session == null || !glReady || !sessionResumed) return;
 
         try {
+            if (!geometryApplied && viewW > 0 && viewH > 0) {
+                session.setDisplayGeometry(viewRot, viewW, viewH);
+                geometryApplied = true;
+            }
             session.setCameraTextureName(background.getTextureId());
             Frame frame = session.update();
             background.draw(frame);
@@ -334,6 +366,7 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
             if (tapPending) {
                 tapPending = false;
                 if (tracking) placeAnchorAtCentre(frame);
+                else showHint("Vänta – AR-spårningen har inte låst på rummet än");
             }
 
             camera.getViewMatrix(viewMatrix, 0);
@@ -348,37 +381,68 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
             }
 
             String label = null;
-            if (anchors.size() >= 2) {
+            if (anchors.size() >= 2
+                    && anchors.get(0).getTrackingState() == TrackingState.TRACKING
+                    && anchors.get(1).getTrackingState() == TrackingState.TRACKING) {
                 double m = distance(anchors.get(0).getPose(), anchors.get(1).getPose());
-                lastMeters = m;
-                label = formatLength(m);
-            } else {
+                // A rolling median over the last samples. ARCore keeps refining
+                // anchor poses, so the raw number twitches by centimetres every
+                // frame; the median also throws away the odd wild outlier
+                // instead of letting it flash up on screen.
+                samples.addLast(m);
+                while (samples.size() > 12) samples.removeFirst();
+                Double[] arr = samples.toArray(new Double[0]);
+                java.util.Arrays.sort(arr);
+                smoothed = arr[arr.length / 2];
+                lastMeters = smoothed;
+                label = formatLength(smoothed);
+            } else if (anchors.size() < 2) {
                 lastMeters = -1;
+                smoothed = -1;
+                samples.clear();
             }
 
+            // The overlay follows the camera and must stay at frame rate, but the
+            // text panel only needs a few updates a second — and only when the
+            // text actually changed.
             final String finalLabel = label;
             final boolean finalTracking = tracking;
+            runOnUiThread(() -> overlay.setState(pts, finalLabel, finalTracking));
+
+            long now = System.currentTimeMillis();
+            if (now - lastUiPush < 120) return;
+            lastUiPush = now;
+
+            final String hintText;
+            final String readoutText;
+            if (!finalTracking) {
+                hintText = "Rör telefonen långsamt så AR-spårningen hittar rummet";
+                readoutText = anchors.isEmpty() ? "Tryck för punkt A" : lastReadoutShown;
+            } else if (anchors.isEmpty()) {
+                hintText = "Sikta med hårkorset och tryck för punkt A";
+                readoutText = "Tryck för punkt A";
+            } else if (anchors.size() == 1) {
+                hintText = "Punkt A satt – sikta på punkt B och tryck igen";
+                readoutText = "Tryck för punkt B";
+            } else {
+                hintText = null;
+                readoutText = finalLabel == null ? "" : finalLabel;
+            }
+
             runOnUiThread(() -> {
-                overlay.setState(pts, finalLabel, finalTracking);
-                if (!finalTracking) {
-                    hint.setVisibility(View.VISIBLE);
-                    hint.setText("Rör telefonen långsamt så AR-spårningen hittar rummet");
-                } else if (anchors.isEmpty()) {
-                    hint.setVisibility(View.VISIBLE);
-                    hint.setText("Sikta med hårkorset och tryck för punkt A");
-                    readout.setText("Tryck för punkt A");
-                } else if (anchors.size() == 1) {
-                    hint.setVisibility(View.VISIBLE);
-                    hint.setText("Gå till punkt B och tryck igen");
-                    readout.setText("Tryck för punkt B");
-                } else {
-                    hint.setVisibility(View.GONE);
-                    readout.setText(finalLabel == null ? "" : finalLabel);
+                if (System.currentTimeMillis() > hintHoldUntil) {
+                    if (hintText == null) {
+                        if (hint.getVisibility() != View.GONE) hint.setVisibility(View.GONE);
+                    } else {
+                        if (hint.getVisibility() != View.VISIBLE) hint.setVisibility(View.VISIBLE);
+                        if (!hintText.equals(lastHintShown)) { hint.setText(hintText); lastHintShown = hintText; }
+                    }
                 }
-                useBtn.setEnabled(lastMeters > 0);
-                useBtn.setAlpha(lastMeters > 0 ? 1f : .45f);
-                undoBtn.setEnabled(!anchors.isEmpty());
-                undoBtn.setAlpha(anchors.isEmpty() ? .45f : 1f);
+                if (!readoutText.equals(lastReadoutShown)) { readout.setText(readoutText); lastReadoutShown = readoutText; }
+                boolean canUse = lastMeters > 0;
+                if (useBtn.isEnabled() != canUse) { useBtn.setEnabled(canUse); useBtn.setAlpha(canUse ? 1f : .45f); }
+                boolean canUndo = !anchors.isEmpty();
+                if (undoBtn.isEnabled() != canUndo) { undoBtn.setEnabled(canUndo); undoBtn.setAlpha(canUndo ? 1f : .45f); }
             });
         } catch (Throwable t) {
             // A dropped frame must never take the whole activity down.
@@ -394,31 +458,69 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
     private void placeAnchorAtCentre(Frame frame) {
         float cx = surfaceView.getWidth() / 2f, cy = surfaceView.getHeight() / 2f;
         List<HitResult> hits = frame.hitTest(cx, cy);
-        HitResult chosen = null, fallback = null;
+
+        // Raw feature points ("Point") used to be accepted as a last resort. They
+        // are the single biggest source of nonsense readings: a feature point can
+        // sit at almost any depth, which is how a kitchen wall came out as 24 m.
+        // Only surfaces ARCore is actually confident about are accepted now —
+        // a fitted plane, or a depth-map point where the phone supports depth.
+        HitResult chosen = null;
         for (HitResult hit : hits) {
             com.google.ar.core.Trackable tr = hit.getTrackable();
-            if (tr instanceof Plane && ((Plane) tr).isPoseInPolygon(hit.getHitPose())) {
+            if (tr instanceof Plane
+                    && ((Plane) tr).isPoseInPolygon(hit.getHitPose())
+                    && tr.getTrackingState() == TrackingState.TRACKING) {
                 chosen = hit;
                 break;
             }
-            if (tr instanceof com.google.ar.core.DepthPoint && chosen == null) {
+            if (chosen == null && tr instanceof com.google.ar.core.DepthPoint
+                    && tr.getTrackingState() == TrackingState.TRACKING) {
                 chosen = hit;
-            } else if (tr instanceof Point && fallback == null) {
-                fallback = hit;
             }
         }
-        if (chosen == null) chosen = fallback;
         if (chosen == null) {
-            runOnUiThread(() -> Toast.makeText(this,
-                    "Hittade ingen yta där – rör telefonen lite och försök igen",
-                    Toast.LENGTH_SHORT).show());
+            showHint("Ingen säker yta där – rikta mot en vägg eller ett golv och rör telefonen lite");
             return;
         }
+
+        // Anything far away is a tracking artefact rather than something being
+        // measured indoors, and a point behind the camera is meaningless.
+        float dist = chosen.getDistance();
+        if (dist <= 0.05f || dist > 12f) {
+            showHint("För osäkert avstånd där (" + String.format(java.util.Locale.forLanguageTag("sv-SE"), "%.1f m", dist) + ") – gå närmare");
+            return;
+        }
+
         if (anchors.size() >= 2) {
             for (Anchor a : anchors) a.detach();
             anchors.clear();
+            smoothed = -1;
+            samples.clear();
         }
-        anchors.add(chosen.createAnchor());
+        // Anchoring on the trackable itself keeps the point locked to that
+        // surface as ARCore refines it, instead of drifting with the session.
+        com.google.ar.core.Trackable tr = chosen.getTrackable();
+        Anchor placed = (tr != null) ? tr.createAnchor(chosen.getHitPose()) : chosen.createAnchor();
+
+        // Sanity-check the SPAN, not just how far the point is from the camera.
+        // Capping camera distance alone still allowed an A–B of tens of metres
+        // when one point had landed badly — which is what a 38 m reading across
+        // a kitchen table means. Nothing measured indoors spans that far, so the
+        // point is rejected with an explanation rather than silently accepted.
+        if (anchors.size() == 1) {
+            double span = distance(anchors.get(0).getPose(), placed.getPose());
+            if (span > 15.0) {
+                placed.detach();
+                showHint("Orimligt avstånd (" + formatLength(span) + ") – punkten togs inte. Rikta mot en tydlig yta och försök igen.");
+                return;
+            }
+        }
+        anchors.add(placed);
+    }
+
+    private void showHint(String msg) {
+        runOnUiThread(() -> { hint.setVisibility(View.VISIBLE); hint.setText(msg); });
+        hintHoldUntil = System.currentTimeMillis() + 2500;
     }
 
     private MeasureOverlayView.ScreenPoint project(Pose pose) {

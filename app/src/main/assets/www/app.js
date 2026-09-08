@@ -62,7 +62,7 @@
   function saveMeta() {
     localStorage.setItem(META_KEY, JSON.stringify(state.meta));
   }
-  const THEMES={dark:"#0b0b0c",light:"#f3f4f6",neon:"#050b06"};
+  const THEMES={dark:"#0b0b0c",light:"#f3f4f6",neon:"#050b06",sky:"#071a33"};
   function applyTheme(theme, persist=false){
     const next=THEMES[theme]?theme:"dark";
     state.meta.theme=next;
@@ -1733,10 +1733,16 @@
   function centerFullscreenDrawing(){
     const viewport=$("#pdfViewport"), wrap=$("#canvasWrap"); if(!viewport||!wrap)return;
     wrap.style.position=""; wrap.style.left=""; wrap.style.top=""; wrap.style.transform="none";
-    // Horizontal centring is CSS (margin-inline:auto). Vertical centring has no
-    // block-layout equivalent, so it is applied as a top margin — which, unlike
-    // flex/grid centring, keeps every part of an overflowing drawing reachable
-    // by scrolling.
+    // Horizontal centring is CSS (margin-inline:auto). Vertical centring is a top
+    // margin — scroll-safe, unlike flex/grid centring which puts the overflowing
+    // part on unreachable negative scroll.
+    // It must only be applied when the viewport has a FIXED height that is taller
+    // than the drawing (fullscreen). In the normal view the frame now sizes to
+    // its content, so adding a margin there just pushes the drawing down AND
+    // grows the frame by the same amount — the drawing ends up sitting low with
+    // a tall empty box above it, instead of the frame hugging the sheet.
+    const fs=$("#viewerView")?.classList.contains("fullscreen-ui");
+    if(!fs){ wrap.style.marginTop=""; wrap.style.marginBottom=""; return; }
     const h=parseFloat(wrap.style.height)||wrap.getBoundingClientRect().height;
     const pad=Math.max(0,(viewport.clientHeight-h)/2);
     wrap.style.marginTop=pad+"px";
@@ -2583,15 +2589,26 @@
           if(dist<r*2.4)nearEnd=q; else farEnd=q;
         }
         if(!nearEnd||!farEnd)continue;
-        // a tick, roughly square to the arm, sitting at the arm's far end
+        // Requiring ONE tick square to the arm was not enough: cable routes are
+        // drawn with right-angle bends, so "segment into the dot, then a
+        // perpendicular segment at its far end" also describes an ordinary
+        // corner in a wire — which is why junction boxes and HT dots kept being
+        // counted. The legend's switch glyph actually carries TWO short strokes
+        // there (the return-spring marker), near-parallel to each other. A wire
+        // corner has only the one continuing segment, so demanding a pair is
+        // what separates them.
+        const ticks=[];
         for(const t of segs){
           if(t===arm)continue;
           if(t.len<d*0.35||t.len>d*1.35)continue;
-          if(angDiff(t.ang,arm.ang)<58)continue;
+          if(angDiff(t.ang,arm.ang)<45)continue;
           const closest=Math.min(
             Math.hypot(t.a[0]-farEnd[0],t.a[1]-farEnd[1]),
             Math.hypot(t.b[0]-farEnd[0],t.b[1]-farEnd[1]));
-          if(closest<d*1.15)return true;
+          if(closest<d*1.15)ticks.push(t);
+        }
+        for(let i=0;i<ticks.length;i++)for(let j=i+1;j<ticks.length;j++){
+          if(angDiff(ticks[i].ang,ticks[j].ang)<22)return true;  // the paired marker
         }
       }
       return false;
@@ -2955,6 +2972,10 @@
   // offline on site (no network on a building site) and stays in step with the
   // build it actually shipped with.
   const CHANGELOG=[
+    {v:"8.3.1",d:"Ritningen centreras nu vertikalt i helskärm — en CSS-regel med !important nollställde marginalen och slog ut centreringen. AR: display-geometrin nådde inte alltid ARCore, vilket gjorde att varje tryck träffade fel del av scenen. Mätsträckor över 15 m avvisas nu."},
+    {v:"8.3.0",d:"AR-mätaren stabiliserad. Råa featurepunkter accepteras inte längre — de kan ligga på nästan vilket djup som helst och var orsaken till vilt fel mått. Gränssnittet uppdaterades 60 ggr/s vilket gav flimret; nu några gånger i sekunden och bara vid faktisk ändring. Måttet medianfiltreras."},
+    {v:"8.2.2",d:"Dosor räknades fortfarande som strömställare. Kabelvägar ritas med räta vinklar, så \"ledning in i punkten + vinkelrätt segment i dess ände\" beskriver också en vanlig kabelböj. Strömställarens symbol har i själva verket TVÅ korta parallella streck där (återfjädringsmärket) — ett par krävs nu."},
+    {v:"8.2.1",d:"Himmelsblå gick inte att välja — temat saknades i listan över giltiga teman, så valet föll tillbaka på mörkt. Ritningen trycktes också ned i ramen: den vertikala centreringen lades på även när ramen redan anpassar sig efter innehållet."},
     {v:"8.2.0",d:"Nytt tema \"Himmelsblå\": djup azurbas, ljus himmelsblå accent och mjuka molnslöjor i bakgrunden. Loggan och startskärmen får en himmelsgradient. Temat följer med hela vägen ut i AR-mätvyn."},
     {v:"8.1.0",d:"Strömställare skiljs nu från dosor. Testet krävde bara ett streck vid cirkeln — men en dosa är också en prick med en ledning. Nu krävs det korta tvärstrecket vinkelrätt mot manöverarmens yttre ände, som bara strömställaren har. Kalibreringen tar den runda symbolen ur legenden i stället för den största."},
     {v:"8.0.1",d:"AR-vyn följer nu temat fullt ut. Accentfärgen följde redan med, men bakgrunder, knappar och måttetikett var hårdkodade mörka och blev därför fel i Vit-temat."},
@@ -3017,7 +3038,8 @@
   };
   window.ekisArMeasureCancelled=function(){};
 
-  $$('[data-theme-choice]').forEach(b=>b.onclick=()=>{applyTheme(b.dataset.themeChoice,true);toast(b.dataset.themeChoice==='light'?'Ljust tema aktiverat':'Mörkt tema aktiverat')});
+  const THEME_NAMES={dark:'Svart',light:'Vit',neon:'Neon',sky:'Himmelsblå'};
+  $$('[data-theme-choice]').forEach(b=>b.onclick=()=>{const t=b.dataset.themeChoice;applyTheme(t,true);toast(`${THEME_NAMES[t]||'Tema'} aktiverat`)});
   $("#brandBtn").onclick=()=>{renderProjects();showView("projectsView")};
   $("#newProjectBtn").onclick=async()=>{
     const name=await promptModal("Nytt projekt","Ge projektet ett namn.","Nytt projekt");
