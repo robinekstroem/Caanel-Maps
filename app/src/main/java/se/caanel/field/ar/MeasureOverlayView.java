@@ -35,6 +35,8 @@ public class MeasureOverlayView extends View {
     private final List<ScreenPoint> points = new ArrayList<>();
     private String distanceLabel = null;
     private boolean tracking = false;
+    private boolean lockOn = false;      // reticle has a stable surface under it
+    private String previewLabel = null;  // live distance to that surface
     private int accent = Color.parseColor("#ff6a00");
 
     public MeasureOverlayView(Context c) { this(c, null); }
@@ -74,11 +76,14 @@ public class MeasureOverlayView extends View {
         invalidate();
     }
 
-    public void setState(List<ScreenPoint> pts, String label, boolean isTracking) {
+    public void setState(List<ScreenPoint> pts, String label, boolean isTracking,
+                         boolean isLockOn, String preview) {
         points.clear();
         if (pts != null) points.addAll(pts);
         distanceLabel = label;
         tracking = isTracking;
+        lockOn = isLockOn;
+        previewLabel = preview;
         invalidate();
     }
 
@@ -91,13 +96,22 @@ public class MeasureOverlayView extends View {
 
         // Centre reticle: shows where a tap will land, and dims while ARCore
         // still lacks tracking so the user knows to move the phone a little.
-        float r = dp(13f);
-        reticle.setAlpha(tracking ? 190 : 70);
+        // The reticle now reports whether a point can actually be trusted here:
+        // dim = no tracking, thin ring = surface found but still settling,
+        // solid ring with a filled centre = locked on and safe to tap.
+        float r = dp(13f) * (lockOn ? 1f : 1.25f);
+        reticle.setAlpha(!tracking ? 60 : (lockOn ? 255 : 130));
+        reticle.setStrokeWidth(dp(lockOn ? 2.6f : 1.5f));
         canvas.drawCircle(cx, cy, r, reticle);
         canvas.drawLine(cx - r * 1.7f, cy, cx - r * 0.55f, cy, reticle);
         canvas.drawLine(cx + r * 0.55f, cy, cx + r * 1.7f, cy, reticle);
         canvas.drawLine(cx, cy - r * 1.7f, cx, cy - r * 0.55f, reticle);
         canvas.drawLine(cx, cy + r * 0.55f, cx, cy + r * 1.7f, reticle);
+        if (lockOn) canvas.drawCircle(cx, cy, dp(3.2f), dotFill);
+        if (previewLabel != null) {
+            float tw = labelText.measureText(previewLabel);
+            canvas.drawText(previewLabel, cx - tw / 2, cy + r * 2.6f + dp(14f), labelText);
+        }
 
         if (points.size() >= 2) {
             ScreenPoint a = points.get(0), b = points.get(1);

@@ -62,7 +62,7 @@
   function saveMeta() {
     localStorage.setItem(META_KEY, JSON.stringify(state.meta));
   }
-  const THEMES={dark:"#0b0b0c",light:"#f3f4f6",neon:"#050b06",sky:"#071a33"};
+  const THEMES={dark:"#0b0b0c",light:"#f3f4f6",neon:"#050b06",sky:"#04152b",jul:"#0a1410"};
   function applyTheme(theme, persist=false){
     const next=THEMES[theme]?theme:"dark";
     state.meta.theme=next;
@@ -75,6 +75,7 @@
     // would stay orange on the green theme.
     accentColor.cache=null;
     if(typeof drawOverlay==="function"&&state.currentFileId)try{drawOverlay()}catch{}
+    try{snow.sync()}catch{}
     if(persist)saveMeta();
   }
   // Accent used for canvas drawing, read from the active theme's CSS variable.
@@ -450,6 +451,9 @@
     $$(".view").forEach(v=>v.classList.toggle("active", v.id===id));
     state.currentView=id;
     $("#bottomNav").classList.toggle("hidden", id==="viewerView" || id==="projectView");
+    // Pause the snow while a drawing is open so panning and zooming a PDF never
+    // competes with decoration for frames.
+    try{ id==="viewerView"?snow.stop():snow.sync(); }catch{}
     if(nav) $$(".nav-btn").forEach(b=>b.classList.toggle("active", b.dataset.view===id));
     window.scrollTo({top:0,behavior:"instant"});
   }
@@ -2091,11 +2095,19 @@
   }
 
   function renderCounterSelectionBadge(){
-    const status=$("#counterStatus"); if(!status)return;
+    const status=$("#counterStatus"), btn=$("#runCounterBtn");
     const groups=counterSelectedSummary();
     const n=[...state.counterSelected].length;
-    if(!n){status.textContent='Inga ritningar markerade.';return}
-    status.innerHTML=`${n} ritningar valda · `+Object.entries(groups).map(([c,fs])=>`${esc(c)} ${fs.length}`).join(' · ');
+    // The action button now states exactly what it will do and is disabled
+    // until there is something to do, instead of sitting enabled in the header
+    // and answering a tap with an error toast.
+    if(btn){
+      btn.disabled=!n;
+      btn.textContent=n?`Scanna ${n} ritning${n===1?'':'ar'}`:'Scanna valda';
+    }
+    if(!status)return;
+    if(!n){status.textContent='Markera minst en ritning nedan.';return}
+    status.innerHTML=Object.entries(groups).map(([c,fs])=>`${esc(c)} ${fs.length}`).join(' · ');
   }
 
   function scannerTextNodes(tc){
@@ -2650,7 +2662,14 @@
       const nearArea=scannerNearestArea(f.cx,f.cy,vpAreas,viewport.width,viewport.height);
       hits.push({type,score:.95,x:f.cx,y:f.cy,nx:f.cx/viewport.width,ny:f.cy/viewport.height,area:nearArea?.area||null});
     }
-    return scannerNms(hits,Math.max(domeLong,domeShort)*.7);
+    // Merge radius has to follow the symbol being merged. One radius derived from
+    // the OUTLET size (~11pt) was applied to switches too, but a switch circle is
+    // only about half that — so a 2- or 3-gang switch, whose circles sit roughly
+    // one diameter apart, was collapsed into a single hit. Each type is now
+    // deduplicated against its own size.
+    const outletHits=scannerNms(hits.filter(h=>h.type==='outlet'),Math.max(domeLong,domeShort)*.7);
+    const switchHits=scannerNms(hits.filter(h=>h.type==='switch'),Math.max(4,circD*.75));
+    return outletHits.concat(switchHits);
   }
 
   async function scannerVisualSymbols(page,tc,areas,types){
@@ -2972,6 +2991,11 @@
   // offline on site (no network on a building site) and stays in step with the
   // build it actually shipped with.
   const CHANGELOG=[
+    {v:"8.8.0",d:"Nytt tema \"Julafton\": granmörk bas, varm guldaccent som levande ljus, och mjuk snö som faller bakom innehållet. Snön pausas automatiskt när en ritning är öppen, i bakgrunden, och för den som valt reducerad rörelse i systemet."},
+    {v:"8.7.0",d:"Räknarvyn omgjord. Knappen satt inklämd i rubrikraden och krockade med texten; den ligger nu i en fast åtgärdsrad längst ned tillsammans med statusraden, visar hur många ritningar som ska scannas och är avstängd tills något är valt. De tre korten är numrerade steg."},
+    {v:"8.6.0",d:"Flerpoliga strömställare räknas nu var för sig. Sammanslagningen av närliggande träffar utgick från uttagets storlek, som är ungefär dubbelt så stor som strömställarens — därför slogs en 2- eller 3-grupp ihop till en enda. Varje symboltyp jämförs nu mot sin egen storlek."},
+    {v:"8.5.0",d:"AR-mätaren: hårkorset visar nu live om ytan under det är pålitlig, med avståndet utskrivet. En punkt kan bara sättas när avläsningen legat stilla en stund — ostadiga avläsningar var källan till de vilda måtten. Varnar också om spårningen tappats mellan punkterna. Himmelsblå har fått en klarare, ljusare blå ton."},
+    {v:"8.4.0",d:"AR-mätaren har fått en diagnostikvy (knappen Diag) som visar spårningsstatus, antal plan, djupstöd, display-geometri och varje mätpunkts data. Appen säger nu också varför spårningen fallerar — t.ex. för mörkt i rummet, vilket gör alla mätningar opålitliga."},
     {v:"8.3.1",d:"Ritningen centreras nu vertikalt i helskärm — en CSS-regel med !important nollställde marginalen och slog ut centreringen. AR: display-geometrin nådde inte alltid ARCore, vilket gjorde att varje tryck träffade fel del av scenen. Mätsträckor över 15 m avvisas nu."},
     {v:"8.3.0",d:"AR-mätaren stabiliserad. Råa featurepunkter accepteras inte längre — de kan ligga på nästan vilket djup som helst och var orsaken till vilt fel mått. Gränssnittet uppdaterades 60 ggr/s vilket gav flimret; nu några gånger i sekunden och bara vid faktisk ändring. Måttet medianfiltreras."},
     {v:"8.2.2",d:"Dosor räknades fortfarande som strömställare. Kabelvägar ritas med räta vinklar, så \"ledning in i punkten + vinkelrätt segment i dess ände\" beskriver också en vanlig kabelböj. Strömställarens symbol har i själva verket TVÅ korta parallella streck där (återfjädringsmärket) — ett par krävs nu."},
@@ -3038,7 +3062,95 @@
   };
   window.ekisArMeasureCancelled=function(){};
 
-  const THEME_NAMES={dark:'Svart',light:'Vit',neon:'Neon',sky:'Himmelsblå'};
+  // ---- Snö (endast Julafton-temat) ----
+  // Ritas på en egen canvas bakom innehållet. En canvas i stället för många
+  // DOM-element håller kostnaden nere, och slingan stoppas helt när temat inte
+  // är aktivt, när appen ligger i bakgrunden, eller när en ritning är öppen —
+  // panorering och zoom av en PDF ska aldrig behöva konkurrera med dekoration.
+  const snow=(function(){
+    let canvas=null,ctx=null,flakes=[],raf=null,w=0,h=0,dpr=1;
+    const reduced=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    function ensure(){
+      if(canvas)return;
+      canvas=document.createElement("canvas");
+      canvas.id="snowLayer";
+      canvas.setAttribute("aria-hidden","true");
+      document.body.appendChild(canvas);
+      ctx=canvas.getContext("2d");
+      resize();
+      window.addEventListener("resize",resize);
+    }
+    function resize(){
+      if(!canvas)return;
+      dpr=Math.min(2,window.devicePixelRatio||1);
+      w=window.innerWidth; h=window.innerHeight;
+      canvas.width=Math.round(w*dpr); canvas.height=Math.round(h*dpr);
+      canvas.style.width=w+"px"; canvas.style.height=h+"px";
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      build();
+    }
+    function build(){
+      // Density scales with the viewport so a tablet does not get a blizzard
+      // and a phone a drizzle.
+      const n=Math.round(Math.min(70,Math.max(26,(w*h)/26000)));
+      flakes=[];
+      for(let i=0;i<n;i++)flakes.push(seed(true));
+    }
+    function seed(anywhere){
+      const r=0.7+Math.random()*2.1;
+      return {
+        x:Math.random()*w,
+        y:anywhere?Math.random()*h:-8-Math.random()*40,
+        r,
+        // Bigger flakes fall a little faster and are a little brighter: a cheap
+        // depth cue that stops the snow looking like uniform static.
+        vy:(6+r*7)/60,
+        drift:(Math.random()*0.5-0.25),
+        phase:Math.random()*Math.PI*2,
+        sway:0.25+Math.random()*0.5,
+        alpha:0.18+ (r/2.8)*0.42
+      };
+    }
+    function frame(){
+      raf=null;
+      if(!ctx)return;
+      ctx.clearRect(0,0,w,h);
+      for(const f of flakes){
+        f.y+=f.vy;
+        f.phase+=0.008;
+        f.x+=f.drift+Math.sin(f.phase)*f.sway*0.35;
+        if(f.y-f.r>h||f.x<-20||f.x>w+20)Object.assign(f,seed(false));
+        ctx.beginPath();
+        ctx.fillStyle=`rgba(255,252,244,${f.alpha})`;
+        ctx.arc(f.x,f.y,f.r,0,Math.PI*2);
+        ctx.fill();
+      }
+      schedule();
+    }
+    function schedule(){ if(!raf&&running())raf=requestAnimationFrame(frame); }
+    function running(){
+      return state.meta.theme==="jul" && !document.hidden && state.currentView!=="viewerView" && !reduced;
+    }
+    function sync(){
+      if(state.meta.theme!=="jul"){ stop(); return; }
+      ensure();
+      if(reduced){ // static, gentle scatter for users who asked for less motion
+        if(ctx){ ctx.clearRect(0,0,w,h);
+          for(const f of flakes){ctx.beginPath();ctx.fillStyle=`rgba(255,252,244,${f.alpha*0.8})`;ctx.arc(f.x,f.y,f.r,0,Math.PI*2);ctx.fill()} }
+        return;
+      }
+      schedule();
+    }
+    function stop(){
+      if(raf){cancelAnimationFrame(raf);raf=null}
+      if(ctx&&canvas)ctx.clearRect(0,0,w,h);
+    }
+    document.addEventListener("visibilitychange",()=>{ document.hidden?stop():sync(); });
+    return {sync,stop};
+  })();
+
+  const THEME_NAMES={dark:'Svart',light:'Vit',neon:'Neon',sky:'Himmelsblå',jul:'Julafton'};
   $$('[data-theme-choice]').forEach(b=>b.onclick=()=>{const t=b.dataset.themeChoice;applyTheme(t,true);toast(`${THEME_NAMES[t]||'Tema'} aktiverat`)});
   $("#brandBtn").onclick=()=>{renderProjects();showView("projectsView")};
   $("#newProjectBtn").onclick=async()=>{
@@ -3095,7 +3207,7 @@
   $("#floatingNextDrawing").onclick=()=>openAdjacentDrawing(1);
   $$(`[data-counter-category]`).forEach(b=>b.onclick=()=>{state.counterCategory=b.dataset.counterCategory;renderCounter();});
   $("#runCounterBtn").onclick=counterPreAnalyze;
-  $("#counterSelectAllBtn").onclick=()=>{const boxes=$$("[data-counter-file]");const all=boxes.length&&boxes.every(x=>x.checked);boxes.forEach(x=>{x.checked=!all;!all?state.counterSelected.add(x.dataset.counterFile):state.counterSelected.delete(x.dataset.counterFile)});};
+  $("#counterSelectAllBtn").onclick=()=>{const boxes=$$("[data-counter-file]");const all=boxes.length&&boxes.every(x=>x.checked);boxes.forEach(x=>{x.checked=!all;!all?state.counterSelected.add(x.dataset.counterFile):state.counterSelected.delete(x.dataset.counterFile)});renderCounterSelectionBadge();};
   $("#fullscreenBtn").onclick=toggleFullscreen;
   $("#zoomResetBtn").onclick=fitDrawing;
   $("#floorDrawingSelect").onchange=e=>switchDrawingKeepView(e.target.value);

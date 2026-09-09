@@ -85,6 +85,21 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
     private long lastUiPush = 0;
     private long hintHoldUntil = 0;
     private String lastHintShown = "", lastReadoutShown = "";
+    // Diagnostics. Four attempts at fixing the wild readings have been made from
+    // reasoning alone, without being able to run the code — so instead of a
+    // fifth guess, the numbers ARCore is actually working with are put on screen.
+    private TextView diag;
+    private boolean diagOn = false;
+    private volatile String lastHitInfo = "–";
+    private volatile String lastRejectInfo = "–";
+    // Live preview at the reticle. Until now a point could only be judged AFTER
+    // it was placed, so a bad depth reading became a bad measurement. The hit is
+    // now evaluated every frame and only accepted once it has held still for a
+    // moment — which is exactly the condition a trustworthy point needs.
+    private final java.util.ArrayDeque<Float> previewDepths = new java.util.ArrayDeque<>();
+    private volatile float previewDist = -1;
+    private volatile boolean previewStable = false;
+    private boolean trackingLostSincePointA = false;
 
     // Display geometry has to reach ARCore before any hit test is meaningful:
     // hitTest() interprets its x/y in the geometry ARCore was last told about.
@@ -97,6 +112,7 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
     // re-applied whenever they change or the session appears.
     private int viewW = 0, viewH = 0, viewRot = -1;
     private boolean geometryApplied = false;
+    private boolean depthSupported = false;
 
     private final float[] viewMatrix = new float[16];
     private final float[] projMatrix = new float[16];
@@ -116,12 +132,18 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
             chromeText = Color.parseColor("#14161a");
             chromeBtn = Color.parseColor("#dfe2e7");
             chromeBtnText = Color.parseColor("#14161a");
+        } else if ("jul".equalsIgnoreCase(getIntent().getStringExtra(EXTRA_THEME))) {
+            chromeBg = Color.parseColor("#0a1410");
+            chromeBgSoft = Color.parseColor("#12211a");
+            chromeText = Color.parseColor("#f6f0e4");
+            chromeBtn = Color.parseColor("#182e23");
+            chromeBtnText = Color.parseColor("#f6f0e4");
         } else if ("sky".equalsIgnoreCase(getIntent().getStringExtra(EXTRA_THEME))) {
-            chromeBg = Color.parseColor("#071a33");
-            chromeBgSoft = Color.parseColor("#0e2748");
-            chromeText = Color.parseColor("#eaf4ff");
-            chromeBtn = Color.parseColor("#143156");
-            chromeBtnText = Color.parseColor("#eaf4ff");
+            chromeBg = Color.parseColor("#04152b");
+            chromeBgSoft = Color.parseColor("#0b2a4d");
+            chromeText = Color.parseColor("#f0f9ff");
+            chromeBtn = Color.parseColor("#123963");
+            chromeBtnText = Color.parseColor("#f0f9ff");
         } else {
             chromeBg = Color.parseColor("#0b0b0c");
             chromeBgSoft = Color.parseColor("#101012");
@@ -172,6 +194,18 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
         hp.setMargins((int) (14 * d), (int) (52 * d), (int) (14 * d), 0);
         root.addView(hint, hp);
 
+        diag = new TextView(this);
+        diag.setTextColor(Color.parseColor("#b8ffd9"));
+        diag.setTextSize(11f);
+        diag.setTypeface(android.graphics.Typeface.MONOSPACE);
+        diag.setBackgroundColor(Color.parseColor("#cc000000"));
+        diag.setPadding((int) (10 * d), (int) (8 * d), (int) (10 * d), (int) (8 * d));
+        diag.setVisibility(View.GONE);
+        FrameLayout.LayoutParams dp2 = new FrameLayout.LayoutParams(-1, -2);
+        dp2.gravity = Gravity.TOP;
+        dp2.setMargins((int) (10 * d), (int) (110 * d), (int) (10 * d), 0);
+        root.addView(diag, dp2);
+
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.VERTICAL);
         bar.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -208,6 +242,13 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
             }
         });
         row.addView(undoBtn, buttonParams(d));
+
+        Button diagBtn = styledButton("Diag", false, d);
+        diagBtn.setOnClickListener(v -> {
+            diagOn = !diagOn;
+            diag.setVisibility(diagOn ? View.VISIBLE : View.GONE);
+        });
+        row.addView(diagBtn, buttonParams(d));
 
         Button close = styledButton("Stäng", false, d);
         close.setOnClickListener(v -> { setResult(RESULT_CANCELED); finish(); });
@@ -283,7 +324,8 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
                 // Depth, where the device supports it, lets points land on
                 // surfaces ARCore has not yet fitted a plane to — which is most
                 // of a bare wall on a building site.
-                if (session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)) {
+                depthSupported = session.isDepthModeSupported(Config.DepthMode.AUTOMATIC);
+                if (depthSupported) {
                     config.setDepthMode(Config.DepthMode.AUTOMATIC);
                 }
                 session.configure(config);
@@ -363,10 +405,18 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
             Camera camera = frame.getCamera();
             boolean tracking = camera.getTrackingState() == TrackingState.TRACKING;
 
+            updatePreview(frame, tracking);
+            if (!tracking && !anchors.isEmpty()) trackingLostSincePointA = true;
+
             if (tapPending) {
                 tapPending = false;
-                if (tracking) placeAnchorAtCentre(frame);
-                else showHint("Vänta – AR-spårningen har inte låst på rummet än");
+                if (!tracking) {
+                    showHint("Vänta – AR-spårningen har inte låst på rummet än");
+                } else if (!previewStable) {
+                    showHint("Avläsningen är ostadig där – håll stilla en sekund tills hårkorset blir fast");
+                } else {
+                    placeAnchorAtCentre(frame);
+                }
             }
 
             camera.getViewMatrix(viewMatrix, 0);
@@ -407,7 +457,10 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
             // text actually changed.
             final String finalLabel = label;
             final boolean finalTracking = tracking;
-            runOnUiThread(() -> overlay.setState(pts, finalLabel, finalTracking));
+            final boolean lock = previewStable;
+            final String prev = (anchors.size() < 2 && previewDist > 0)
+                    ? formatLength(previewDist) : null;
+            runOnUiThread(() -> overlay.setState(pts, finalLabel, finalTracking, lock, prev));
 
             long now = System.currentTimeMillis();
             if (now - lastUiPush < 120) return;
@@ -416,7 +469,21 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
             final String hintText;
             final String readoutText;
             if (!finalTracking) {
-                hintText = "Rör telefonen långsamt så AR-spårningen hittar rummet";
+                // Naming the actual reason matters: ARCore degrades badly in dim
+                // light, and every measurement taken while tracking is poor is
+                // unreliable no matter what the code does afterwards.
+                switch (camera.getTrackingFailureReason()) {
+                    case INSUFFICIENT_LIGHT:
+                        hintText = "För mörkt för AR – tänd ljuset i rummet"; break;
+                    case EXCESSIVE_MOTION:
+                        hintText = "Du rör telefonen för fort – håll den stilla"; break;
+                    case INSUFFICIENT_FEATURES:
+                        hintText = "För kal yta – rikta mot något med mönster eller kanter"; break;
+                    case CAMERA_UNAVAILABLE:
+                        hintText = "Kameran är upptagen av en annan app"; break;
+                    default:
+                        hintText = "Rör telefonen långsamt så AR-spårningen hittar rummet";
+                }
                 readoutText = anchors.isEmpty() ? "Tryck för punkt A" : lastReadoutShown;
             } else if (anchors.isEmpty()) {
                 hintText = "Sikta med hårkorset och tryck för punkt A";
@@ -425,11 +492,60 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
                 hintText = "Punkt A satt – sikta på punkt B och tryck igen";
                 readoutText = "Tryck för punkt B";
             } else {
-                hintText = null;
+                // Anchors placed either side of a tracking dropout can sit in
+                // effectively different frames of reference, so the span between
+                // them is not trustworthy — say so rather than present a number.
+                hintText = trackingLostSincePointA
+                        ? "Spårningen tappades mellan punkterna – mät om för säkert värde" : null;
                 readoutText = finalLabel == null ? "" : finalLabel;
             }
 
+            // Diagnostics text is assembled here where the frame data is available.
+            String diagText = null;
+            if (diagOn) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("spårning: ").append(camera.getTrackingState());
+                if (camera.getTrackingState() != TrackingState.TRACKING) {
+                    sb.append(" (").append(camera.getTrackingFailureReason()).append(")");
+                }
+                int planes = 0, tracked = 0;
+                for (Plane pl : session.getAllTrackables(Plane.class)) {
+                    planes++;
+                    if (pl.getTrackingState() == TrackingState.TRACKING) tracked++;
+                }
+                sb.append("\nplan: ").append(tracked).append("/").append(planes);
+                sb.append("  djup: ").append(depthSupported ? "ja" : "nej");
+                sb.append("\ngeometri: ").append(viewW).append("x").append(viewH)
+                  .append(" rot=").append(viewRot).append(" satt=").append(geometryApplied);
+                sb.append("\nyta: ").append(surfaceView.getWidth()).append("x").append(surfaceView.getHeight());
+                sb.append("\nförhandsvisning: ")
+                  .append(previewDist > 0 ? String.format(java.util.Locale.US, "%.2fm", previewDist) : "ingen")
+                  .append(previewStable ? " STABIL" : " ostadig")
+                  .append(" n=").append(previewDepths.size());
+                sb.append("\nsenaste träff: ").append(lastHitInfo);
+                sb.append("\nsenast avvisad: ").append(lastRejectInfo);
+                for (int i = 0; i < anchors.size(); i++) {
+                    Anchor a = anchors.get(i);
+                    Pose ap = a.getPose();
+                    float dx = ap.tx() - camera.getPose().tx();
+                    float dy = ap.ty() - camera.getPose().ty();
+                    float dz = ap.tz() - camera.getPose().tz();
+                    sb.append("\n").append(i == 0 ? "A" : "B").append(": ")
+                      .append(a.getTrackingState())
+                      .append(" kam=").append(String.format(java.util.Locale.US, "%.2f", Math.sqrt(dx*dx+dy*dy+dz*dz))).append("m")
+                      .append(" xyz=").append(String.format(java.util.Locale.US, "%.2f,%.2f,%.2f", ap.tx(), ap.ty(), ap.tz()));
+                }
+                if (anchors.size() >= 2) {
+                    sb.append("\nrå: ").append(String.format(java.util.Locale.US, "%.3f", distance(anchors.get(0).getPose(), anchors.get(1).getPose())))
+                      .append("m  median: ").append(String.format(java.util.Locale.US, "%.3f", smoothed)).append("m")
+                      .append("  n=").append(samples.size());
+                }
+                diagText = sb.toString();
+            }
+            final String finalDiag = diagText;
+
             runOnUiThread(() -> {
+                if (finalDiag != null) diag.setText(finalDiag);
                 if (System.currentTimeMillis() > hintHoldUntil) {
                     if (hintText == null) {
                         if (hint.getVisibility() != View.GONE) hint.setVisibility(View.GONE);
@@ -479,6 +595,7 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
             }
         }
         if (chosen == null) {
+            lastRejectInfo = "ingen godkänd träff (" + hits.size() + " raw)";
             showHint("Ingen säker yta där – rikta mot en vägg eller ett golv och rör telefonen lite");
             return;
         }
@@ -486,7 +603,11 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
         // Anything far away is a tracking artefact rather than something being
         // measured indoors, and a point behind the camera is meaningless.
         float dist = chosen.getDistance();
+        lastHitInfo = chosen.getTrackable().getClass().getSimpleName()
+                + " d=" + String.format(java.util.Locale.US, "%.2f", dist) + "m"
+                + " raw=" + hits.size();
         if (dist <= 0.05f || dist > 12f) {
+            lastRejectInfo = "avstånd " + String.format(java.util.Locale.US, "%.2f", dist) + "m utanför 0.05–12";
             showHint("För osäkert avstånd där (" + String.format(java.util.Locale.forLanguageTag("sv-SE"), "%.1f m", dist) + ") – gå närmare");
             return;
         }
@@ -496,6 +617,7 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
             anchors.clear();
             smoothed = -1;
             samples.clear();
+            trackingLostSincePointA = false;
         }
         // Anchoring on the trackable itself keeps the point locked to that
         // surface as ARCore refines it, instead of drifting with the session.
@@ -510,12 +632,43 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
         if (anchors.size() == 1) {
             double span = distance(anchors.get(0).getPose(), placed.getPose());
             if (span > 15.0) {
+                lastRejectInfo = "span " + String.format(java.util.Locale.US, "%.2f", span) + "m > 15";
                 placed.detach();
                 showHint("Orimligt avstånd (" + formatLength(span) + ") – punkten togs inte. Rikta mot en tydlig yta och försök igen.");
                 return;
             }
         }
         anchors.add(placed);
+    }
+
+    /**
+     * Evaluates the surface under the reticle every frame and decides whether it
+     * is trustworthy. A depth reading that jumps around between frames is the
+     * signature of a bad hit, so a point is only allowed once the reading has
+     * held within a couple of centimetres over several consecutive frames.
+     */
+    private void updatePreview(Frame frame, boolean tracking) {
+        if (!tracking) { previewDepths.clear(); previewDist = -1; previewStable = false; return; }
+        float cx = surfaceView.getWidth() / 2f, cy = surfaceView.getHeight() / 2f;
+        Float d = null;
+        for (HitResult hit : frame.hitTest(cx, cy)) {
+            com.google.ar.core.Trackable tr = hit.getTrackable();
+            if (tr.getTrackingState() != TrackingState.TRACKING) continue;
+            if (tr instanceof Plane && ((Plane) tr).isPoseInPolygon(hit.getHitPose())) { d = hit.getDistance(); break; }
+            if (d == null && tr instanceof com.google.ar.core.DepthPoint) d = hit.getDistance();
+        }
+        if (d == null || d <= 0.05f || d > 12f) {
+            previewDepths.clear(); previewDist = -1; previewStable = false; return;
+        }
+        previewDepths.addLast(d);
+        while (previewDepths.size() > 8) previewDepths.removeFirst();
+        previewDist = d;
+        if (previewDepths.size() < 6) { previewStable = false; return; }
+        float min = Float.MAX_VALUE, max = -Float.MAX_VALUE;
+        for (float v : previewDepths) { min = Math.min(min, v); max = Math.max(max, v); }
+        // 2 cm of spread over the window, scaled a little with distance since
+        // depth noise naturally grows further away.
+        previewStable = (max - min) < Math.max(0.02f, previewDist * 0.02f);
     }
 
     private void showHint(String msg) {

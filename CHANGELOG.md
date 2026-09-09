@@ -2,6 +2,76 @@
 
 ---
 
+## 8.8.0 (build 65)
+
+**Nytt tema: Julafton**
+- Femte temat. Granmörk bas med en varm guldaccent som ett levande ljus, och varmvit text — dämpat och mysigt snarare än rött och grönt julpynt. Rött används sparsamt, som på en riktig gran.
+- Ett varmt sken uppifrån och en mörkare botten ger rummet djup.
+- Loggan och startskärmen får en guldgradient.
+
+**Snö**
+- Mjuk snö faller bakom innehållet, i samma djup som rutnätet, så den aldrig lägger sig över en ritning eller fångar tryck.
+- Ritad på en egen canvas i stället för många DOM-element, vilket håller kostnaden nere. Större flingor faller något snabbare och ljusare än små — en enkel djupkänsla som gör att det inte ser ut som brus.
+- **Pausas helt** när en ritning är öppen, när appen ligger i bakgrunden, och när temat inte är valt. Panorering och zoom av en PDF ska aldrig behöva konkurrera med dekoration om bildrutorna.
+- För den som valt reducerad rörelse i systeminställningarna ritas snön stilla i stället för att falla.
+- Antalet flingor skalas efter skärmytan, så en surfplatta inte får snöstorm och en telefon duggregn.
+
+---
+
+## 8.7.0 (build 64)
+
+**Räknarvyn omgjord**
+- Den primära knappen satt inklämd uppe till höger i rubrikraden, där den krockade med beskrivningstexten som bröt runt den. Statusraden låg samtidigt löst längst ned utan koppling till åtgärden, och de tre korten låg som likvärdiga block utan inbördes ordning.
+- Knappen ligger nu i en **fast åtgärdsrad längst ned** tillsammans med statusraden, så den är nåbar oavsett hur lång ritningslistan är.
+- Knappen är **kontextuell**: den skriver ut hur många ritningar som ska scannas och är avstängd tills något är valt — i stället för att vara aktiv och svara på ett tryck med ett felmeddelande.
+- Korten är nu **numrerade steg** (1 Kategori, 2 Vad ska räknas, 3 Ritningar) så ordningen framgår.
+- Rubriktexten är kortad, och förklaringen om att kategorin bara styr vilka ritningar som listas ligger nu vid kategorivalet där den hör hemma.
+- "Markera alla" uppdaterar nu också knappen och statusraden, vilket den inte gjorde.
+
+---
+
+## 8.6.0 (build 63)
+
+**Flerpoliga strömställare räknas var för sig**
+- Efter symbolsökningen slås närliggande träffar ihop så att samma symbol inte räknas två gånger. Radien för den sammanslagningen räknades ut från **uttagets** storlek och användes även för strömställare — men en strömställarcirkel är ungefär hälften så stor. En 2- eller 3-grupp, där cirklarna sitter ungefär en diameter isär, hamnade därför innanför radien och blev en enda träff.
+- Varje symboltyp jämförs nu mot sin egen storlek.
+- Verifierat mot gruppen märkt d/l/k på Belysning P18 Del 1: räknas nu som 3 strömställare i stället för 1. Totalen på den ritningen gick från 26 till 33, och på P17 Del 1 från 50 till 66.
+
+---
+
+## 8.5.0 (build 62)
+
+**AR-mätaren: se innan du trycker**
+- Grundproblemet har varit att en punkts kvalitet bara gick att bedöma *efter* att den satts — en dålig djupavläsning blev därmed direkt ett dåligt mått. Ytan under hårkorset utvärderas nu varje bildruta.
+- Hårkorset visar läget: nedtonat när spårning saknas, tunn ring medan avläsningen fortfarande vandrar, och kraftig ring med fylld mitt när den ligger stabilt. Avståndet till ytan skrivs ut under hårkorset hela tiden.
+- **En punkt kan bara sättas när avläsningen legat stilla** — inom ett par centimeter över flera bildrutor i följd. Ett djup som hoppar mellan bildrutor är själva signaturen för en dålig träff, och det var vad som blev orimliga mått.
+- Varnar nu om spårningen tappats mellan punkt A och B. Punkter satta på var sin sida av ett spårningsavbrott hamnar i praktiken i olika referensramar, och avståndet mellan dem går inte att lita på.
+- Diagnostikvyn visar även förhandsvisningens avstånd och om den bedöms stabil.
+
+**Himmelsblå ljusare**
+- Klarare och mer mättad himmelsblå accent mot en djupare bas, samma grepp som neon-grönt använder. Moln, rutnät, panelfärger, temaväljarens miniatyr och AR-vyns färger följer med.
+
+---
+
+## 8.4.0 (build 61)
+
+**AR-mätaren: diagnostik i stället för fler gissningar**
+- Fyra rättningar har gjorts utifrån enbart kodläsning, utan möjlighet att köra koden. I stället för en femte gissning visas nu de värden ARCore faktiskt arbetar med, via knappen **Diag** i mätvyn:
+  - spårningsstatus och orsak när den fallerar
+  - antal upptäckta plan, och hur många som spåras
+  - om telefonen stödjer djupdata
+  - vilken display-geometri ARCore fått, och om den hunnit sättas
+  - senaste träffens typ och avstånd, samt senaste avvisade träff med skäl
+  - varje mätpunkts spårningsstatus, avstånd från kameran och världskoordinater
+  - rått kontra medianfiltrerat mått
+- Skicka en skärmdump av den panelen vid ett felaktigt mått, så går det att se var det brister i stället för att anta.
+
+**Appen säger varför spårningen fallerar**
+- I stället för det generella "rör telefonen långsamt" visas nu den faktiska orsaken: för mörkt i rummet, för snabb rörelse, för kal yta, eller upptagen kamera.
+- Ljuset är värt att notera särskilt: ARCore tappar spårningen snabbt i dåligt ljus, och en mätning gjord under sådana förhållanden blir opålitlig oavsett vad koden gör efteråt.
+
+---
+
 ## 8.3.1 (build 60)
 
 **Ritningen centreras i helskärm**

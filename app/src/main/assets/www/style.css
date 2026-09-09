@@ -850,12 +850,14 @@ svg.mi{width:16px;height:16px;vertical-align:-3px;flex:0 0 auto}
    molnslöjor i bakgrunden. Ritningen lämnas orörd, som i övriga teman.
    =================================================================== */
 :root[data-theme="sky"]{
-  --bg:#071a33; --panel:#0e2748; --panel2:#143156; --line:#245084;
-  --text:#eaf4ff; --muted:#8fb2d6;
-  --orange:#4db8ff; --orange2:#8fd4ff;
-  --danger:#ff5d73; --ok:#4de0a8;
-  --sky-glow:0 0 16px rgba(77,184,255,.40);
-  --grid-line:rgba(150,205,255,.075);
+  /* Ljusare, mer mättad himmelsblå — samma grepp som neon-grönt: en klar accent
+     som lyser mot en djup bas, i stället för en dämpad blå mot en blå bas. */
+  --bg:#04152b; --panel:#0b2a4d; --panel2:#123963; --line:#1f5b9e;
+  --text:#f0f9ff; --muted:#95bfe4;
+  --orange:#4fd0ff; --orange2:#a5e9ff;
+  --danger:#ff5d73; --ok:#4fd0ff;
+  --sky-glow:0 0 16px rgba(79,208,255,.48);
+  --grid-line:rgba(120,205,255,.085);
 }
 :root[data-theme="sky"] html,:root[data-theme="sky"] body{background:var(--bg);color:var(--text)}
 
@@ -865,15 +867,15 @@ svg.mi{width:16px;height:16px;vertical-align:-3px;flex:0 0 auto}
 :root[data-theme="sky"] body:after{
   content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
   background:
-    radial-gradient(58% 34% at 16% 4%, rgba(226,242,255,.20) 0%, rgba(226,242,255,.07) 42%, transparent 72%),
-    radial-gradient(46% 28% at 84% 10%, rgba(198,229,255,.16) 0%, rgba(198,229,255,.05) 46%, transparent 74%),
-    radial-gradient(70% 40% at 50% 0%, rgba(120,190,255,.16) 0%, transparent 68%),
+    radial-gradient(58% 34% at 16% 4%, rgba(226,246,255,.26) 0%, rgba(226,246,255,.09) 42%, transparent 72%),
+    radial-gradient(46% 28% at 84% 10%, rgba(205,238,255,.20) 0%, rgba(205,238,255,.07) 46%, transparent 74%),
+    radial-gradient(70% 40% at 50% 0%, rgba(110,200,255,.20) 0%, transparent 68%),
     linear-gradient(180deg, rgba(11,43,80,.30) 0%, transparent 55%);
 }
-:root[data-theme="sky"] .topbar{background:linear-gradient(180deg,rgba(10,32,60,.96) 0%,rgba(7,26,51,.92) 100%);box-shadow:0 1px 0 rgba(77,184,255,.20)}
-:root[data-theme="sky"] .bottom-nav{background:rgba(9,29,55,.96);box-shadow:0 -8px 26px rgba(77,184,255,.10)}
+:root[data-theme="sky"] .topbar{background:linear-gradient(180deg,rgba(9,32,60,.96) 0%,rgba(7,26,51,.92) 100%);box-shadow:0 1px 0 rgba(79,208,255,.20)}
+:root[data-theme="sky"] .bottom-nav{background:rgba(9,29,55,.96);box-shadow:0 -8px 26px rgba(79,208,255,.10)}
 :root[data-theme="sky"] .nav-btn.active{color:var(--orange);text-shadow:var(--sky-glow)}
-:root[data-theme="sky"] .nav-btn.active svg{filter:drop-shadow(0 0 6px rgba(77,184,255,.55))}
+:root[data-theme="sky"] .nav-btn.active svg{filter:drop-shadow(0 0 6px rgba(79,208,255,.55))}
 
 /* Loggan får en himmelsgradient i stället för platt färg. */
 :root[data-theme="sky"] .brand{
@@ -882,20 +884,20 @@ svg.mi{width:16px;height:16px;vertical-align:-3px;flex:0 0 auto}
   -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
   -webkit-mask-position:center;mask-position:center;
   background:linear-gradient(160deg,#ffffff 0%,#bfe4ff 38%,var(--orange) 78%,#1f7fd0 100%);
-  filter:drop-shadow(0 0 11px rgba(77,184,255,.45))
+  filter:drop-shadow(0 0 11px rgba(79,208,255,.45))
 }
 :root[data-theme="sky"] .brand img{visibility:hidden}
 :root[data-theme="sky"] #ekisSplash .s24-ekis{
   background:linear-gradient(180deg,#ffffff 0%,#cfe9ff 40%,var(--orange) 74%,#1a6fb8 100%)!important;
   -webkit-background-clip:text!important;background-clip:text!important;
   -webkit-text-fill-color:transparent!important;
-  text-shadow:0 0 28px rgba(77,184,255,.38)!important
+  text-shadow:0 0 28px rgba(79,208,255,.38)!important
 }
 :root[data-theme="sky"] #ekisSplash .s24-field span,
 :root[data-theme="sky"] #ekisSplash .s24-tagline b{color:var(--orange)!important}
 :root[data-theme="sky"] #ekisSplash .s24-field i{background:var(--orange)!important}
 :root[data-theme="sky"] #ekisSplash .s24-glow{
-  background:radial-gradient(circle,rgba(77,184,255,.26) 0%,rgba(190,228,255,.09) 40%,transparent 70%)!important}
+  background:radial-gradient(circle,rgba(79,208,255,.26) 0%,rgba(190,228,255,.09) 40%,transparent 70%)!important}
 :root[data-theme="sky"] #ekisSplash{background:linear-gradient(180deg,#04122a 0%,#071a33 55%,#0a2545 100%)!important}
 
 /* Ytor: svag molnljusning uppifrån ger djup utan att bli plottrigt. */
@@ -909,7 +911,7 @@ svg.mi{width:16px;height:16px;vertical-align:-3px;flex:0 0 auto}
 }
 :root[data-theme="sky"] .hero,
 :root[data-theme="sky"] .page-head{
-  background:radial-gradient(120% 90% at 80% 0%,rgba(77,184,255,.20) 0%,transparent 62%),var(--panel)
+  background:radial-gradient(120% 90% at 80% 0%,rgba(79,208,255,.20) 0%,transparent 62%),var(--panel)
 }
 :root[data-theme="sky"] .btn,
 :root[data-theme="sky"] .icon-btn,
@@ -936,28 +938,171 @@ svg.mi{width:16px;height:16px;vertical-align:-3px;flex:0 0 auto}
 :root[data-theme="sky"] a,:root[data-theme="sky"] .link,:root[data-theme="sky"] .file-icon{color:var(--orange)}
 :root[data-theme="sky"] .file-icon{border-color:var(--line);background:var(--panel2)}
 :root[data-theme="sky"] .muted,:root[data-theme="sky"] small{color:var(--muted)}
-:root[data-theme="sky"] .eyebrow{color:var(--orange);text-shadow:0 0 10px rgba(77,184,255,.32)}
-:root[data-theme="sky"] h1{text-shadow:0 0 20px rgba(77,184,255,.16)}
-:root[data-theme="sky"] ::selection{background:rgba(77,184,255,.32);color:#f2faff}
+:root[data-theme="sky"] .eyebrow{color:var(--orange);text-shadow:0 0 10px rgba(79,208,255,.32)}
+:root[data-theme="sky"] h1{text-shadow:0 0 20px rgba(79,208,255,.16)}
+:root[data-theme="sky"] ::selection{background:rgba(79,208,255,.32);color:#f2faff}
 :root[data-theme="sky"] input:focus,
 :root[data-theme="sky"] select:focus,
 :root[data-theme="sky"] textarea:focus{outline:none;border-color:var(--orange);box-shadow:var(--sky-glow)}
 :root[data-theme="sky"] .changelog-item{border-left-color:var(--orange)}
-:root[data-theme="sky"] .toast{border-color:rgba(77,184,255,.35);box-shadow:var(--sky-glow)}
-:root[data-theme="sky"] .drawing-edge-arrow{border-color:rgba(77,184,255,.28);background:rgba(10,32,60,.66)}
-:root[data-theme="sky"] .drawing-edge-arrow:active{background:rgba(77,184,255,.26);border-color:var(--orange)}
+:root[data-theme="sky"] .toast{border-color:rgba(79,208,255,.35);box-shadow:var(--sky-glow)}
+:root[data-theme="sky"] .drawing-edge-arrow{border-color:rgba(79,208,255,.28);background:rgba(9,32,60,.66)}
+:root[data-theme="sky"] .drawing-edge-arrow:active{background:rgba(79,208,255,.26);border-color:var(--orange)}
 :root[data-theme="sky"] .viewer-view.fullscreen-ui .viewer-head,
 :root[data-theme="sky"] .viewer-view.fullscreen-ui .toolstrip{
-  background:rgba(10,32,60,.74);border-color:rgba(77,184,255,.22);
-  box-shadow:0 6px 22px rgba(0,0,0,.45),0 0 24px rgba(77,184,255,.12)
+  background:rgba(9,32,60,.74);border-color:rgba(79,208,255,.22);
+  box-shadow:0 6px 22px rgba(0,0,0,.45),0 0 24px rgba(79,208,255,.12)
 }
-:root[data-theme="sky"] .scanner-review-bar{background:rgba(10,32,60,.94);border-color:rgba(77,184,255,.28)}
+:root[data-theme="sky"] .scanner-review-bar{background:rgba(9,32,60,.94);border-color:rgba(79,208,255,.28)}
 :root[data-theme="sky"] .measure-summary{color:var(--orange)}
 :root[data-theme="sky"] .ar-measure-btn{background:var(--panel2)}
 /* Ritningen ska förbli svart på vitt; bara ramen färgas. */
-:root[data-theme="sky"] .canvas-wrap{box-shadow:0 8px 35px rgba(2,12,28,.6),0 0 0 1px rgba(77,184,255,.24)}
+:root[data-theme="sky"] .canvas-wrap{box-shadow:0 8px 35px rgba(2,12,28,.6),0 0 0 1px rgba(79,208,255,.24)}
 :root[data-theme="sky"] .pdf-viewport{background:#04122a}
 
-.preview-sky{background:#071a33;border-color:#245084}
-.preview-sky i{background:#143156}
-.preview-sky i:nth-child(3){background:#0e2748}
+.preview-sky{background:#04152b;border-color:#1f5b9e}
+.preview-sky i{background:#123963}
+.preview-sky i:nth-child(3){background:#0b2a4d}
+
+/* ===== Räknaren, omgjord (v8.7) =====
+   Den primära knappen satt inklämd uppe till höger i rubrikraden, där den
+   krockade med den brytande beskrivningstexten, medan statusraden låg löst
+   längst ned utan koppling till åtgärden. De tre korten låg dessutom som
+   likvärdiga block utan ordning. Nu: ren rubrik, numrerade steg, och en fast
+   åtgärdsrad längst ned där status och knapp hör ihop. */
+.counter-head-clean{display:block}
+.counter-head-clean h1{margin:2px 0 4px}
+.counter-head-clean p.muted{max-width:52ch}
+
+.counter-step{position:relative}
+.counter-step .step-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.counter-step .step-head h3{margin:0;flex:1}
+.counter-step .step-num{
+  width:24px;height:24px;flex:0 0 24px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:800;
+  background:var(--orange);color:#111
+}
+.counter-step .step-note{font-size:12px;margin:11px 0 0}
+
+/* Åtgärdsraden ligger kvar i botten så knappen alltid är nåbar, oavsett hur
+   lång ritningslistan är. */
+.counter-actionbar{
+  position:sticky;bottom:0;z-index:12;
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  margin:14px -10px 0;padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+  background:linear-gradient(180deg,transparent 0%,var(--bg) 26%);
+  border-top:1px solid var(--line)
+}
+.counter-actionbar .statusline{flex:1;min-width:140px;margin:0;font-size:12.5px}
+.counter-actionbar .btn.primary{min-width:170px}
+.counter-actionbar .btn.primary:disabled{opacity:.42}
+@media(max-width:520px){
+  .counter-actionbar .btn.primary{flex:1 1 100%;min-width:0}
+}
+
+/* ===================================================================
+   TEMA 5: "JULAFTON" — gran, guld och levande ljus (v8.8)
+   Varm och dämpad snarare än röd-grön julpynt: djup granmörk bas, ljus
+   guldaccent som ett stearinljus, och varmvitt i texten. Rött används
+   sparsamt, som på en riktig gran.
+   =================================================================== */
+:root[data-theme="jul"]{
+  --bg:#0a1410; --panel:#12211a; --panel2:#182e23; --line:#2b4d39;
+  --text:#f6f0e4; --muted:#a2b8a8;
+  --orange:#e9b455; --orange2:#ffd894;
+  --danger:#e0474d; --ok:#5fbf72;
+  --jul-glow:0 0 16px rgba(233,180,85,.42);
+  --grid-line:rgba(233,180,85,.05);
+}
+:root[data-theme="jul"] html,:root[data-theme="jul"] body{background:var(--bg);color:var(--text)}
+
+/* Levande ljus uppifrån: ett varmt sken som ger rummet djup. */
+:root[data-theme="jul"] body:after{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(62% 34% at 26% 0%, rgba(255,203,120,.15) 0%, rgba(255,203,120,.05) 44%, transparent 72%),
+    radial-gradient(50% 30% at 78% 6%, rgba(224,71,77,.10) 0%, transparent 66%),
+    radial-gradient(90% 55% at 50% 100%, rgba(20,52,36,.55) 0%, transparent 70%);
+}
+:root[data-theme="jul"] .topbar{background:linear-gradient(180deg,rgba(14,26,20,.96),rgba(10,20,16,.93));box-shadow:0 1px 0 rgba(233,180,85,.20)}
+:root[data-theme="jul"] .bottom-nav{background:rgba(12,24,18,.96);box-shadow:0 -8px 26px rgba(233,180,85,.09)}
+:root[data-theme="jul"] .nav-btn.active{color:var(--orange);text-shadow:var(--jul-glow)}
+:root[data-theme="jul"] .nav-btn.active svg{filter:drop-shadow(0 0 6px rgba(233,180,85,.5))}
+:root[data-theme="jul"] .brand{
+  -webkit-mask-image:url(logo-transparent.png);mask-image:url(logo-transparent.png);
+  -webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
+  -webkit-mask-position:center;mask-position:center;
+  background:linear-gradient(160deg,#fff6e2 0%,var(--orange2) 34%,var(--orange) 72%,#a9761f 100%);
+  filter:drop-shadow(0 0 10px rgba(233,180,85,.45))
+}
+:root[data-theme="jul"] .brand img{visibility:hidden}
+:root[data-theme="jul"] #ekisSplash{background:linear-gradient(180deg,#06100c 0%,#0a1410 55%,#102019 100%)!important}
+:root[data-theme="jul"] #ekisSplash .s24-ekis{
+  background:linear-gradient(180deg,#fff8ea 0%,var(--orange2) 40%,var(--orange) 74%,#9c6b17 100%)!important;
+  -webkit-background-clip:text!important;background-clip:text!important;
+  -webkit-text-fill-color:transparent!important;text-shadow:0 0 26px rgba(233,180,85,.35)!important}
+:root[data-theme="jul"] #ekisSplash .s24-field span,
+:root[data-theme="jul"] #ekisSplash .s24-tagline b{color:var(--orange)!important}
+:root[data-theme="jul"] #ekisSplash .s24-field i{background:var(--orange)!important}
+:root[data-theme="jul"] #ekisSplash .s24-glow{
+  background:radial-gradient(circle,rgba(233,180,85,.24) 0%,rgba(224,71,77,.07) 42%,transparent 70%)!important}
+
+:root[data-theme="jul"] .card,
+:root[data-theme="jul"] .settings-card,
+:root[data-theme="jul"] .ata-card,
+:root[data-theme="jul"] .modal-card{
+  background:linear-gradient(180deg,rgba(233,180,85,.09) 0%,var(--panel) 60%);
+  border-color:var(--line);
+  box-shadow:inset 0 1px 0 rgba(255,236,200,.10),0 10px 30px rgba(3,10,7,.55)}
+:root[data-theme="jul"] .hero,
+:root[data-theme="jul"] .page-head{
+  background:radial-gradient(120% 90% at 80% 0%,rgba(233,180,85,.17) 0%,transparent 62%),var(--panel)}
+:root[data-theme="jul"] .btn,
+:root[data-theme="jul"] .icon-btn,
+:root[data-theme="jul"] .tool,
+:root[data-theme="jul"] .chip,
+:root[data-theme="jul"] select,
+:root[data-theme="jul"] input,
+:root[data-theme="jul"] textarea,
+:root[data-theme="jul"] .theme-option,
+:root[data-theme="jul"] .smart-doc,
+:root[data-theme="jul"] .statusline,
+:root[data-theme="jul"] .counter-results,
+:root[data-theme="jul"] .todo-item{background:var(--panel);border-color:var(--line);color:var(--text)}
+:root[data-theme="jul"] .btn.primary,
+:root[data-theme="jul"] .tool.active,
+:root[data-theme="jul"] .counter-step .step-num{
+  background:linear-gradient(180deg,var(--orange2) 0%,var(--orange) 56%,#b8801f 100%);
+  color:#26180a;border:0;box-shadow:var(--jul-glow)}
+:root[data-theme="jul"] .btn.ghost{background:transparent;border-color:var(--line);color:var(--orange)}
+:root[data-theme="jul"] .btn:active,
+:root[data-theme="jul"] .icon-btn:active{border-color:var(--orange);box-shadow:var(--jul-glow)}
+:root[data-theme="jul"] .theme-option.active{border-color:var(--orange);box-shadow:var(--jul-glow)}
+:root[data-theme="jul"] .badge{border-color:var(--line);color:var(--orange)}
+:root[data-theme="jul"] a,:root[data-theme="jul"] .link,:root[data-theme="jul"] .file-icon{color:var(--orange)}
+:root[data-theme="jul"] .file-icon{border-color:var(--line);background:var(--panel2)}
+:root[data-theme="jul"] .muted,:root[data-theme="jul"] small{color:var(--muted)}
+:root[data-theme="jul"] .eyebrow{color:var(--orange);text-shadow:0 0 9px rgba(233,180,85,.30)}
+:root[data-theme="jul"] ::selection{background:rgba(233,180,85,.30);color:#fff8ea}
+:root[data-theme="jul"] input:focus,:root[data-theme="jul"] select:focus,:root[data-theme="jul"] textarea:focus{
+  outline:none;border-color:var(--orange);box-shadow:var(--jul-glow)}
+:root[data-theme="jul"] .changelog-item{border-left-color:var(--orange)}
+:root[data-theme="jul"] .toast{border-color:rgba(233,180,85,.35);box-shadow:var(--jul-glow)}
+:root[data-theme="jul"] .drawing-edge-arrow{border-color:rgba(233,180,85,.26);background:rgba(14,26,20,.68)}
+:root[data-theme="jul"] .drawing-edge-arrow:active{background:rgba(233,180,85,.24);border-color:var(--orange)}
+:root[data-theme="jul"] .viewer-view.fullscreen-ui .viewer-head,
+:root[data-theme="jul"] .viewer-view.fullscreen-ui .toolstrip{
+  background:rgba(14,26,20,.74);border-color:rgba(233,180,85,.20);
+  box-shadow:0 6px 22px rgba(0,0,0,.5),0 0 22px rgba(233,180,85,.10)}
+:root[data-theme="jul"] .counter-actionbar{border-top-color:var(--line)}
+:root[data-theme="jul"] .canvas-wrap{box-shadow:0 8px 35px rgba(3,10,7,.6),0 0 0 1px rgba(233,180,85,.22)}
+:root[data-theme="jul"] .pdf-viewport{background:#07100c}
+
+/* Snölagret ligger i samma djup som rutnätet: bakom allt innehåll. */
+#snowLayer{position:fixed;inset:0;z-index:0;pointer-events:none;display:none}
+:root[data-theme="jul"] #snowLayer{display:block}
+
+.preview-jul{background:#0a1410;border-color:#2b4d39}
+.preview-jul i{background:#182e23}
+.preview-jul i:nth-child(3){background:#12211a}
