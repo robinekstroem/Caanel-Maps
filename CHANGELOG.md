@@ -2,6 +2,26 @@
 
 ---
 
+## 9.0.2 (build 72)
+
+**Inga avstick vid dörrar och möbler**
+- Markeringen vek av in i dörrslag och annan ritningsdetalj som råkade dela ändpunkt med kabeln. Två egenskaper skiljer dem åt, och båda används nu:
+  - **Segmentlängd.** Dörrslag, möbler och andra kurvor ritas som kedjor av mycket korta segment; en kabel ritas med få långa. Vandringen går inte in i korta segment.
+  - **Riktning.** En kabel fortsätter rakt fram eller svänger rätvinkligt. Ett segment som lämnar i en udda vinkel hör till något annat och följs inte.
+- Tillsammans med förgreningsstoppet från 9.0.1 gör det att markeringen håller sig till den kabel man faktiskt tryckte på.
+
+---
+
+## 9.0.1 (build 71)
+
+**Ledningsmarkeringen följer bara sin egen kabel**
+- Glöden är borttagen. Den breda mjuka linjen under läste som ett sken snarare än som en markerad kabel, och gjorde det otydligt var ledningen faktiskt gick. Nu en ren linje i temats färg.
+- Markeringen spred sig tidigare långt utanför kabeln. Orsaken var inte filtreringen utan elen själv: **alla kablar i en lägenhet möts vid centralen**, så en fri spridning från en kabel når hela kretsnätet — och därmed även linjer som visuellt ser ut att höra till något annat.
+- En enskild kabel är sträckan **mellan förgreningar**. Vandringen stannar nu vid varje punkt där tre eller fler segment möts. Själva förgreningen ingår, men inget bortom den.
+- Taket sänkt från 6000 till 2000 segment, eftersom en enskild dragning aldrig är i den storleksordningen.
+
+---
+
 ## 9.0.0 (build 70)
 
 **Alla fyra teman genomgångna**

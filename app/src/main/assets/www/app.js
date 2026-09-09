@@ -1121,10 +1121,46 @@
     }
     const seedCol=cable.segs[best].col;
     const seen=new Set([best]),stack=[best],run=[];
-    const CAP=6000;
+    const CAP=2000;
+    // Every cable in a flat ultimately meets at the distribution point, so a
+    // plain flood reaches the whole circuit network — which is why the marking
+    // ran off along walls and other runs. A single cable is the stretch BETWEEN
+    // branch points, so the walk stops at any junction: a point where three or
+    // more segments meet. The junction itself is included, but nothing beyond it.
     while(stack.length&&run.length<CAP){
       const i=stack.pop(); run.push(cable.segs[i]);
-      for(const j of cableNeighbours(i,seedCol))if(!seen.has(j)){seen.add(j);stack.push(j)}
+      const nb=cableNeighbours(i,seedCol);
+      const sg=cable.segs[i];
+      const dirOf=(o,from)=>{
+        // Direction of segment o leading away from the shared point `from`.
+        const near=(Math.hypot(o.a[0]-from[0],o.a[1]-from[1])<=0.75)?o.a:o.b;
+        const far=(near===o.a)?o.b:o.a;
+        return Math.atan2(far[1]-near[1],far[0]-near[0])*180/Math.PI;
+      };
+      const sgDir=q=>{
+        const far=(q===sg.a)?sg.b:sg.a;
+        return Math.atan2(far[1]-q[1],far[0]-q[0])*180/Math.PI;
+      };
+      for(const q of [sg.a,sg.b]){
+        let at=nb.filter(j=>{
+          const o=cable.segs[j];
+          return Math.hypot(o.a[0]-q[0],o.a[1]-q[1])<=0.75||Math.hypot(o.b[0]-q[0],o.b[1]-q[1])<=0.75;
+        });
+        // Door swings, furniture and other curved detail are drawn as chains of
+        // very short segments; a cable is drawn as few long ones. Refusing to
+        // walk into tiny segments removes those detours at the source.
+        at=at.filter(j=>cable.segs[j].len>=1.5);
+        // A cable also runs straight or turns square. Anything leaving at an
+        // odd angle belongs to something else, so it is not followed.
+        const inDir=sgDir(q);
+        at=at.filter(j=>{
+          let t=Math.abs(((dirOf(cable.segs[j],q)-inDir+180)%360+360)%360-180);
+          t=Math.abs(180-t);                 // 0 = straight on, 90 = square turn
+          return t<26||(t>62&&t<118);
+        });
+        if(at.length>=2)continue;           // junction – do not walk past it
+        for(const j of at)if(!seen.has(j)){seen.add(j);stack.push(j)}
+      }
     }
     let total=0; for(const sg of run)total+=sg.len;
     state.cableRun=run;
@@ -1134,7 +1170,7 @@
       // Architectural linework is all connected, so tapping a wall rather than a
       // cable can reach most of the sheet. Say so instead of presenting a length
       // that means nothing.
-      toast(`Väldigt stort sammanhängande nät (${run.length}+ segment) – tryck närmare själva ledningen`);
+      toast(`Ovanligt lång sammanhängande dragning (${run.length}+ segment)`);
     }else{
       toast(`Ledning markerad · ${run.length} segment · ca ${formatLength(m)}`);
     }
@@ -1149,18 +1185,16 @@
     if(state.cableRun&&state.cableRun.length){
       ctx.save();
       const acc=accentColor();
-      // A soft wide pass under a solid thin pass reads as a highlight rather
-      // than as another drawn line, so the original linework stays visible.
-      for(const pass of [{w:9,a:.30},{w:3.2,a:.95}]){
-        ctx.strokeStyle=acc; ctx.globalAlpha=pass.a;
-        ctx.lineWidth=pass.w; ctx.lineCap="round"; ctx.lineJoin="round";
-        ctx.beginPath();
-        for(const sg of state.cableRun){
-          const a=toPx({x:sg.a[0],y:sg.a[1]}), b=toPx({x:sg.b[0],y:sg.b[1]});
-          ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
-        }
-        ctx.stroke();
+      // One clean stroke. The wide soft pass under it read as a glow rather than
+      // as a marked cable, and blurred where the line actually ran.
+      ctx.strokeStyle=acc; ctx.globalAlpha=1;
+      ctx.lineWidth=2.6; ctx.lineCap="round"; ctx.lineJoin="round";
+      ctx.beginPath();
+      for(const sg of state.cableRun){
+        const a=toPx({x:sg.a[0],y:sg.a[1]}), b=toPx({x:sg.b[0],y:sg.b[1]});
+        ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
       }
+      ctx.stroke();
       ctx.restore();
     }
     function drawPath(points,closed=false,label=""){
@@ -3161,6 +3195,8 @@
   // offline on site (no network on a building site) and stays in step with the
   // build it actually shipped with.
   const CHANGELOG=[
+    {v:"9.0.2",d:"Ledningsmarkeringen gjorde avstick vid dörrar och möbler. De ritas som kedjor av mycket korta segment medan en kabel ritas med få långa, och de viker av i udda vinklar. Vandringen följer nu bara segment av kabellängd som fortsätter rakt fram eller svänger rätvinkligt."},
+    {v:"9.0.1",d:"Ledningsmarkeringen: glöden borttagen, nu en ren linje. Markeringen stannar också vid förgreningar — alla kablar i en lägenhet möts ju vid centralen, så en fri spridning nådde hela kretsnätet och följde med längs väggar."},
     {v:"9.0.0",d:"Alla fyra teman genomgångna. Svart har fått djup, gradienter och glöd — det hade aldrig fått samma behandling som de nyare. Vit har svalare bas och riktiga skuggor så korten lyfter. Himmelsblå är klarare och mer neon. Julafton bär nu rött lika mycket som guld."},
     {v:"8.9.3",d:"Ett andra tryck på en markerad ledning släcker den nu. Tidigare markerades samma ledning bara om igen, och enda vägen ur var att trycka på tom yta, byta verktyg eller gå bakåt."},
     {v:"8.9.2",d:"Ledningsverktyget följer nu den tryckta linjens EGEN färg i stället för en fast tröskel. Färgerna skiljer sig mellan ritningar och projekt, så en inställd gräns skulle spricka på nästa jobb. Nu kalibrerar det sig självt."},
