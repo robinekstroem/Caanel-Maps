@@ -297,7 +297,7 @@ button.file-tag{cursor:pointer}
 .theme-preview:before{content:"";grid-column:1/-1;border-radius:4px;background:var(--orange);opacity:.88}
 .theme-preview i{display:block;border-radius:4px}.theme-preview i:nth-child(2){grid-row:2}.theme-preview i:nth-child(3){grid-row:2}
 .preview-dark{background:#0b0b0c}.preview-dark i{background:#252529}.preview-dark i:nth-child(3){background:#19191c}
-.preview-light{background:#f3f4f6;border-color:#d8dbe1}.preview-light i{background:#fff;border:1px solid #e1e3e7}.preview-light i:nth-child(3){background:#eceef1}
+.preview-light{background:#eef1f6;border-color:#d3d9e3}.preview-light i{background:#fff;border:1px solid #e1e3e7}.preview-light i:nth-child(3){background:#eceef1}
 .ata-mark-snapshots{margin-top:9px}.ata-mark-snapshots-label{font-size:11px;font-weight:900;letter-spacing:.08em;color:var(--muted);margin-bottom:6px;text-transform:uppercase}.ata-mark-snapshots-grid{display:flex;gap:6px;overflow:auto}.ata-mark-snapshots img{width:112px;height:78px;object-fit:cover;border-radius:9px;border:1px solid var(--line);background:white}
 #ataMarkBar{align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:8px 10px;margin:0 10px 10px;position:relative;z-index:25}
 #ataMarkBar .ata-mark-tools{display:flex;gap:6px;flex-wrap:wrap;flex:1}
@@ -960,9 +960,9 @@ svg.mi{width:16px;height:16px;vertical-align:-3px;flex:0 0 auto}
 :root[data-theme="sky"] .canvas-wrap{box-shadow:0 8px 35px rgba(2,12,28,.6),0 0 0 1px rgba(79,208,255,.24)}
 :root[data-theme="sky"] .pdf-viewport{background:#04122a}
 
-.preview-sky{background:#04152b;border-color:#1f5b9e}
-.preview-sky i{background:#123963}
-.preview-sky i:nth-child(3){background:#0b2a4d}
+.preview-sky{background:#03101f;border-color:#1d6bb8}
+.preview-sky i{background:#0f3157}
+.preview-sky i:nth-child(3){background:#0a2242}
 
 /* ===== Räknaren, omgjord (v8.7) =====
    Den primära knappen satt inklämd uppe till höger i rubrikraden, där den
@@ -1103,6 +1103,127 @@ svg.mi{width:16px;height:16px;vertical-align:-3px;flex:0 0 auto}
 #snowLayer{position:fixed;inset:0;z-index:0;pointer-events:none;display:none}
 :root[data-theme="jul"] #snowLayer{display:block}
 
-.preview-jul{background:#0a1410;border-color:#2b4d39}
-.preview-jul i{background:#182e23}
-.preview-jul i:nth-child(3){background:#12211a}
+.preview-jul{background:#08130e;border-color:#3a5c40}
+.preview-jul i{background:#193026}
+.preview-jul i:nth-child(3){background:#122019}
+
+/* ===================================================================
+   TEMAOMGÅNG v9.0 — alla fyra teman genomgångna
+   =================================================================== */
+
+/* ---------- SVART: djup istället för platt ----------
+   Standardtemat hade aldrig fått samma behandling som de nyare: platta ytor,
+   ingen glöd, ingen gradient. Det ser nu ut som en medveten mörk yta i stället
+   för bara frånvaro av ljus. */
+:root{--dark-glow:0 0 15px rgba(255,106,0,.32)}
+:root[data-theme="dark"] body:after,
+html:not([data-theme]) body:after{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(65% 38% at 22% 0%, rgba(255,106,0,.10) 0%, transparent 66%),
+    radial-gradient(55% 34% at 88% 4%, rgba(255,140,60,.055) 0%, transparent 68%),
+    radial-gradient(95% 55% at 50% 100%, rgba(12,12,14,.85) 0%, transparent 72%);
+}
+:root[data-theme="dark"] .card,:root[data-theme="dark"] .settings-card,
+:root[data-theme="dark"] .ata-card,:root[data-theme="dark"] .modal-card{
+  background:linear-gradient(180deg,rgba(255,255,255,.045) 0%,var(--panel) 62%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 10px 30px rgba(0,0,0,.5)}
+:root[data-theme="dark"] .hero,:root[data-theme="dark"] .page-head{
+  background:radial-gradient(120% 90% at 82% 0%,rgba(255,106,0,.14) 0%,transparent 62%),var(--panel)}
+:root[data-theme="dark"] .btn.primary,:root[data-theme="dark"] .tool.active,
+:root[data-theme="dark"] .counter-step .step-num{
+  background:linear-gradient(180deg,#ff8a3d 0%,var(--orange) 55%,#d1550a 100%);
+  color:#180a02;border:0;box-shadow:var(--dark-glow)}
+:root[data-theme="dark"] .nav-btn.active{text-shadow:var(--dark-glow)}
+:root[data-theme="dark"] .nav-btn.active svg{filter:drop-shadow(0 0 6px rgba(255,106,0,.5))}
+:root[data-theme="dark"] .topbar{box-shadow:0 1px 0 rgba(255,106,0,.16)}
+:root[data-theme="dark"] input:focus,:root[data-theme="dark"] select:focus,
+:root[data-theme="dark"] textarea:focus{outline:none;border-color:var(--orange);box-shadow:var(--dark-glow)}
+:root[data-theme="dark"] .eyebrow{text-shadow:0 0 9px rgba(255,106,0,.28)}
+
+/* ---------- VIT: skarpare och mindre platt ----------
+   Var i praktiken bara grått på vitt. Nu en sval blågrå bas med riktiga
+   skuggor, så korten lyfter från underlaget i stället för att ligga i det. */
+:root[data-theme="light"]{
+  --bg:#eef1f6;--panel:#ffffff;--panel2:#f6f8fb;--line:#d3d9e3;
+  --text:#101319;--muted:#5c6472;
+  --orange2:#ff8a3d;
+}
+:root[data-theme="light"] body:after{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(70% 42% at 20% 0%, rgba(255,106,0,.07) 0%, transparent 64%),
+    radial-gradient(60% 40% at 86% 2%, rgba(90,130,200,.09) 0%, transparent 66%);
+}
+:root[data-theme="light"] .card,:root[data-theme="light"] .settings-card,
+:root[data-theme="light"] .ata-card,:root[data-theme="light"] .modal-card{
+  background:#fff;border-color:var(--line);
+  box-shadow:0 1px 2px rgba(16,22,38,.05),0 8px 24px rgba(16,22,38,.07)}
+:root[data-theme="light"] .hero,:root[data-theme="light"] .page-head{
+  background:radial-gradient(120% 92% at 84% 0%,rgba(255,106,0,.10) 0%,transparent 60%),#fff}
+:root[data-theme="light"] .btn.primary,:root[data-theme="light"] .tool.active,
+:root[data-theme="light"] .counter-step .step-num{
+  background:linear-gradient(180deg,#ff8a3d 0%,var(--orange) 58%,#e2570a 100%);
+  color:#fff;border:0;box-shadow:0 4px 14px rgba(255,106,0,.32)}
+:root[data-theme="light"] .topbar{background:rgba(255,255,255,.93);box-shadow:0 1px 0 rgba(16,22,38,.07)}
+:root[data-theme="light"] .bottom-nav{background:rgba(255,255,255,.97);box-shadow:0 -8px 24px rgba(16,22,38,.07)}
+:root[data-theme="light"] input:focus,:root[data-theme="light"] select:focus,
+:root[data-theme="light"] textarea:focus{outline:none;border-color:var(--orange);box-shadow:0 0 0 3px rgba(255,106,0,.16)}
+:root[data-theme="light"] .canvas-wrap{box-shadow:0 8px 30px rgba(16,22,38,.16),0 0 0 1px var(--line)}
+:root[data-theme="light"] .pdf-viewport{background:#e7ebf1}
+
+/* ---------- HIMMELSBLÅ: klarare, mer neon ---------- */
+:root[data-theme="sky"]{
+  --bg:#03101f; --panel:#0a2242; --panel2:#0f3157; --line:#1d6bb8;
+  --text:#f4fcff; --muted:#9fcdec;
+  --orange:#63dcff; --orange2:#b6f0ff;
+  --sky-glow:0 0 20px rgba(99,220,255,.55);
+  --grid-line:rgba(130,220,255,.10);
+}
+:root[data-theme="sky"] .btn.primary,:root[data-theme="sky"] .tool.active,
+:root[data-theme="sky"] .counter-step .step-num{
+  background:linear-gradient(180deg,var(--orange2) 0%,var(--orange) 55%,#1799cc 100%);
+  color:#03202e;box-shadow:var(--sky-glow)}
+:root[data-theme="sky"] .nav-btn.active svg{filter:drop-shadow(0 0 7px rgba(99,220,255,.6))}
+:root[data-theme="sky"] h1{text-shadow:0 0 22px rgba(99,220,255,.22)}
+:root[data-theme="sky"] .brand{background:linear-gradient(160deg,#ffffff 0%,#c8f4ff 34%,var(--orange) 74%,#1a86bd 100%)}
+:root[data-theme="sky"] #ekisSplash .s24-ekis{
+  background:linear-gradient(180deg,#ffffff 0%,#d8f6ff 38%,var(--orange) 72%,#127ba8 100%)!important}
+
+/* ---------- JULAFTON: mer jul ----------
+   Guld ensamt läste mer "lyx" än "jul". Nu bär rött lika mycket som guldet:
+   granmörk bas, gyllene accent och ett rött sken som från en ljusstake. */
+:root[data-theme="jul"]{
+  --bg:#08130e; --panel:#122019; --panel2:#193026;
+  --line:#3a5c40; --text:#fdf4e6; --muted:#adc0ad;
+  --orange:#f0bd5c; --orange2:#ffe0a0;
+  --danger:#e8434a; --jul-red:#c8262e;
+  --jul-glow:0 0 16px rgba(240,189,92,.45);
+  --grid-line:rgba(240,189,92,.055);
+}
+:root[data-theme="jul"] body:after{
+  background:
+    radial-gradient(58% 32% at 20% 0%, rgba(255,206,124,.20) 0%, rgba(255,206,124,.06) 44%, transparent 72%),
+    radial-gradient(52% 32% at 82% 4%, rgba(200,38,46,.20) 0%, rgba(200,38,46,.05) 48%, transparent 74%),
+    radial-gradient(95% 55% at 50% 100%, rgba(10,32,20,.7) 0%, transparent 72%)!important;
+}
+/* Guld och rött sida vid sida, som gran med kulor. */
+:root[data-theme="jul"] .brand{
+  background:linear-gradient(150deg,#fff3d8 0%,var(--orange2) 26%,var(--orange) 58%,var(--jul-red) 100%)}
+:root[data-theme="jul"] #ekisSplash .s24-ekis{
+  background:linear-gradient(180deg,#fff6e6 0%,var(--orange2) 34%,var(--orange) 66%,var(--jul-red) 100%)!important}
+:root[data-theme="jul"] #ekisSplash .s24-glow{
+  background:radial-gradient(circle,rgba(240,189,92,.26) 0%,rgba(200,38,46,.16) 40%,transparent 72%)!important}
+:root[data-theme="jul"] .topbar{box-shadow:0 1px 0 rgba(200,38,46,.30)}
+:root[data-theme="jul"] .bottom-nav{box-shadow:0 -8px 26px rgba(200,38,46,.12)}
+:root[data-theme="jul"] .card,:root[data-theme="jul"] .settings-card,
+:root[data-theme="jul"] .ata-card,:root[data-theme="jul"] .modal-card{
+  background:linear-gradient(180deg,rgba(240,189,92,.10) 0%,var(--panel) 58%);
+  box-shadow:inset 0 1px 0 rgba(255,236,200,.12),0 10px 30px rgba(2,10,6,.6)}
+:root[data-theme="jul"] .hero,:root[data-theme="jul"] .page-head{
+  background:radial-gradient(120% 90% at 82% 0%,rgba(240,189,92,.18) 0%,transparent 58%),
+             radial-gradient(90% 80% at 8% 100%,rgba(200,38,46,.14) 0%,transparent 62%),var(--panel)}
+:root[data-theme="jul"] .eyebrow{color:var(--jul-red);text-shadow:0 0 10px rgba(200,38,46,.35)}
+:root[data-theme="jul"] .badge{border-color:rgba(200,38,46,.45);color:var(--orange2)}
+:root[data-theme="jul"] .counter-step .step-num{
+  background:linear-gradient(180deg,var(--jul-red) 0%,#9d1c23 100%);color:#fff5e6}

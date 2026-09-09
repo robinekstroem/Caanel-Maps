@@ -127,22 +127,22 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
         }
         lightTheme = "light".equalsIgnoreCase(getIntent().getStringExtra(EXTRA_THEME));
         if (lightTheme) {
-            chromeBg = Color.parseColor("#f2f3f5");
+            chromeBg = Color.parseColor("#eef1f6");
             chromeBgSoft = Color.parseColor("#e8eaee");
             chromeText = Color.parseColor("#14161a");
             chromeBtn = Color.parseColor("#dfe2e7");
             chromeBtnText = Color.parseColor("#14161a");
         } else if ("jul".equalsIgnoreCase(getIntent().getStringExtra(EXTRA_THEME))) {
-            chromeBg = Color.parseColor("#0a1410");
-            chromeBgSoft = Color.parseColor("#12211a");
+            chromeBg = Color.parseColor("#08130e");
+            chromeBgSoft = Color.parseColor("#122019");
             chromeText = Color.parseColor("#f6f0e4");
-            chromeBtn = Color.parseColor("#182e23");
+            chromeBtn = Color.parseColor("#193026");
             chromeBtnText = Color.parseColor("#f6f0e4");
         } else if ("sky".equalsIgnoreCase(getIntent().getStringExtra(EXTRA_THEME))) {
-            chromeBg = Color.parseColor("#04152b");
-            chromeBgSoft = Color.parseColor("#0b2a4d");
+            chromeBg = Color.parseColor("#03101f");
+            chromeBgSoft = Color.parseColor("#0a2242");
             chromeText = Color.parseColor("#f0f9ff");
-            chromeBtn = Color.parseColor("#123963");
+            chromeBtn = Color.parseColor("#0f3157");
             chromeBtnText = Color.parseColor("#f0f9ff");
         } else {
             chromeBg = Color.parseColor("#0b0b0c");

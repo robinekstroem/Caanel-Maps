@@ -46,7 +46,7 @@
     analysisBusy: false,
     todoFilter: "open",
     editMeasure: null,
-    distanceDraft: null, distanceFirstDraft: null,
+    distanceDraft: null, distanceFirstDraft: null, cableRun: null,
     pageTextItems: [],
     calibrationMode: null,
     ataFilter: "open", ataSelected: new Set(), ataPhotoTarget: null, activeAtaMark:null, ataMarkAnnotationId:null, ataMarkBaseIds:null, riserMode:false, selectedOverlay:null, drawDraft:null, counterSelected:new Set(), counterCategory:"Belysning", ataEditingId:null, ataHoursEditingId:null, scannerSession:null, scannerReview:null
@@ -62,7 +62,7 @@
   function saveMeta() {
     localStorage.setItem(META_KEY, JSON.stringify(state.meta));
   }
-  const THEMES={dark:"#0b0b0c",light:"#f3f4f6",neon:"#050b06",sky:"#04152b",jul:"#0a1410"};
+  const THEMES={dark:"#0b0b0c",light:"#eef1f6",neon:"#050b06",sky:"#03101f",jul:"#08130e"};
   function applyTheme(theme, persist=false){
     const next=THEMES[theme]?theme:"dark";
     state.meta.theme=next;
@@ -939,7 +939,7 @@
     await loadSmartHotspots(page,viewport);
     $("#pageLabel").textContent=`${state.pageNum} / ${state.pageCount}`;
     $("#prevPageBtn").disabled=state.pageNum<=1; $("#nextPageBtn").disabled=state.pageNum>=state.pageCount;
-    syncScaleUI(); state.tempPoints=[]; drawOverlay(); updateHint(); setTimeout(centerFullscreenDrawing,60);
+    syncScaleUI(); state.tempPoints=[]; state.cableRun=null; drawOverlay(); updateHint(); setTimeout(centerFullscreenDrawing,60);
   }
 
   function getMeasurements(){
@@ -961,6 +961,7 @@
 
   function setTool(tool){
     state.tool=tool; state.tempPoints=[]; state.distanceDraft=null; state.distanceFirstDraft=null;
+    if(tool!=='cable')state.cableRun=null;
     $$(".tool[data-tool]").forEach(b=>b.classList.toggle("active",b.dataset.tool===tool));
     $$('[data-ata-tool]').forEach(b=>b.classList.toggle('active',b.dataset.ataTool===tool));
     $("#finishMeasureBtn").classList.toggle("hidden",!(tool==="route"||tool==="area"));
@@ -973,7 +974,8 @@
       distance:"Tryck punkt A. Tryck sedan punkt B, dra till exakt läge och släpp. Måttet blir en rak linje.",
       route:"Tryck ut en kabelväg/sträcka. Tryck Slutför när du är klar.",
       area:"Markera hörnen runt en yta. Tryck Slutför när du är klar. Kalibrera gärna via en känd rumsarea först.",
-      pen:"Rita direkt på ritningen. Markeringen sparas automatiskt.",text:"Tryck där texten ska ligga.",arrow:"Dra från start till pilspets.",circle:"Dra runt området som ska markeras."
+      pen:"Rita direkt på ritningen. Markeringen sparas automatiskt.",text:"Tryck där texten ska ligga.",arrow:"Dra från start till pilspets.",circle:"Dra runt området som ska markeras.",
+      cable:"Tryck på en ledning – hela den sammanhängande dragningen markeras. Korsande linjer följer inte med."
     }[state.tool];
     $("#measureHint").textContent=text;
   }
@@ -1002,11 +1004,165 @@
   function roundRectPath(ctx,x,y,w,h,r){
     ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
   }
+  // ---- Kabelmarkering ----
+  // Trycker man på en ledning markeras hela den sammanhängande dragningen.
+  // Nyckeln till att KORSANDE linjer inte dras med: två segment kopplas bara
+  // ihop om deras ÄNDPUNKTER möts. En linje som korsar en annan skär den mitt
+  // på sträckan och delar därför ingen ändpunkt — den hoppas över. Det är
+  // samma sak i ritningen: en korsning är inte en förbindelse.
+  const cable={cacheKey:null,segs:null,grid:null,cell:6};
+
+  function cableKeyFor(){ return `${state.currentFileId}|${state.pageNum}`; }
+
+  async function ensureCableGraph(){
+    const key=cableKeyFor();
+    if(cable.cacheKey===key&&cable.segs)return true;
+    const OPS=window.pdfjsLib&&window.pdfjsLib.OPS;
+    if(!OPS||!state.pdfDoc)return false;
+    const page=await state.pdfDoc.getPage(state.pageNum);
+    const viewport=page.getViewport({scale:1});
+    let ops; try{ops=await page.getOperatorList()}catch{return false}
+    let paths; try{paths=scannerReadPaths(ops,viewport,OPS)}catch{return false}
+    const STROKE=new Set([OPS.stroke,OPS.closeStroke]);
+    const segs=[];
+    // No colour threshold is applied when building the graph. A fixed cut-off
+    // would be calibrated to one project's palette, and the greys differ from
+    // drawing to drawing. Instead every stroke is kept and the colour is decided
+    // at tap time: the run follows whatever colour the tapped line has. That is
+    // self-calibrating — it works whether cables are black here and blue in the
+    // next project, and it excludes the thick collection route and the greyed
+    // architectural base automatically, because neither shares the cable's colour.
+    for(const p of paths){
+      if(!STROKE.has(p.paintOp)||p.npts<2)continue;
+      // Multi-point paths are already a connected run; keep their internal order.
+      for(let i=1;i<p.pts.length;i++){
+        const a=p.pts[i-1],b=p.pts[i];
+        const len=Math.hypot(b[0]-a[0],b[1]-a[1]);
+        if(len<0.4)continue;                    // hatching noise
+        segs.push({a,b,len,lw:p.lw||1,col:p.col||"#000000"});
+      }
+    }
+    if(!segs.length)return false;
+    // Endpoint hash grid so joining is O(1) per endpoint instead of O(n²).
+    const grid=new Map();
+    const key2=(x,y)=>`${Math.round(x/cable.cell)},${Math.round(y/cable.cell)}`;
+    segs.forEach((sg,i)=>{
+      for(const q of [sg.a,sg.b]){
+        const k=key2(q[0],q[1]);
+        (grid.get(k)||grid.set(k,[]).get(k)).push(i);
+      }
+    });
+    cable.cacheKey=key; cable.segs=segs; cable.grid=grid;
+    return true;
+  }
+
+  function colorRgb(c){
+    const m=/^#([0-9a-f]{6})$/i.exec(String(c||""));
+    if(!m)return [0,0,0];
+    const v=parseInt(m[1],16);
+    return [(v>>16)&255,(v>>8)&255,v&255];
+  }
+  function sameColor(a,b){
+    const x=colorRgb(a),y=colorRgb(b);
+    // Small tolerance so a run drawn in two near-identical shades still joins,
+    // while clearly different linework (grey architecture vs black cable) does not.
+    return Math.abs(x[0]-y[0])+Math.abs(x[1]-y[1])+Math.abs(x[2]-y[2]) < 60;
+  }
+
+  function cableNeighbours(i,seedCol){
+    const sg=cable.segs[i], out=[];
+    const TOL=0.75;                              // endpoints must actually meet
+    const key2=(x,y)=>`${Math.round(x/cable.cell)},${Math.round(y/cable.cell)}`;
+    for(const q of [sg.a,sg.b]){
+      for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
+        const bucket=cable.grid.get(key2(q[0]+dx*cable.cell,q[1]+dy*cable.cell));
+        if(!bucket)continue;
+        for(const j of bucket){
+          if(j===i)continue;
+          const o=cable.segs[j];
+          if(!(Math.hypot(o.a[0]-q[0],o.a[1]-q[1])<=TOL||Math.hypot(o.b[0]-q[0],o.b[1]-q[1])<=TOL))continue;
+          // Line weight is only used to block joins between clearly different
+          // kinds of linework. On the drawings tested nearly everything is the
+          // same weight, so a tight ratio would have blocked legitimate runs
+          // while gaining nothing — this stops only at a sharp change.
+          const r=(o.lw||1)/(sg.lw||1);
+          if(r<0.34||r>2.9)continue;
+          if(seedCol&&!sameColor(o.col,seedCol))continue;
+          out.push(j);
+        }
+      }
+    }
+    return out;
+  }
+
+  function pointToSegDist(p,a,b){
+    const vx=b[0]-a[0],vy=b[1]-a[1];
+    const L=vx*vx+vy*vy;
+    let t=L?((p.x-a[0])*vx+(p.y-a[1])*vy)/L:0;
+    t=Math.max(0,Math.min(1,t));
+    return Math.hypot(p.x-(a[0]+vx*t),p.y-(a[1]+vy*t));
+  }
+
+  async function selectCableAt(pt){
+    if(!await ensureCableGraph()){toast("Kunde inte läsa ritningens linjer");return}
+    // Tolerance follows zoom so it stays a comfortable finger target on screen.
+    const tol=Math.max(1.2,7/(state.renderScale*state.viewZoom||1));
+    let best=-1,bd=Infinity;
+    for(let i=0;i<cable.segs.length;i++){
+      const d=pointToSegDist(pt,cable.segs[i].a,cable.segs[i].b);
+      if(d<bd){bd=d;best=i}
+    }
+    if(best<0||bd>tol){state.cableRun=null;drawOverlay();toast("Ingen ledning där");return}
+    // Tapping the already-marked run clears it. Without this the same run was
+    // simply re-selected, so the only ways out were an empty tap, switching tool
+    // or the back button — none of which is what a second tap should mean.
+    if(state.cableRun&&state.cableRun.some(sg=>sg===cable.segs[best])){
+      state.cableRun=null; drawOverlay(); return;
+    }
+    const seedCol=cable.segs[best].col;
+    const seen=new Set([best]),stack=[best],run=[];
+    const CAP=6000;
+    while(stack.length&&run.length<CAP){
+      const i=stack.pop(); run.push(cable.segs[i]);
+      for(const j of cableNeighbours(i,seedCol))if(!seen.has(j)){seen.add(j);stack.push(j)}
+    }
+    let total=0; for(const sg of run)total+=sg.len;
+    state.cableRun=run;
+    drawOverlay();
+    const m=ptToM(total);
+    if(run.length>=CAP){
+      // Architectural linework is all connected, so tapping a wall rather than a
+      // cable can reach most of the sheet. Say so instead of presenting a length
+      // that means nothing.
+      toast(`Väldigt stort sammanhängande nät (${run.length}+ segment) – tryck närmare själva ledningen`);
+    }else{
+      toast(`Ledning markerad · ${run.length} segment · ca ${formatLength(m)}`);
+    }
+  }
+
   function drawOverlay(){
     const c=$("#overlayCanvas"), dpr=Math.min(window.devicePixelRatio||1,2), ctx=c.getContext("2d");
     ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,c.width/dpr,c.height/dpr);
     ctx.lineWidth=2.5;ctx.strokeStyle=accentColor();ctx.fillStyle=accentColor();ctx.font="700 13px system-ui";
     const toPx=p=>({x:p.x*state.renderScale,y:p.y*state.renderScale});
+    // Highlighted cable run, drawn first so annotations stay on top of it.
+    if(state.cableRun&&state.cableRun.length){
+      ctx.save();
+      const acc=accentColor();
+      // A soft wide pass under a solid thin pass reads as a highlight rather
+      // than as another drawn line, so the original linework stays visible.
+      for(const pass of [{w:9,a:.30},{w:3.2,a:.95}]){
+        ctx.strokeStyle=acc; ctx.globalAlpha=pass.a;
+        ctx.lineWidth=pass.w; ctx.lineCap="round"; ctx.lineJoin="round";
+        ctx.beginPath();
+        for(const sg of state.cableRun){
+          const a=toPx({x:sg.a[0],y:sg.a[1]}), b=toPx({x:sg.b[0],y:sg.b[1]});
+          ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
     function drawPath(points,closed=false,label=""){
       if(points.length<1)return; const q=points.map(toPx);ctx.beginPath();ctx.moveTo(q[0].x,q[0].y);
       q.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));if(closed&&q.length>2)ctx.closePath();ctx.stroke();
@@ -1150,7 +1306,9 @@
     }
     return best;
   }
-  $('#overlayCanvas').addEventListener('pointerdown',e=>{if(!['pen','arrow','circle'].includes(state.tool))return;const p=pdfPointFromEvent(e);state.drawDraft={type:state.tool,points:[p],pointerId:e.pointerId};if(state.tool==='arrow')showMeasureMagnifier(e);try{e.target.setPointerCapture(e.pointerId)}catch{}e.preventDefault()});
+  $('#overlayCanvas').addEventListener('pointerdown',e=>{
+    if(state.tool==='cable'){ e.preventDefault(); selectCableAt(pdfPointFromEvent(e)); return; }
+    if(!['pen','arrow','circle'].includes(state.tool))return;const p=pdfPointFromEvent(e);state.drawDraft={type:state.tool,points:[p],pointerId:e.pointerId};if(state.tool==='arrow')showMeasureMagnifier(e);try{e.target.setPointerCapture(e.pointerId)}catch{}e.preventDefault()});
   $('#overlayCanvas').addEventListener('pointermove',e=>{const d=state.drawDraft;if(!d||d.pointerId!==e.pointerId)return;const p=pdfPointFromEvent(e);
     if(d.type==='pen'){
       // Drop samples closer than ~1px on screen: finger jitter otherwise becomes
@@ -1853,6 +2011,7 @@
     const fs=!!(document.fullscreenElement||document.webkitFullscreenElement)||viewer?.classList.contains("pseudo-fullscreen");
     if(fs){ toggleFullscreen(); return true; }
     if(state.currentView==="viewerView"){
+      if(state.cableRun){ state.cableRun=null; drawOverlay(); return true; }
       if(state.selectedOverlay){ clearOverlaySelection(); return true; }
       if(state.tool&&state.tool!=="pan"){ setTool("pan"); return true; }
       if(state.riserMode){ setRiserMode(false); return true; }
@@ -2443,18 +2602,29 @@
   function scannerReadPaths(ops,viewport,OPS){
     let ctm=viewport.transform.slice(); const stack=[]; const out=[];
     let pendingPts=null, pendingCurves=0;
+    // Stroke width is tracked as well: cable routes are drawn noticeably thicker
+    // than building linework, which is what lets a cable run stop at a wall
+    // instead of flooding into the whole floor plan.
+    let lineWidth=1; const lwStack=[];
+    // Stroke colour separates the electrical linework from the architectural
+    // base drawing: on the sheets measured, the building is drawn in grey
+    // (#ababab, ~85 000 paths) while the electrical lines are black (~3 000).
+    let strokeCol="#000000"; const colStack=[];
     const V3=(a)=>Array.isArray(a[0]);
     const flush=(paintOp)=>{
       if(!pendingPts||!pendingPts.length){pendingPts=null;return}
       let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
       for(const q of pendingPts){if(q[0]<x0)x0=q[0];if(q[0]>x1)x1=q[0];if(q[1]<y0)y0=q[1];if(q[1]>y1)y1=q[1];}
-      out.push({paintOp,x0,y0,x1,y1,w:x1-x0,h:y1-y0,cx:(x0+x1)/2,cy:(y0+y1)/2,npts:pendingPts.length,pts:pendingPts,curves:pendingCurves});
+      const sc=Math.hypot(ctm[0],ctm[1])||1;
+      out.push({paintOp,x0,y0,x1,y1,w:x1-x0,h:y1-y0,cx:(x0+x1)/2,cy:(y0+y1)/2,npts:pendingPts.length,pts:pendingPts,curves:pendingCurves,lw:lineWidth*sc,col:strokeCol});
       pendingPts=null; pendingCurves=0;
     };
     for(let i=0;i<ops.fnArray.length;i++){
       const fn=ops.fnArray[i], args=ops.argsArray[i];
-      if(fn===OPS.save){stack.push(ctm.slice());continue}
-      if(fn===OPS.restore){ctm=stack.pop()||viewport.transform.slice();continue}
+      if(fn===OPS.save){stack.push(ctm.slice());lwStack.push(lineWidth);colStack.push(strokeCol);continue}
+      if(fn===OPS.restore){ctm=stack.pop()||viewport.transform.slice();lineWidth=lwStack.pop()??lineWidth;strokeCol=colStack.pop()??strokeCol;continue}
+      if(fn===OPS.setStrokeRGBColor){strokeCol=String(args[0]||strokeCol);continue}
+      if(fn===OPS.setLineWidth){lineWidth=Math.abs(Number(args[0])||1);continue}
       if(fn===OPS.transform){ctm=mtxMul(ctm,args);continue}
       if(fn===OPS.constructPath){
         const pts=[]; let curves=0;
@@ -2991,6 +3161,11 @@
   // offline on site (no network on a building site) and stays in step with the
   // build it actually shipped with.
   const CHANGELOG=[
+    {v:"9.0.0",d:"Alla fyra teman genomgångna. Svart har fått djup, gradienter och glöd — det hade aldrig fått samma behandling som de nyare. Vit har svalare bas och riktiga skuggor så korten lyfter. Himmelsblå är klarare och mer neon. Julafton bär nu rött lika mycket som guld."},
+    {v:"8.9.3",d:"Ett andra tryck på en markerad ledning släcker den nu. Tidigare markerades samma ledning bara om igen, och enda vägen ur var att trycka på tom yta, byta verktyg eller gå bakåt."},
+    {v:"8.9.2",d:"Ledningsverktyget följer nu den tryckta linjens EGEN färg i stället för en fast tröskel. Färgerna skiljer sig mellan ritningar och projekt, så en inställd gräns skulle spricka på nästa jobb. Nu kalibrerar det sig självt."},
+    {v:"8.9.1",d:"Ledningsverktyget följer nu bara el-linjerna. Den tjocka samlingsledningen visade sig vara en fylld grå form, inte en linje, och byggnadsritningen är grå streck — el är svart. Färgen skiljer dem, vilket tar bort 96 procent av geometrin och gör markeringen både korrekt och direkt."},
+    {v:"8.9.0",d:"Nytt verktyg \"Ledning\": tryck på en kabel så markeras hela den sammanhängande dragningen i temats färg, med uppskattad längd. Korsande linjer följer inte med — två linjer kopplas bara ihop om deras ändpunkter faktiskt möts, precis som i ritningen."},
     {v:"8.8.0",d:"Nytt tema \"Julafton\": granmörk bas, varm guldaccent som levande ljus, och mjuk snö som faller bakom innehållet. Snön pausas automatiskt när en ritning är öppen, i bakgrunden, och för den som valt reducerad rörelse i systemet."},
     {v:"8.7.0",d:"Räknarvyn omgjord. Knappen satt inklämd i rubrikraden och krockade med texten; den ligger nu i en fast åtgärdsrad längst ned tillsammans med statusraden, visar hur många ritningar som ska scannas och är avstängd tills något är valt. De tre korten är numrerade steg."},
     {v:"8.6.0",d:"Flerpoliga strömställare räknas nu var för sig. Sammanslagningen av närliggande träffar utgick från uttagets storlek, som är ungefär dubbelt så stor som strömställarens — därför slogs en 2- eller 3-grupp ihop till en enda. Varje symboltyp jämförs nu mot sin egen storlek."},

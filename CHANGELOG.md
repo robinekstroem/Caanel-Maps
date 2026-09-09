@@ -2,6 +2,72 @@
 
 ---
 
+## 9.0.0 (build 70)
+
+**Alla fyra teman genomgångna**
+
+*Svart*
+- Standardtemat hade aldrig fått samma behandling som de nyare — platta ytor, ingen glöd, ingen gradient. Nu ett varmt orange sken uppifrån, mörkare botten, panelgradienter med inre kantljus och glöd på aktiva element. Ser ut som en medveten mörk yta i stället för bara frånvaro av ljus.
+
+*Vit*
+- Var i praktiken grått på vitt. Nu en svalare blågrå bas med riktiga skuggor, så korten lyfter från underlaget i stället för att ligga i det. Orange accent med gradient och mjuk skugga, och ett svagt orange/blått sken i bakgrunden.
+
+*Himmelsblå*
+- Klarare och mer neon: djupare bas, ljusare cyanblå accent och kraftigare glöd. Loggan och startskärmen följer med.
+
+*Julafton*
+- Guld ensamt läste mer "lyx" än "jul". Rött bär nu lika mycket som guldet: rött sken vid sidan av det gyllene, röd rubriktext, röda stegsiffror, och en logga som går från guld ner i djupt rött — som gran med kulor.
+
+Temaväljarens miniatyrer, statusfältets färg och AR-mätvyns färger följer alla med.
+
+---
+
+## 8.9.3 (build 69)
+
+**Andra trycket släcker ledningen**
+- Ett tryck på en redan markerad ledning markerade bara samma ledning om igen. Enda vägen ur var att trycka på tom yta, byta verktyg eller gå bakåt — inget av det är vad ett andra tryck rimligen ska betyda.
+- Trycker man nu på den markerade dragningen släcks den. Trycker man på en annan ledning byter markeringen dit som förut.
+
+---
+
+## 8.9.2 (build 68)
+
+**Ledningsverktyget kalibrerar sig självt**
+- Färgfiltret i 8.9.1 byggde på en fast luminansgräns, kalibrerad mot de ritningar som fanns till hands. Färgerna skiljer sig mellan ritningar och projekt, så den gränsen skulle förr eller senare hamna fel.
+- Markeringen följer nu **den tryckta linjens egen färg**. Ingen tröskel behövs: trycker du på en svart ledning följs svart, ritar ett annat projekt sina kablar i blått följs blått.
+- Den tjocka samlingsledningen och den gråtonade byggnadsritningen utesluts automatiskt, eftersom ingen av dem delar kabelns färg — inte för att någon gräns är inställd.
+- En liten tolerans tillåts, så en dragning ritad i två närmast identiska nyanser ändå hänger ihop.
+- Verifierat på P9: ett tryck på en svart ledning kan nå högst 2 479 segment och aldrig de 53 286 gråa arkitekturlinjerna.
+
+---
+
+## 8.9.1 (build 67)
+
+**Ledningsverktyget följer bara el-linjerna**
+- Undersökningen av P9 gav två svar som ingen av oss förutsåg:
+  - Den tjocka **samlingsledningen är ingen linje alls** utan en *fylld* grå bandform (`#646464`). Den ingick därför aldrig i markeringen — verktyget följer bara streck.
+  - Byggnadsritningen under är ritad med **gråa** streck (`#ababab`, ca 85 000 stycken) medan el-linjerna är **svarta** (ca 3 000). Det var arkitekturen som riskerade att svälla ut markeringen, inte huvudledningen.
+- Grafen bygger nu bara på mörka streck. Ett luminanstest används i stället för exakt färgmatchning, så en ritning med en något annan grå ton fortfarande separeras rätt.
+- Effekt: från 56 035 till 2 479 segment på P9, och 76 200 till 5 743 på P18. Markeringen blir både korrekt avgränsad och omedelbar.
+- Linjebredd visade sig sakna signal i dessa ritningar (allt ritas 0,24pt, och `setGState` förekommer inte), så färgen är den bärande skillnaden.
+
+---
+
+## 8.9.0 (build 66)
+
+**Nytt verktyg: Ledning**
+- Tryck på en kabel i ritningen så markeras hela den sammanhängande dragningen i temats accentfärg, tillsammans med en uppskattad längd i vald skala.
+- **Korsande linjer följer inte med.** Två segment kopplas bara ihop om deras *ändpunkter* möts. En linje som korsar en annan skär den mitt på sträckan och delar därför ingen ändpunkt — precis som i verkligheten är en korsning inte en förbindelse.
+- Bygger på samma vektorutdrag som räknaren: ritningens faktiska linjegeometri, inte pixlar. Linjerna läses in första gången verktyget används på en ritning och sparas sedan i minnet.
+- Markeringen ritas som ett brett mjukt sken under en tunn heldragen linje, så originalritningen förblir läsbar under.
+- Bakåtknappen och byte av verktyg rensar markeringen.
+
+**Känd begränsning**
+- Byggnadslinjer hänger ihop över hela ritningen. Trycker man på en vägg i stället för en kabel kan markeringen därför bli mycket stor — då visas ett meddelande om det i stället för en längd som inte betyder något.
+- Linjebredd används för att stoppa vid tydligt olika linjevikter, men i de testade ritningarna är nästan all geometri ritad med samma bredd, så den signalen hjälper lite här.
+
+---
+
 ## 8.8.0 (build 65)
 
 **Nytt tema: Julafton**
