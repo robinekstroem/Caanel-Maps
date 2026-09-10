@@ -2,6 +2,48 @@
 
 ---
 
+## 9.3.0 (build 77)
+
+**Avståndsmätningen ritas som en måttsättning**
+- Måttet ritades med feta fyllda prickar, boxade A- och B-bokstäver och ett stort etikettblock. Tungt på skärmen, och till skillnad från ritningen det ligger ovanpå.
+- Nu samma språk som en teknisk måttsättning: tunn linje med korta ändstreck vinkelrätt mot den, öppna ändpunkter så att den exakta punkten syns igenom markören, och värdet på en kompakt rundad bricka vid sidan av linjen i stället för mitt över den.
+- Måttet visas nu även löpande medan man drar punkt B, inte bara i statusraden.
+
+---
+
+## 9.2.1 (build 76)
+
+**Lös punkt vid tryck på ledning**
+- Varje tryck med ledningsverktyget skapade också en fristående mätpunkt som gick att dra ut över ytor utan linjer. Klickhanteraren som lägger till punkter undantar en fast lista av verktyg, och `cable` fanns inte med i den när verktyget lades till. Nu undantaget.
+
+**Markeringen följer genom dosor, men inte genom korsningar**
+- Stoppet från 9.0.1 gällde *alla* punkter där tre eller fler segment möttes, vilket bröt dragningen även där kabeln faktiskt fortsätter genom en dosa.
+- Dosor läses nu ut ur ritningen som små runda fyllda former. Möts linjer vid en dosa fortsätter markeringen igenom den till sista linjen. Möts de utan dosa är det en ren korsning mellan orelaterade dragningar, och markeringen stannar.
+
+---
+
+## 9.2.0 (build 75)
+
+**Effekter går att välja fritt**
+- Snö, scanlines med ljussvep, norrsken och rutnät satt tidigare fast i var sitt tema. De styrs nu var för sig under Inställningar → Tema och **kan kombineras med vilket tema som helst** — snö i Cyberpunk, scanlines i Svart, och så vidare.
+- Varje tema har kvar sina ursprungliga effekter som utgångsläge, så inget ändras förrän man själv rör reglagen. Valet sparas per tema, så olika teman kan ha olika uppsättning.
+- Alla effekter ligger fortsatt bakom innehållet och pausas när en ritning är öppen, och står stilla för den som valt reducerad rörelse.
+
+**Versionshistoriken samlad**
+- Historiken låg på två ställen: en sektion "Om EKIS FIELD" som redan fanns, och ett kort jag lade till i 7.1.0 utan att se den. Nyare versioner hamnade i det ena och äldre i det andra.
+- Det tillagda kortet är borttaget. Hela historiken visas nu under **Om EKIS FIELD**, och versionsnumret där uppdateras med bygget i stället för att stå kvar på 5.1.4.
+
+---
+
+## 9.1.1 (build 74)
+
+**Rektangel i stället för EKIS-texten på startskärmen**
+- Drabbade Himmelsblå och Julafton. Texten ritas som en gradient klippt till bokstävernas form (`background-clip:text`), men CSS-genvägen `background` **nollställer** `background-clip` till sitt standardvärde. I temaomgången i 9.0.0 sattes bara bakgrunden om, utan att upprepa klippningen — gradienten fyllde därför hela rutan medan texten låg kvar osynlig.
+- Klippningen är återställd på båda, och samtliga sju teman är kontrollerade så att ingen annan har samma brist.
+- Loggan i Himmelsblå hade samma sorts risk och har fått sin mask uttryckligen upprepad.
+
+---
+
 ## 9.1.0 (build 73)
 
 **Två nya teman med rörelse**

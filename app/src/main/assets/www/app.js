@@ -75,7 +75,7 @@
     // would stay orange on the green theme.
     accentColor.cache=null;
     if(typeof drawOverlay==="function"&&state.currentFileId)try{drawOverlay()}catch{}
-    try{snow.sync()}catch{}
+    try{applyEffects()}catch{}
     if(persist)saveMeta();
   }
   // Accent used for canvas drawing, read from the active theme's CSS variable.
@@ -1011,7 +1011,7 @@
   // ihop om deras ÄNDPUNKTER möts. En linje som korsar en annan skär den mitt
   // på sträckan och delar därför ingen ändpunkt — den hoppas över. Det är
   // samma sak i ritningen: en korsning är inte en förbindelse.
-  const cable={cacheKey:null,segs:null,grid:null,cell:6};
+  const cable={cacheKey:null,segs:null,grid:null,dots:null,cell:6};
 
   function cableKeyFor(){ return `${state.currentFileId}|${state.pageNum}`; }
 
@@ -1053,7 +1053,19 @@
         (grid.get(k)||grid.set(k,[]).get(k)).push(i);
       }
     });
-    cable.cacheKey=key; cable.segs=segs; cable.grid=grid;
+    // Junction boxes are small filled dots. Where a cable passes through one it
+    // genuinely continues; where two lines merely cross with no dot between them
+    // they are unrelated and the run must stop. Collecting the dots lets the walk
+    // tell those two cases apart instead of stopping at every meeting point.
+    const FILL=new Set([OPS.fill,OPS.eoFill,OPS.fillStroke,OPS.eoFillStroke]);
+    const dots=[];
+    for(const p of paths){
+      if(!FILL.has(p.paintOp))continue;
+      const lo=Math.min(p.w,p.h), hi=Math.max(p.w,p.h);
+      if(lo<0.8||hi>9||hi/Math.max(lo,.01)>1.7)continue;   // round-ish and small
+      dots.push({x:p.cx,y:p.cy,r:hi/2});
+    }
+    cable.cacheKey=key; cable.segs=segs; cable.grid=grid; cable.dots=dots;
     return true;
   }
 
@@ -1159,7 +1171,13 @@
           t=Math.abs(180-t);                 // 0 = straight on, 90 = square turn
           return t<26||(t>62&&t<118);
         });
-        if(at.length>=2)continue;           // junction – do not walk past it
+        // More than one continuation means the lines meet here. Pass through only
+        // if a junction box sits at the point; otherwise this is a plain crossing
+        // between unrelated runs and the walk stops.
+        if(at.length>=2){
+          const box=(cable.dots||[]).some(d=>Math.hypot(d.x-q[0],d.y-q[1])<=Math.max(2.5,d.r*2.2));
+          if(!box)continue;
+        }
         for(const j of at)if(!seen.has(j)){seen.add(j);stack.push(j)}
       }
     }
@@ -1175,6 +1193,47 @@
     }else{
       toast(`Ledning markerad · ${run.length} segment · ca ${formatLength(m)}`);
     }
+  }
+
+  // Draws a measurement the way a dimension is drawn on a technical drawing:
+  // a thin line with short end ticks square to it, and the value on a compact
+  // rounded chip. The previous version used fat filled dots, boxed A/B letters
+  // and an oversized label — heavy on screen and unlike the drawing it sits on.
+  function drawDimension(ctx,a,b,label,dashed){
+    const acc=accentColor();
+    const ang=Math.atan2(b.y-a.y,b.x-a.x);
+    const nx=-Math.sin(ang), ny=Math.cos(ang), t=6;
+    ctx.save();
+    ctx.strokeStyle=acc; ctx.fillStyle=acc;
+    ctx.lineWidth=1.8; ctx.lineCap="butt";
+    if(dashed)ctx.setLineDash([6,4]);
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    ctx.setLineDash([]);
+    // end ticks
+    for(const q of [a,b]){
+      ctx.beginPath();
+      ctx.moveTo(q.x-nx*t,q.y-ny*t); ctx.lineTo(q.x+nx*t,q.y+ny*t); ctx.stroke();
+    }
+    // small open endpoints so the exact point stays visible under the marker
+    ctx.lineWidth=1.6;
+    for(const q of [a,b]){
+      ctx.beginPath(); ctx.arc(q.x,q.y,3.2,0,Math.PI*2);
+      ctx.fillStyle="#fff"; ctx.fill(); ctx.strokeStyle=acc; ctx.stroke();
+    }
+    if(label){
+      ctx.font="600 12px system-ui,-apple-system,sans-serif";
+      const w=ctx.measureText(label).width, padX=7, padY=4, h=12+padY*2;
+      // offset clear of the line, on its normal
+      const mx=(a.x+b.x)/2+nx*14, my=(a.y+b.y)/2+ny*14;
+      const x=mx-w/2-padX, y=my-h/2;
+      ctx.fillStyle="rgba(14,14,16,.88)";
+      roundRectPath(ctx,x,y,w+padX*2,h,6); ctx.fill();
+      ctx.strokeStyle="rgba(255,255,255,.14)"; ctx.lineWidth=1; ctx.stroke();
+      ctx.fillStyle=acc; ctx.textBaseline="middle";
+      ctx.fillText(label,x+padX,my);
+      ctx.textBaseline="alphabetic";
+    }
+    ctx.restore();
   }
 
   function drawOverlay(){
@@ -1209,14 +1268,13 @@
     }
     getMeasurements().forEach(m=>{
       if(m.type==="distance" && m.points?.length===2){
-        const a=toPx(m.points[0]),b=toPx(m.points[1]);
-        ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
-        [a,b].forEach((q,i)=>{ctx.beginPath();ctx.arc(q.x,q.y,6,0,Math.PI*2);ctx.fill();ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(q.x+8,q.y-12,20,20);ctx.fillStyle=accentColor();ctx.fillText(i?"B":"A",q.x+13,q.y+3);ctx.fillStyle=accentColor();});
-        const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(mx+7,my-21,Math.max(74,m.label.length*7),23);ctx.fillStyle=accentColor();ctx.fillText(m.label,mx+12,my-6);
+        drawDimension(ctx,toPx(m.points[0]),toPx(m.points[1]),m.label,false);
       } else drawPath(m.points,m.type==="area",m.label);
     });
     if(state.distanceDraft){
-      const a=toPx(state.distanceDraft.a),b=toPx(state.distanceDraft.b);ctx.save();ctx.setLineDash([7,5]);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.setLineDash([]);[a,b].forEach((q,i)=>{ctx.beginPath();ctx.arc(q.x,q.y,6,0,Math.PI*2);ctx.fill();ctx.fillStyle="rgba(11,11,12,.9)";ctx.fillRect(q.x+8,q.y-12,20,20);ctx.fillStyle=accentColor();ctx.fillText(i?"B":"A",q.x+13,q.y+3);ctx.fillStyle=accentColor();});ctx.restore();
+      const a=toPx(state.distanceDraft.a),b=toPx(state.distanceDraft.b);
+      const live=formatLength(ptToM(distancePt(state.distanceDraft.a,state.distanceDraft.b)));
+      drawDimension(ctx,a,b,live,true);
     }
     const f=fileMeta(state.currentFileId);
     const refs=f?.syncRefs?.[state.pageNum] || [];
@@ -1405,7 +1463,7 @@
     }
   });
   $("#overlayCanvas").addEventListener("pointercancel",()=>{if(state.editMeasure){state.editMeasure=null;}if(state.distanceDraft){state.distanceDraft=null;}if(state.distanceFirstDraft){state.distanceFirstDraft=null;state.tempPoints=[];}drawOverlay();});
-  $("#overlayCanvas").addEventListener("click",e=>{if(Date.now()<state.suppressClickUntil||["pan","distance","text","pen","arrow","circle"].includes(state.tool))return;state.tempPoints.push(pdfPointFromEvent(e));drawOverlay();});
+  $("#overlayCanvas").addEventListener("click",e=>{if(Date.now()<state.suppressClickUntil||["pan","distance","text","pen","arrow","circle","cable"].includes(state.tool))return;state.tempPoints.push(pdfPointFromEvent(e));drawOverlay();});
 
   function screenMeasureHandles(m){
     if(!m||m.type!=="distance"||m.points?.length!==2)return [];const sc=state.renderScale*state.viewZoom,r=$("#overlayCanvas").getBoundingClientRect();return [{kind:"a",p:m.points[0]},{kind:"b",p:m.points[1]}].map(h=>({...h,cx:r.left+h.p.x*sc,cy:r.top+h.p.y*sc}));
@@ -3196,6 +3254,10 @@
   // offline on site (no network on a building site) and stays in step with the
   // build it actually shipped with.
   const CHANGELOG=[
+    {v:"9.3.0",d:"Avståndsmätningen ritas nu som en riktig måttsättning: tunn linje med ändstreck, öppna ändpunkter så själva punkten syns, och värdet på en kompakt bricka vid sidan av linjen. Tidigare feta prickar, boxade A/B-bokstäver och ett stort etikettblock är borta."},
+    {v:"9.2.1",d:"Ledningsverktyget lämnade en lös mätpunkt vid varje tryck — klickhanteraren undantog alla verktyg utom det nya. Markeringen passerar nu även genom dosor till sista linjen, men stannar där linjer bara korsar varandra utan dosa."},
+    {v:"9.2.0",d:"Effekterna går nu att slå av och på var för sig och kombineras fritt med vilket tema som helst — snö, scanlines, norrsken och rutnät. Valet sparas per tema. Versionshistoriken låg på två ställen och är samlad under Om EKIS FIELD."},
+    {v:"9.1.1",d:"Startskärmen visade en ifylld rektangel i stället för EKIS-texten i Himmelsblå och Julafton. CSS-genvägen background nollställer background-clip, och i temaomgången sattes bara bakgrunden om utan att upprepa klippningen."},
     {v:"9.1.0",d:"Två nya teman med rörelse: \"Cyberpunk\" med magenta, cyan, scanlines och ett ljusband som sveper, och \"Norrsken\" med två slöjor som driver i olika takt över vinternatt. All animation pausas när en ritning är öppen och för den som valt reducerad rörelse."},
     {v:"9.0.2",d:"Ledningsmarkeringen gjorde avstick vid dörrar och möbler. De ritas som kedjor av mycket korta segment medan en kabel ritas med få långa, och de viker av i udda vinklar. Vandringen följer nu bara segment av kabellängd som fortsätter rakt fram eller svänger rätvinkligt."},
     {v:"9.0.1",d:"Ledningsmarkeringen: glöden borttagen, nu en ren linje. Markeringen stannar också vid förgreningar — alla kablar i en lägenhet möts ju vid centralen, så en fri spridning nådde hela kretsnätet och följde med längs väggar."},
@@ -3238,14 +3300,15 @@
     {v:"2",    d:"Nyp/zoom med två fingrar, panorering, swipe mellan ritningar, helskärm och zoomindikator."},
     {v:"1",    d:"Projekt, PDF- och ZIP-import, skala per sida, kalibrering, avstånd, sträcka och area, export och backup."}
   ];
-  $("#changelogBtn")?.addEventListener("click",()=>{
-    const box=$("#changelogBox"); if(!box)return;
-    const open=!box.classList.contains("hidden");
-    if(open){box.classList.add("hidden");$("#changelogBtn").textContent="Visa versionshistorik";return}
-    box.innerHTML=CHANGELOG.map(c=>`<div class="changelog-item"><strong>${esc(c.v)}</strong><p class="muted">${esc(c.d)}</p></div>`).join("");
-    box.classList.remove("hidden");
-    $("#changelogBtn").textContent="Dölj versionshistorik";
-  });
+  // The release list lives in one place only: Inställningar → Om EKIS FIELD.
+  // It used to be duplicated in a second card, so newer entries appeared in one
+  // spot and the older ones in another.
+  (function renderChangelog(){
+    const box=$("#changelogAuto"); if(!box)return;
+    box.innerHTML=CHANGELOG.map((c,i)=>
+      `<details class="release-note"${i===0?' open':''}><summary><span><b>${esc(c.v)}</b></span>${i===0?'<em>Senaste</em>':''}</summary><p>${esc(c.d)}</p></details>`
+    ).join("");
+  })();
 
   // ---- AR-mätning (ARCore) ----
   // Only shown where it can actually work: the native bridge reports whether
@@ -3343,10 +3406,10 @@
     }
     function schedule(){ if(!raf&&running())raf=requestAnimationFrame(frame); }
     function running(){
-      return state.meta.theme==="jul" && !document.hidden && state.currentView!=="viewerView" && !reduced;
+      return document.body.classList.contains("fx-snow") && !document.hidden && state.currentView!=="viewerView" && !reduced;
     }
     function sync(){
-      if(state.meta.theme!=="jul"){ stop(); return; }
+      if(!document.body.classList.contains("fx-snow")){ stop(); return; }
       ensure();
       if(reduced){ // static, gentle scatter for users who asked for less motion
         if(ctx){ ctx.clearRect(0,0,w,h);
@@ -3362,6 +3425,40 @@
     document.addEventListener("visibilitychange",()=>{ document.hidden?stop():sync(); });
     return {sync,stop};
   })();
+
+  // Effects are independent of the theme: each theme merely supplies the
+  // defaults, and any effect can then be turned on or off and combined freely.
+  const FX_DEFAULTS={
+    dark:{snow:false,scan:false,aurora:false,grid:true},
+    light:{snow:false,scan:false,aurora:false,grid:true},
+    neon:{snow:false,scan:false,aurora:false,grid:true},
+    sky:{snow:false,scan:false,aurora:false,grid:true},
+    jul:{snow:true,scan:false,aurora:false,grid:true},
+    cyber:{snow:false,scan:true,aurora:false,grid:true},
+    aurora:{snow:false,scan:false,aurora:true,grid:true}
+  };
+  function effectsFor(theme){
+    const base=FX_DEFAULTS[theme]||FX_DEFAULTS.dark;
+    const saved=(state.meta.fx&&state.meta.fx[theme])||null;
+    return Object.assign({},base,saved||{});
+  }
+  function applyEffects(){
+    const t=state.meta.theme||"dark", fx=effectsFor(t);
+    const b=document.body.classList;
+    b.toggle("fx-snow",!!fx.snow);
+    b.toggle("fx-scan",!!fx.scan);
+    b.toggle("fx-aurora",!!fx.aurora);
+    b.toggle("fx-grid",!!fx.grid);
+    document.querySelectorAll("[data-fx]").forEach(cb=>{cb.checked=!!fx[cb.dataset.fx]});
+    try{snow.sync()}catch{}
+  }
+
+  $$("[data-fx]").forEach(cb=>cb.onchange=()=>{
+    const t=state.meta.theme||"dark";
+    state.meta.fx=state.meta.fx||{};
+    state.meta.fx[t]=Object.assign({},effectsFor(t),{[cb.dataset.fx]:cb.checked});
+    saveMeta(); applyEffects();
+  });
 
   const THEME_NAMES={dark:'Svart',light:'Vit',neon:'Neon',sky:'Himmelsblå',jul:'Julafton',cyber:'Cyberpunk',aurora:'Norrsken'};
   $$('[data-theme-choice]').forEach(b=>b.onclick=()=>{const t=b.dataset.themeChoice;applyTheme(t,true);toast(`${THEME_NAMES[t]||'Tema'} aktiverat`)});
@@ -3469,6 +3566,7 @@
   if("serviceWorker" in navigator && location.protocol!=="file:") navigator.serviceWorker.register("sw.js").catch(()=>{});
 
   applyTheme(state.meta.theme||'dark',false);
+  try{applyEffects()}catch{}
   installViewerGestures();
   renderProjects(); renderAllDrawings(); renderTodos();
 })();
