@@ -2,6 +2,26 @@
 
 ---
 
+## 9.1.0 (build 73)
+
+**Två nya teman med rörelse**
+
+*Cyberpunk*
+- Magenta och cyan mot nästan svart lila. Scanlines över hela ytan, och ett ljusband som långsamt sveper nedåt genom rutnätet.
+- Aktiv flik pulserar svagt. Loggan och startskärmen går från cyan genom vitt till magenta.
+- Knappar har en diagonal gradient som skiftar mot cyan i kanten.
+
+*Norrsken*
+- Levande norrsken över vinternatt: två oskarpa slöjor i mintgrönt och violett som driver i olika takt, så skenet aldrig upprepar sig exakt.
+- Mintgrön accent med violett som andrafärg i rubriker och stegsiffror.
+
+**Prestanda och tillgänglighet**
+- All animation ligger i bakgrundslagret bakom innehållet och **pausas helt när en ritning är öppen** — samma princip som snön i Julafton-temat. Panorering och zoom av en PDF ska aldrig konkurrera med dekoration.
+- Har man valt reducerad rörelse i systeminställningarna står bakgrunderna stilla.
+- Båda temanas färger följer med ut i AR-mätvyn.
+
+---
+
 ## 9.0.2 (build 72)
 
 **Inga avstick vid dörrar och möbler**

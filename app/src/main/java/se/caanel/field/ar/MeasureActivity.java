@@ -132,6 +132,18 @@ public class MeasureActivity extends Activity implements GLSurfaceView.Renderer 
             chromeText = Color.parseColor("#14161a");
             chromeBtn = Color.parseColor("#dfe2e7");
             chromeBtnText = Color.parseColor("#14161a");
+        } else if ("cyber".equalsIgnoreCase(getIntent().getStringExtra(EXTRA_THEME))) {
+            chromeBg = Color.parseColor("#07030f");
+            chromeBgSoft = Color.parseColor("#140a24");
+            chromeText = Color.parseColor("#ffeaff");
+            chromeBtn = Color.parseColor("#1c0f31");
+            chromeBtnText = Color.parseColor("#ffeaff");
+        } else if ("aurora".equalsIgnoreCase(getIntent().getStringExtra(EXTRA_THEME))) {
+            chromeBg = Color.parseColor("#02060f");
+            chromeBgSoft = Color.parseColor("#0a1626");
+            chromeText = Color.parseColor("#eafff9");
+            chromeBtn = Color.parseColor("#0f2134");
+            chromeBtnText = Color.parseColor("#eafff9");
         } else if ("jul".equalsIgnoreCase(getIntent().getStringExtra(EXTRA_THEME))) {
             chromeBg = Color.parseColor("#08130e");
             chromeBgSoft = Color.parseColor("#122019");

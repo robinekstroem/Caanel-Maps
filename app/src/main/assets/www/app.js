@@ -62,7 +62,7 @@
   function saveMeta() {
     localStorage.setItem(META_KEY, JSON.stringify(state.meta));
   }
-  const THEMES={dark:"#0b0b0c",light:"#eef1f6",neon:"#050b06",sky:"#03101f",jul:"#08130e"};
+  const THEMES={dark:"#0b0b0c",light:"#eef1f6",neon:"#050b06",sky:"#03101f",jul:"#08130e",cyber:"#07030f",aurora:"#02060f"};
   function applyTheme(theme, persist=false){
     const next=THEMES[theme]?theme:"dark";
     state.meta.theme=next;
@@ -453,6 +453,7 @@
     $("#bottomNav").classList.toggle("hidden", id==="viewerView" || id==="projectView");
     // Pause the snow while a drawing is open so panning and zooming a PDF never
     // competes with decoration for frames.
+    document.body.classList.toggle("in-viewer", id==="viewerView");
     try{ id==="viewerView"?snow.stop():snow.sync(); }catch{}
     if(nav) $$(".nav-btn").forEach(b=>b.classList.toggle("active", b.dataset.view===id));
     window.scrollTo({top:0,behavior:"instant"});
@@ -3195,6 +3196,7 @@
   // offline on site (no network on a building site) and stays in step with the
   // build it actually shipped with.
   const CHANGELOG=[
+    {v:"9.1.0",d:"Två nya teman med rörelse: \"Cyberpunk\" med magenta, cyan, scanlines och ett ljusband som sveper, och \"Norrsken\" med två slöjor som driver i olika takt över vinternatt. All animation pausas när en ritning är öppen och för den som valt reducerad rörelse."},
     {v:"9.0.2",d:"Ledningsmarkeringen gjorde avstick vid dörrar och möbler. De ritas som kedjor av mycket korta segment medan en kabel ritas med få långa, och de viker av i udda vinklar. Vandringen följer nu bara segment av kabellängd som fortsätter rakt fram eller svänger rätvinkligt."},
     {v:"9.0.1",d:"Ledningsmarkeringen: glöden borttagen, nu en ren linje. Markeringen stannar också vid förgreningar — alla kablar i en lägenhet möts ju vid centralen, så en fri spridning nådde hela kretsnätet och följde med längs väggar."},
     {v:"9.0.0",d:"Alla fyra teman genomgångna. Svart har fått djup, gradienter och glöd — det hade aldrig fått samma behandling som de nyare. Vit har svalare bas och riktiga skuggor så korten lyfter. Himmelsblå är klarare och mer neon. Julafton bär nu rött lika mycket som guld."},
@@ -3361,7 +3363,7 @@
     return {sync,stop};
   })();
 
-  const THEME_NAMES={dark:'Svart',light:'Vit',neon:'Neon',sky:'Himmelsblå',jul:'Julafton'};
+  const THEME_NAMES={dark:'Svart',light:'Vit',neon:'Neon',sky:'Himmelsblå',jul:'Julafton',cyber:'Cyberpunk',aurora:'Norrsken'};
   $$('[data-theme-choice]').forEach(b=>b.onclick=()=>{const t=b.dataset.themeChoice;applyTheme(t,true);toast(`${THEME_NAMES[t]||'Tema'} aktiverat`)});
   $("#brandBtn").onclick=()=>{renderProjects();showView("projectsView")};
   $("#newProjectBtn").onclick=async()=>{

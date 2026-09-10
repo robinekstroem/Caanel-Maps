@@ -1227,3 +1227,204 @@ html:not([data-theme]) body:after{
 :root[data-theme="jul"] .badge{border-color:rgba(200,38,46,.45);color:var(--orange2)}
 :root[data-theme="jul"] .counter-step .step-num{
   background:linear-gradient(180deg,var(--jul-red) 0%,#9d1c23 100%);color:#fff5e6}
+
+/* ===================================================================
+   TEMA 6: "CYBERPUNK" — magenta, cyan och scanlines
+   Rörelsen ligger i ett fixerat bakgrundslager bakom #app och pausas
+   helt när en ritning är öppen (body.in-viewer), så panorering av en PDF
+   aldrig konkurrerar med animation.
+   =================================================================== */
+:root[data-theme="cyber"]{
+  --bg:#07030f; --panel:#140a24; --panel2:#1c0f31; --line:#46216e;
+  --text:#ffeaff; --muted:#b18fd0;
+  --orange:#ff2d95; --orange2:#ff7bc4;
+  --cyber-cyan:#00e5ff;
+  --danger:#ff3b5c; --ok:#00e5ff;
+  --cyber-glow:0 0 18px rgba(255,45,149,.55);
+  --grid-line:rgba(255,45,149,.09);
+}
+:root[data-theme="cyber"] html,:root[data-theme="cyber"] body{background:var(--bg);color:var(--text)}
+@keyframes cyberSweep{
+  0%{transform:translateY(-30%)}
+  100%{transform:translateY(130%)}
+}
+@keyframes cyberPulse{
+  0%,100%{opacity:.85}
+  50%{opacity:1}
+}
+:root[data-theme="cyber"] body:after{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(60% 34% at 16% 0%, rgba(255,45,149,.22) 0%, transparent 68%),
+    radial-gradient(56% 34% at 86% 6%, rgba(0,229,255,.18) 0%, transparent 70%),
+    repeating-linear-gradient(180deg, rgba(255,255,255,.030) 0 1px, transparent 1px 3px),
+    radial-gradient(95% 60% at 50% 100%, rgba(4,2,10,.9) 0%, transparent 72%);
+}
+/* Ljusband som långsamt sveper nedåt — det som ger rörelsen. */
+:root[data-theme="cyber"] body:before{
+  z-index:0;
+  background-image:
+    linear-gradient(var(--grid-line) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid-line) 1px,transparent 1px),
+    linear-gradient(180deg,transparent 0%,rgba(0,229,255,.10) 45%,rgba(255,45,149,.12) 52%,transparent 100%);
+  background-size:44px 44px,44px 44px,100% 42vh;
+  background-repeat:repeat,repeat,no-repeat;
+  animation:cyberSweep 7s linear infinite;
+}
+body.in-viewer:before,body.in-viewer:after{animation:none!important}
+:root[data-theme="cyber"] .topbar{background:rgba(10,4,20,.94);box-shadow:0 1px 0 rgba(255,45,149,.35)}
+:root[data-theme="cyber"] .bottom-nav{background:rgba(12,5,24,.96);box-shadow:0 -8px 26px rgba(255,45,149,.16)}
+:root[data-theme="cyber"] .nav-btn.active{color:var(--orange);text-shadow:var(--cyber-glow);animation:cyberPulse 2.4s ease-in-out infinite}
+:root[data-theme="cyber"] .nav-btn.active svg{filter:drop-shadow(0 0 7px rgba(255,45,149,.7))}
+:root[data-theme="cyber"] .brand{
+  -webkit-mask-image:url(logo-transparent.png);mask-image:url(logo-transparent.png);
+  -webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
+  -webkit-mask-position:center;mask-position:center;
+  background:linear-gradient(110deg,var(--cyber-cyan) 0%,#ffffff 30%,var(--orange) 68%,#7a1050 100%);
+  filter:drop-shadow(0 0 10px rgba(255,45,149,.6))}
+:root[data-theme="cyber"] .brand img{visibility:hidden}
+:root[data-theme="cyber"] #ekisSplash{background:linear-gradient(180deg,#0a0418 0%,#07030f 60%,#12062a 100%)!important}
+:root[data-theme="cyber"] #ekisSplash .s24-ekis{
+  background:linear-gradient(180deg,var(--cyber-cyan) 0%,#ffffff 36%,var(--orange) 74%,#6d0d46 100%)!important;
+  -webkit-background-clip:text!important;background-clip:text!important;
+  -webkit-text-fill-color:transparent!important;text-shadow:0 0 30px rgba(255,45,149,.5)!important}
+:root[data-theme="cyber"] #ekisSplash .s24-field span,
+:root[data-theme="cyber"] #ekisSplash .s24-tagline b{color:var(--cyber-cyan)!important}
+:root[data-theme="cyber"] #ekisSplash .s24-field i{background:var(--orange)!important}
+:root[data-theme="cyber"] .card,:root[data-theme="cyber"] .settings-card,
+:root[data-theme="cyber"] .ata-card,:root[data-theme="cyber"] .modal-card{
+  background:linear-gradient(180deg,rgba(255,45,149,.12) 0%,var(--panel) 60%);
+  border-color:var(--line);
+  box-shadow:inset 0 1px 0 rgba(255,180,230,.14),0 10px 30px rgba(2,0,8,.7),0 0 22px rgba(255,45,149,.07)}
+:root[data-theme="cyber"] .hero,:root[data-theme="cyber"] .page-head{
+  background:radial-gradient(120% 90% at 82% 0%,rgba(0,229,255,.18) 0%,transparent 60%),
+             radial-gradient(90% 80% at 6% 100%,rgba(255,45,149,.20) 0%,transparent 62%),var(--panel)}
+:root[data-theme="cyber"] .btn,:root[data-theme="cyber"] .icon-btn,:root[data-theme="cyber"] .tool,
+:root[data-theme="cyber"] .chip,:root[data-theme="cyber"] select,:root[data-theme="cyber"] input,
+:root[data-theme="cyber"] textarea,:root[data-theme="cyber"] .theme-option,
+:root[data-theme="cyber"] .smart-doc,:root[data-theme="cyber"] .statusline,
+:root[data-theme="cyber"] .counter-results,:root[data-theme="cyber"] .todo-item{
+  background:var(--panel);border-color:var(--line);color:var(--text)}
+:root[data-theme="cyber"] .btn.primary,:root[data-theme="cyber"] .tool.active{
+  background:linear-gradient(110deg,var(--orange) 0%,#c8137a 55%,var(--cyber-cyan) 190%);
+  color:#1b0011;border:0;box-shadow:var(--cyber-glow)}
+:root[data-theme="cyber"] .counter-step .step-num{background:var(--cyber-cyan);color:#04252b}
+:root[data-theme="cyber"] .btn.ghost{background:transparent;border-color:var(--line);color:var(--cyber-cyan)}
+:root[data-theme="cyber"] .btn:active,:root[data-theme="cyber"] .icon-btn:active{
+  border-color:var(--orange);box-shadow:var(--cyber-glow)}
+:root[data-theme="cyber"] .theme-option.active{border-color:var(--orange);box-shadow:var(--cyber-glow)}
+:root[data-theme="cyber"] a,:root[data-theme="cyber"] .link,:root[data-theme="cyber"] .file-icon{color:var(--cyber-cyan)}
+:root[data-theme="cyber"] .file-icon{border-color:var(--line);background:var(--panel2)}
+:root[data-theme="cyber"] .muted,:root[data-theme="cyber"] small{color:var(--muted)}
+:root[data-theme="cyber"] .eyebrow{color:var(--cyber-cyan);text-shadow:0 0 12px rgba(0,229,255,.5)}
+:root[data-theme="cyber"] h1{text-shadow:0 0 24px rgba(255,45,149,.28)}
+:root[data-theme="cyber"] ::selection{background:rgba(255,45,149,.35);color:#fff}
+:root[data-theme="cyber"] input:focus,:root[data-theme="cyber"] select:focus,
+:root[data-theme="cyber"] textarea:focus{outline:none;border-color:var(--orange);box-shadow:var(--cyber-glow)}
+:root[data-theme="cyber"] .drawing-edge-arrow{border-color:rgba(255,45,149,.4);background:rgba(14,5,26,.7)}
+:root[data-theme="cyber"] .viewer-view.fullscreen-ui .viewer-head,
+:root[data-theme="cyber"] .viewer-view.fullscreen-ui .toolstrip{
+  background:rgba(14,5,26,.76);border-color:rgba(255,45,149,.3);
+  box-shadow:0 6px 22px rgba(0,0,0,.6),0 0 26px rgba(255,45,149,.16)}
+:root[data-theme="cyber"] .canvas-wrap{box-shadow:0 8px 35px rgba(2,0,8,.7),0 0 0 1px rgba(255,45,149,.35)}
+:root[data-theme="cyber"] .pdf-viewport{background:#0a0416}
+.preview-cyber{background:#07030f;border-color:#46216e}
+.preview-cyber i{background:#1c0f31}
+.preview-cyber i:nth-child(3){background:#140a24}
+
+/* ===================================================================
+   TEMA 7: "NORRSKEN" — levande norrsken över vinternatt
+   =================================================================== */
+:root[data-theme="aurora"]{
+  --bg:#02060f; --panel:#0a1626; --panel2:#0f2134; --line:#1d4a5e;
+  --text:#eafff9; --muted:#8fb9b4;
+  --orange:#54ffc8; --orange2:#a8fff0;
+  --aur-violet:#a67bff;
+  --danger:#ff5d7a; --ok:#54ffc8;
+  --aur-glow:0 0 18px rgba(84,255,200,.48);
+  --grid-line:rgba(120,255,220,.055);
+}
+:root[data-theme="aurora"] html,:root[data-theme="aurora"] body{background:var(--bg);color:var(--text)}
+@keyframes auroraDrift{
+  0%{transform:translate3d(-6%,0,0) scaleY(1)}
+  50%{transform:translate3d(6%,2%,0) scaleY(1.18)}
+  100%{transform:translate3d(-6%,0,0) scaleY(1)}
+}
+/* Två slöjor som driver i olika takt ger ett levande, aldrig upprepande sken. */
+:root[data-theme="aurora"] body:after{
+  content:"";position:fixed;inset:-10% -10% auto -10%;height:75vh;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(58% 44% at 28% 30%, rgba(84,255,200,.26) 0%, transparent 66%),
+    radial-gradient(48% 40% at 70% 18%, rgba(166,123,255,.24) 0%, transparent 68%),
+    radial-gradient(40% 34% at 50% 52%, rgba(60,190,255,.18) 0%, transparent 70%);
+  filter:blur(28px);
+  animation:auroraDrift 18s ease-in-out infinite;
+}
+:root[data-theme="aurora"] .topbar{background:rgba(4,10,20,.94);box-shadow:0 1px 0 rgba(84,255,200,.26)}
+:root[data-theme="aurora"] .bottom-nav{background:rgba(5,13,24,.96);box-shadow:0 -8px 26px rgba(84,255,200,.12)}
+:root[data-theme="aurora"] .nav-btn.active{color:var(--orange);text-shadow:var(--aur-glow)}
+:root[data-theme="aurora"] .nav-btn.active svg{filter:drop-shadow(0 0 7px rgba(84,255,200,.6))}
+:root[data-theme="aurora"] .brand{
+  -webkit-mask-image:url(logo-transparent.png);mask-image:url(logo-transparent.png);
+  -webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
+  -webkit-mask-position:center;mask-position:center;
+  background:linear-gradient(120deg,var(--aur-violet) 0%,#ffffff 34%,var(--orange) 72%,#0d7d63 100%);
+  filter:drop-shadow(0 0 11px rgba(84,255,200,.5))}
+:root[data-theme="aurora"] .brand img{visibility:hidden}
+:root[data-theme="aurora"] #ekisSplash{background:linear-gradient(180deg,#020813 0%,#02060f 55%,#071c22 100%)!important}
+:root[data-theme="aurora"] #ekisSplash .s24-ekis{
+  background:linear-gradient(180deg,#ffffff 0%,var(--orange2) 34%,var(--orange) 66%,var(--aur-violet) 100%)!important;
+  -webkit-background-clip:text!important;background-clip:text!important;
+  -webkit-text-fill-color:transparent!important;text-shadow:0 0 30px rgba(84,255,200,.45)!important}
+:root[data-theme="aurora"] #ekisSplash .s24-field span,
+:root[data-theme="aurora"] #ekisSplash .s24-tagline b{color:var(--orange)!important}
+:root[data-theme="aurora"] #ekisSplash .s24-field i{background:var(--orange)!important}
+:root[data-theme="aurora"] #ekisSplash .s24-glow{
+  background:radial-gradient(circle,rgba(84,255,200,.26) 0%,rgba(166,123,255,.14) 42%,transparent 72%)!important}
+:root[data-theme="aurora"] .card,:root[data-theme="aurora"] .settings-card,
+:root[data-theme="aurora"] .ata-card,:root[data-theme="aurora"] .modal-card{
+  background:linear-gradient(180deg,rgba(84,255,200,.10) 0%,var(--panel) 60%);
+  border-color:var(--line);
+  box-shadow:inset 0 1px 0 rgba(200,255,244,.12),0 10px 30px rgba(0,4,10,.65)}
+:root[data-theme="aurora"] .hero,:root[data-theme="aurora"] .page-head{
+  background:radial-gradient(120% 90% at 80% 0%,rgba(84,255,200,.18) 0%,transparent 60%),
+             radial-gradient(90% 80% at 8% 100%,rgba(166,123,255,.16) 0%,transparent 64%),var(--panel)}
+:root[data-theme="aurora"] .btn,:root[data-theme="aurora"] .icon-btn,:root[data-theme="aurora"] .tool,
+:root[data-theme="aurora"] .chip,:root[data-theme="aurora"] select,:root[data-theme="aurora"] input,
+:root[data-theme="aurora"] textarea,:root[data-theme="aurora"] .theme-option,
+:root[data-theme="aurora"] .smart-doc,:root[data-theme="aurora"] .statusline,
+:root[data-theme="aurora"] .counter-results,:root[data-theme="aurora"] .todo-item{
+  background:var(--panel);border-color:var(--line);color:var(--text)}
+:root[data-theme="aurora"] .btn.primary,:root[data-theme="aurora"] .tool.active{
+  background:linear-gradient(120deg,var(--orange2) 0%,var(--orange) 50%,var(--aur-violet) 160%);
+  color:#022a20;border:0;box-shadow:var(--aur-glow)}
+:root[data-theme="aurora"] .counter-step .step-num{background:var(--aur-violet);color:#150a2c}
+:root[data-theme="aurora"] .btn.ghost{background:transparent;border-color:var(--line);color:var(--orange)}
+:root[data-theme="aurora"] .btn:active,:root[data-theme="aurora"] .icon-btn:active{
+  border-color:var(--orange);box-shadow:var(--aur-glow)}
+:root[data-theme="aurora"] .theme-option.active{border-color:var(--orange);box-shadow:var(--aur-glow)}
+:root[data-theme="aurora"] a,:root[data-theme="aurora"] .link,:root[data-theme="aurora"] .file-icon{color:var(--orange)}
+:root[data-theme="aurora"] .file-icon{border-color:var(--line);background:var(--panel2)}
+:root[data-theme="aurora"] .muted,:root[data-theme="aurora"] small{color:var(--muted)}
+:root[data-theme="aurora"] .eyebrow{color:var(--aur-violet);text-shadow:0 0 12px rgba(166,123,255,.45)}
+:root[data-theme="aurora"] h1{text-shadow:0 0 24px rgba(84,255,200,.22)}
+:root[data-theme="aurora"] ::selection{background:rgba(84,255,200,.30);color:#eafff9}
+:root[data-theme="aurora"] input:focus,:root[data-theme="aurora"] select:focus,
+:root[data-theme="aurora"] textarea:focus{outline:none;border-color:var(--orange);box-shadow:var(--aur-glow)}
+:root[data-theme="aurora"] .drawing-edge-arrow{border-color:rgba(84,255,200,.32);background:rgba(6,16,28,.7)}
+:root[data-theme="aurora"] .viewer-view.fullscreen-ui .viewer-head,
+:root[data-theme="aurora"] .viewer-view.fullscreen-ui .toolstrip{
+  background:rgba(6,16,28,.76);border-color:rgba(84,255,200,.24);
+  box-shadow:0 6px 22px rgba(0,0,0,.55),0 0 24px rgba(84,255,200,.14)}
+:root[data-theme="aurora"] .canvas-wrap{box-shadow:0 8px 35px rgba(0,4,10,.65),0 0 0 1px rgba(84,255,200,.28)}
+:root[data-theme="aurora"] .pdf-viewport{background:#03101c}
+.preview-aurora{background:#02060f;border-color:#1d4a5e}
+.preview-aurora i{background:#0f2134}
+.preview-aurora i:nth-child(3){background:#0a1626}
+
+/* Ingen rörelse för den som valt bort det i systemet. */
+@media(prefers-reduced-motion:reduce){
+  :root[data-theme="cyber"] body:before,
+  :root[data-theme="cyber"] .nav-btn.active,
+  :root[data-theme="aurora"] body:after{animation:none!important}
+}
