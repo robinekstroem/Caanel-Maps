@@ -76,6 +76,33 @@
     accentColor.cache=null;
     if(typeof drawOverlay==="function"&&state.currentFileId)try{drawOverlay()}catch{}
     try{applyEffects()}catch{}
+    // A custom accent has to be re-stated after a theme switch: the theme sets
+    // --orange from the stylesheet, and the user's colour is an inline override
+    // that must sit on top of whatever the new theme just put there.
+    try{applyAccent(state.meta.accent??null,false)}catch{}
+    if(persist)saveMeta();
+  }
+  // Custom accent colour. hue is 0-360, or null to fall back to the theme's own
+  // colour. Written as inline custom properties on :root so every existing
+  // var(--orange) rule — all 108 of them — follows without being touched.
+  function applyAccent(hue,persist=false){
+    const root=document.documentElement;
+    if(hue===null||hue===undefined||hue===""){
+      state.meta.accent=null;
+      root.style.removeProperty("--orange");
+      root.style.removeProperty("--orange2");
+      root.style.removeProperty("--dark-glow");
+    }else{
+      const h=((+hue%360)+360)%360;
+      state.meta.accent=h;
+      root.style.setProperty("--orange",`hsl(${h} 100% 55%)`);
+      root.style.setProperty("--orange2",`hsl(${h} 100% 67%)`);
+      root.style.setProperty("--dark-glow",`0 0 15px hsl(${h} 100% 55% / .32)`);
+    }
+    const sl=document.getElementById("accentSlider");
+    if(sl&&state.meta.accent!==null&&sl.value!=String(state.meta.accent))sl.value=state.meta.accent;
+    accentColor.cache=null;
+    if(typeof drawOverlay==="function"&&state.currentFileId)try{drawOverlay()}catch{}
     if(persist)saveMeta();
   }
   // Accent used for canvas drawing, read from the active theme's CSS variable.
@@ -2919,7 +2946,11 @@
       const lo=Math.min(f.w,f.h), hi=Math.max(f.w,f.h), ratio=hi/Math.max(lo,.01);
       let type=null;
       const ar=domeArea?polyArea(f)/domeArea:0;
-      if(types.outlets&&domeRef&&ar>.62&&ar<1.62&&hi>domeLong*.6&&hi<domeLong*1.5&&ratio>1.15)type='outlet';
+      // The area test alone let thin bars through: a 13.2x3.2 sliver (a mitred
+      // corner in the wall hatch, a length of trunking drawn solid) has both the
+      // right polygon area and the right long side, and only its SHORT side gives
+      // it away. The dome's short side is therefore checked as well.
+      if(types.outlets&&domeRef&&ar>.62&&ar<1.62&&hi>domeLong*.6&&hi<domeLong*1.5&&near(lo,domeShort)&&ratio>1.15)type='outlet';
       else if(types.switches&&switchRuleValid&&near(hi,circD)&&near(lo,circD)&&ratio<1.45&&hasArm(f))type='switch';
       if(!type)continue;
       const nearArea=scannerNearestArea(f.cx,f.cy,vpAreas,viewport.width,viewport.height);
@@ -3429,13 +3460,13 @@
   // Effects are independent of the theme: each theme merely supplies the
   // defaults, and any effect can then be turned on or off and combined freely.
   const FX_DEFAULTS={
-    dark:{snow:false,scan:false,aurora:false,grid:true},
-    light:{snow:false,scan:false,aurora:false,grid:true},
-    neon:{snow:false,scan:false,aurora:false,grid:true},
-    sky:{snow:false,scan:false,aurora:false,grid:true},
-    jul:{snow:true,scan:false,aurora:false,grid:true},
-    cyber:{snow:false,scan:true,aurora:false,grid:true},
-    aurora:{snow:false,scan:false,aurora:true,grid:true}
+    dark:{snow:false,scan:false,aurora:false,grid:true,glow:false},
+    light:{snow:false,scan:false,aurora:false,grid:true,glow:false},
+    neon:{snow:false,scan:false,aurora:false,grid:true,glow:false},
+    sky:{snow:false,scan:false,aurora:false,grid:true,glow:false},
+    jul:{snow:true,scan:false,aurora:false,grid:true,glow:false},
+    cyber:{snow:false,scan:true,aurora:false,grid:true,glow:false},
+    aurora:{snow:false,scan:false,aurora:true,grid:true,glow:false}
   };
   function effectsFor(theme){
     const base=FX_DEFAULTS[theme]||FX_DEFAULTS.dark;
@@ -3449,6 +3480,7 @@
     b.toggle("fx-scan",!!fx.scan);
     b.toggle("fx-aurora",!!fx.aurora);
     b.toggle("fx-grid",!!fx.grid);
+    b.toggle("fx-glow",!!fx.glow);
     document.querySelectorAll("[data-fx]").forEach(cb=>{cb.checked=!!fx[cb.dataset.fx]});
     try{snow.sync()}catch{}
   }
@@ -3462,6 +3494,13 @@
 
   const THEME_NAMES={dark:'Svart',light:'Vit',neon:'Neon',sky:'Himmelsblå',jul:'Julafton',cyber:'Cyberpunk',aurora:'Norrsken'};
   $$('[data-theme-choice]').forEach(b=>b.onclick=()=>{const t=b.dataset.themeChoice;applyTheme(t,true);toast(`${THEME_NAMES[t]||'Tema'} aktiverat`)});
+  const accentSlider=$("#accentSlider");
+  if(accentSlider){
+    accentSlider.oninput=()=>applyAccent(accentSlider.value,false);
+    accentSlider.onchange=()=>{applyAccent(accentSlider.value,true);toast('Accentfärg sparad')};
+  }
+  const accentResetBtn=$("#accentResetBtn");
+  if(accentResetBtn)accentResetBtn.onclick=()=>{applyAccent(null,true);toast('Temats egen färg återställd')};
   $("#brandBtn").onclick=()=>{renderProjects();showView("projectsView")};
   $("#newProjectBtn").onclick=async()=>{
     const name=await promptModal("Nytt projekt","Ge projektet ett namn.","Nytt projekt");
@@ -3566,6 +3605,7 @@
   if("serviceWorker" in navigator && location.protocol!=="file:") navigator.serviceWorker.register("sw.js").catch(()=>{});
 
   applyTheme(state.meta.theme||'dark',false);
+  applyAccent(state.meta.accent??null,false);
   try{applyEffects()}catch{}
   installViewerGestures();
   renderProjects(); renderAllDrawings(); renderTodos();

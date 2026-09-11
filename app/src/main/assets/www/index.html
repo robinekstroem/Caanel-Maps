@@ -146,7 +146,6 @@
             <h1>Inställningar</h1>
           </div>
         </div>
-        </div>
         <div class="settings-card theme-settings">
           <h3>Tema</h3>
           <p class="muted">Välj hur EKIS FIELD ska se ut. Valet sparas på enheten.</p>
@@ -159,6 +158,17 @@
             <button id="themeCyberBtn" class="theme-option" data-theme-choice="cyber" type="button"><span class="theme-preview preview-cyber"><i></i><i></i><i></i></span><strong>Cyberpunk</strong><small>Magenta &amp; scanlines</small></button>
             <button id="themeAuroraBtn" class="theme-option" data-theme-choice="aurora" type="button"><span class="theme-preview preview-aurora"><i></i><i></i><i></i></span><strong>Norrsken</strong><small>Levande norrsken</small></button>
           </div>
+          <div class="accent-settings">
+            <h4>Färg</h4>
+            <p class="muted">Dra reglaget upp eller ner för att välja accentfärg. Slår igenom på knappar, markeringar och mätningar — och gäller oavsett vilket tema du kör.</p>
+            <div class="accent-row">
+              <input id="accentSlider" class="accent-slider" type="range" min="0" max="360" step="1" value="24" aria-label="Accentfärg">
+              <div class="accent-info">
+                <span id="accentSwatch" class="accent-swatch" aria-hidden="true"></span>
+                <button id="accentResetBtn" class="btn mini-btn" type="button">Temats egen färg</button>
+              </div>
+            </div>
+          </div>
           <div class="fx-settings">
             <h4>Effekter</h4>
             <p class="muted">Fungerar med vilket tema som helst – kombinera fritt. Alla effekter pausas automatiskt när en ritning är öppen.</p>
@@ -166,6 +176,7 @@
             <label class="fx-row"><input type="checkbox" data-fx="scan"> <span>Scanlines &amp; ljussvep<small>Rörligt band och tunna linjer, som i Cyberpunk</small></span></label>
             <label class="fx-row"><input type="checkbox" data-fx="aurora"> <span>Norrsken<small>Två slöjor som driver långsamt</small></span></label>
             <label class="fx-row"><input type="checkbox" data-fx="grid"> <span>Rutnät<small>Svagt rutnät i bakgrunden</small></span></label>
+            <label class="fx-row"><input type="checkbox" data-fx="glow"> <span>Glow<small>Accentfärgen lyser runt knappar, rubriker och aktiva val</small></span></label>
           </div>
         </div>
         <div class="settings-card">

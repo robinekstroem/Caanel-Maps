@@ -1454,3 +1454,62 @@ body.in-viewer #auroraLayer{animation:none}
 .fx-row input{margin-top:2px;flex:0 0 auto}
 .fx-row span{display:flex;flex-direction:column;line-height:1.3}
 .fx-row small{color:var(--muted);font-size:11.5px;margin-top:2px}
+
+/* ---------- Accentfärg (Färg) + Glow ----------------------------------- */
+/* Reglaget sätter --orange/--orange2 som inline-style på :root, vilket slår
+   temats egna värden. Canvas-markeringar läser samma variabel via
+   accentColor(), så mätningar och ÄTA-markeringar följer med automatiskt. */
+.accent-settings{margin-top:22px;padding-top:20px;border-top:1px solid var(--line)}
+.accent-settings h4{margin:0 0 6px}
+.accent-row{display:flex;align-items:center;gap:18px;margin-top:14px}
+.accent-slider{
+  -webkit-appearance:none;appearance:none;
+  writing-mode:vertical-lr;direction:rtl;
+  width:38px;height:200px;flex:0 0 auto;
+  border-radius:19px;border:1px solid var(--line);
+  outline:none;cursor:pointer;
+  background:linear-gradient(to top,
+    hsl(0 100% 55%),hsl(60 100% 55%),hsl(120 100% 55%),
+    hsl(180 100% 55%),hsl(240 100% 55%),hsl(300 100% 55%),hsl(360 100% 55%));
+}
+.accent-slider::-webkit-slider-thumb{
+  -webkit-appearance:none;width:48px;height:18px;border-radius:9px;
+  background:#fff;border:2px solid rgba(0,0,0,.5);
+  box-shadow:0 2px 8px rgba(0,0,0,.55);
+}
+.accent-slider::-moz-range-thumb{
+  width:48px;height:18px;border-radius:9px;
+  background:#fff;border:2px solid rgba(0,0,0,.5);
+}
+.accent-info{display:flex;flex-direction:column;gap:14px;align-items:flex-start}
+.accent-swatch{
+  width:64px;height:64px;border-radius:16px;
+  border:1px solid var(--line);background:var(--orange);
+  box-shadow:0 0 18px rgba(255,106,0,.35);
+  box-shadow:0 0 18px color-mix(in srgb,var(--orange) 45%,transparent);
+}
+
+/* Glow: tvårads-deklarationer så äldre WebView faller tillbaka på rgba. */
+body.fx-glow .btn.primary,
+body.fx-glow .theme-option.active,
+body.fx-glow .category-tab.active,
+body.fx-glow .todo-filter.active{
+  box-shadow:0 0 20px rgba(255,106,0,.45);
+  box-shadow:0 0 20px color-mix(in srgb,var(--orange) 50%,transparent);
+}
+body.fx-glow .nav-btn.active,
+body.fx-glow .eyebrow,
+body.fx-glow h1{
+  text-shadow:0 0 16px rgba(255,106,0,.4);
+  text-shadow:0 0 16px color-mix(in srgb,var(--orange) 45%,transparent);
+}
+body.fx-glow .settings-card,
+body.fx-glow .action-card{
+  border-color:rgba(255,106,0,.25);
+  border-color:color-mix(in srgb,var(--orange) 25%,var(--line));
+}
+body.fx-glow .icon-btn:active,
+body.fx-glow .mini-btn:active{
+  box-shadow:0 0 14px rgba(255,106,0,.4);
+  box-shadow:0 0 14px color-mix(in srgb,var(--orange) 45%,transparent);
+}
