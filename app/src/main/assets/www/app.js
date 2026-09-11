@@ -45,6 +45,7 @@
     selectedArmatureEntry: null,
     analysisBusy: false,
     todoFilter: "open",
+    crewFilter: null,
     editMeasure: null,
     distanceDraft: null, distanceFirstDraft: null, cableRun: null,
     pageTextItems: [],
@@ -53,7 +54,7 @@
   };
 
   function defaultMeta() {
-    return { projects: [], todos: [], atas: [], fileMeta: {}, measurements: {}, annotations: {}, theme: "dark", version: 6 };
+    return { projects: [], todos: [], atas: [], crew: [], fileMeta: {}, measurements: {}, annotations: {}, theme: "dark", version: 6 };
   }
   function loadMeta() {
     try { return {...defaultMeta(), ...JSON.parse(localStorage.getItem(META_KEY) || "{}")}; }
@@ -62,7 +63,7 @@
   function saveMeta() {
     localStorage.setItem(META_KEY, JSON.stringify(state.meta));
   }
-  const THEMES={dark:"#0b0b0c",light:"#eef1f6",neon:"#050b06",sky:"#03101f",jul:"#08130e",cyber:"#07030f",aurora:"#02060f"};
+  const THEMES={dark:"#0b0b0c",light:"#eef1f6",neon:"#050b06",sky:"#03101f",jul:"#08130e",cyber:"#07030f",aurora:"#02060f",amp:"#16161a"};
   function applyTheme(theme, persist=false){
     const next=THEMES[theme]?theme:"dark";
     state.meta.theme=next;
@@ -85,19 +86,34 @@
   // Custom accent colour. hue is 0-360, or null to fall back to the theme's own
   // colour. Written as inline custom properties on :root so every existing
   // var(--orange) rule — all 108 of them — follows without being touched.
+  // Relative luminance of hsl(h 100% 55%), used to choose readable label text.
+  function accentIsLight(h){
+    const c=.9, x=c*(1-Math.abs(((h/60)%2)-1)), m=.55-c/2;
+    const seg=Math.floor(h/60)%6;
+    const rgb=[[c,x,0],[x,c,0],[0,c,x],[0,x,c],[x,0,c],[c,0,x]][seg].map(v=>v+m);
+    const lin=rgb.map(v=>v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4));
+    return (.2126*lin[0]+.7152*lin[1]+.0722*lin[2])>.42;
+  }
   function applyAccent(hue,persist=false){
     const root=document.documentElement;
     if(hue===null||hue===undefined||hue===""){
       state.meta.accent=null;
+      delete root.dataset.accent;
       root.style.removeProperty("--orange");
       root.style.removeProperty("--orange2");
       root.style.removeProperty("--dark-glow");
+      root.style.removeProperty("--on-accent");
     }else{
       const h=((+hue%360)+360)%360;
       state.meta.accent=h;
+      root.dataset.accent="custom";
       root.style.setProperty("--orange",`hsl(${h} 100% 55%)`);
       root.style.setProperty("--orange2",`hsl(${h} 100% 67%)`);
       root.style.setProperty("--dark-glow",`0 0 15px hsl(${h} 100% 55% / .32)`);
+      // Label colour has to follow the hue: yellow and cyan need dark text,
+      // deep blue and violet need white, and picking one for all of them
+      // leaves the button unreadable across half the slider.
+      root.style.setProperty("--on-accent",accentIsLight(h)?"#12060a":"#ffffff");
     }
     const sl=document.getElementById("accentSlider");
     if(sl&&state.meta.accent!==null&&sl.value!=String(state.meta.accent))sl.value=state.meta.accent;
@@ -614,7 +630,7 @@
     if(state.meta.occhioLinks) delete state.meta.occhioLinks[id];
     state.meta.projects=(state.meta.projects||[]).filter(x=>x.id!==id);
     if(state.currentProjectId===id) state.currentProjectId=null;
-    saveMeta(); renderProjects(); renderAllDrawings(); renderTodos(); renderAtas(); showView('projectsView'); toast('Projektet togs bort');
+    saveMeta(); renderProjects(); renderAllDrawings(); renderCrew(); renderTodos(); renderAtas(); showView('projectsView'); toast('Projektet togs bort');
   }
 
   function openProject(id){
@@ -815,14 +831,92 @@
     wireFileRows(list);
   }
 
+  // Montörer på jobbet. Bara namn — listan är ledande montörens egen
+  // planering på den här enheten, inte konton. Uppgifter pekar på id, så ett
+  // namnbyte slår igenom överallt utan att någon punkt tappar sin montör.
+  const crewList = () => state.meta.crew || (state.meta.crew = []);
+  const crewById = id => crewList().find(m => m.id === id);
+
+  function renderCrew(){
+    const el=$("#crewFilters"); if(!el)return;
+    const crew=crewList();
+    el.innerHTML=
+      `<button class="todo-filter ${state.crewFilter===null?"active":""}" data-crew-pick="">Alla</button>`+
+      crew.map(m=>{
+        const open=(state.meta.todos||[]).filter(t=>t.assignee===m.id&&!t.done).length;
+        return `<button class="todo-filter ${state.crewFilter===m.id?"active":""}" data-crew-pick="${m.id}">${esc(m.name)}${open?`<b class="crew-count">${open}</b>`:""}<span class="crew-x" data-crew-del="${m.id}" role="button" aria-label="Ta bort montör">×</span></button>`;
+      }).join("")+
+      `<button class="todo-filter crew-add" data-crew-add="1">+ Montör</button>`;
+
+    el.querySelectorAll("[data-crew-pick]").forEach(b=>b.onclick=e=>{
+      if(e.target.closest("[data-crew-del]"))return;
+      state.crewFilter=b.dataset.crewPick||null; renderCrew(); renderTodos();
+    });
+    el.querySelectorAll("[data-crew-del]").forEach(x=>x.onclick=async e=>{
+      e.stopPropagation();
+      const m=crewById(x.dataset.crewDel); if(!m)return;
+      const open=(state.meta.todos||[]).filter(t=>t.assignee===m.id).length;
+      if(!await confirmDelete("Ta bort montör?",`${m.name} tas bort. ${open?`${open} uppgift(er) blir kvar men utan montör.`:"Inga uppgifter påverkas."}`))return;
+      // Uppgifterna behålls medvetet — de är utfört arbete som ska planeras om,
+      // inte något som ska försvinna för att en montör lämnar jobbet.
+      (state.meta.todos||[]).forEach(t=>{if(t.assignee===m.id)t.assignee=null});
+      state.meta.crew=crew.filter(c=>c.id!==m.id);
+      if(state.crewFilter===m.id)state.crewFilter=null;
+      saveMeta(); renderCrew(); renderTodos(); toast("Montören togs bort");
+    });
+    const add=el.querySelector("[data-crew-add]");
+    if(add)add.onclick=async()=>{
+      const name=await promptModal("Ny montör","Vad heter montören?","");
+      if(!name||!name.trim())return;
+      const m={id:uid(),name:name.trim()};
+      crewList().push(m); state.crewFilter=m.id;
+      saveMeta(); renderCrew(); renderTodos(); toast(`${m.name} tillagd`);
+    };
+  }
+
+  async function pickAssignee(current){
+    const crew=crewList();
+    if(!crew.length){toast("Lägg till en montör först");return undefined}
+    const menu=crew.map((m,i)=>`${i+1}. ${m.name}`).join("\n");
+    const cur=current?crewById(current):null;
+    const ans=await promptModal("Montör",`Skriv siffran för montören, eller 0 för ingen.\n${menu}`,cur?String(crew.indexOf(cur)+1):"");
+    if(ans===null)return undefined;
+    const n=parseInt(String(ans).trim(),10);
+    if(n===0)return null;
+    return crew[n-1]?crew[n-1].id:undefined;
+  }
+
+  // "Klar 14:32" säger mer än ett ISO-datum när man står på bygget och ska
+  // stämma av dagens arbete. Äldre punkter får datum i stället för klockslag.
+  function doneLabel(iso){
+    if(!iso)return "Klar";
+    const d=new Date(iso); if(isNaN(d))return "Klar";
+    const now=new Date();
+    const day=x=>`${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`;
+    const hhmm=`${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    if(day(d)===day(now))return `Klar ${hhmm}`;
+    const igar=new Date(now); igar.setDate(now.getDate()-1);
+    if(day(d)===day(igar))return `Klar igår ${hhmm}`;
+    const man=["jan","feb","mar","apr","maj","jun","jul","aug","sep","okt","nov","dec"];
+    return `Klar ${d.getDate()} ${man[d.getMonth()]}`;
+  }
+
   function renderTodos(){
     const list=$("#todoList"); const today=new Date().toISOString().slice(0,10);
     let items=[...state.meta.todos];
     if(state.todoFilter==="open")items=items.filter(t=>!t.done);
     if(state.todoFilter==="today")items=items.filter(t=>!t.done && t.due===today);
+    if(state.todoFilter==="done"){
+      items=items.filter(t=>t.done);
+      // Senast avbockat överst: kvittensen läses bakåt i tiden, inte i den
+      // ordning punkterna en gång skrevs in. Punkter avbockade före den här
+      // versionen saknar doneAt och hamnar sist.
+      items.sort((a,b)=>String(b.doneAt||"").localeCompare(String(a.doneAt||"")));
+    }
+    if(state.crewFilter)items=items.filter(t=>t.assignee===state.crewFilter);
     if(!items.length){list.innerHTML='<div class="empty">Inga punkter här.</div>';return}
-    list.innerHTML=items.map(t=>{const p=projectById(t.projectId);return `<div class="todo-row ${t.done?"done":""}" data-todo="${t.id}"><input type="checkbox" ${t.done?"checked":""}><div class="todo-text"><strong>${esc(t.text)}</strong><div class="todo-meta"><span class="prio ${esc((t.priority||"Normal").toLowerCase())}">${esc(t.priority||"Normal")}</span>${t.due?`<span><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3.5v3M16 3.5v3"/></svg> ${esc(t.due)}</span>`:""}${p?`<span>▦ ${esc(p.name)}</span>`:""}</div></div><button class="row-btn">×</button></div>`}).join("");
-    list.querySelectorAll("[data-todo]").forEach(row=>{const id=row.dataset.todo,t=state.meta.todos.find(x=>x.id===id);row.querySelector("input").onchange=e=>{t.done=e.target.checked;saveMeta();renderTodos()};row.querySelector("button").onclick=async()=>{if(!await confirmDelete("Ta bort uppgift?",`Vill du verkligen ta bort “${t.text}”?`))return;state.meta.todos=state.meta.todos.filter(x=>x.id!==id);saveMeta();renderTodos()}});
+    list.innerHTML=items.map(t=>{const p=projectById(t.projectId);return `<div class="todo-row ${t.done?"done":""}" data-todo="${t.id}"><input type="checkbox" ${t.done?"checked":""}><div class="todo-text"><strong>${esc(t.text)}</strong><div class="todo-meta"><span class="prio ${esc((t.priority||"Normal").toLowerCase())}">${esc(t.priority||"Normal")}</span>${t.due?`<span><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3.5v3M16 3.5v3"/></svg> ${esc(t.due)}</span>`:""}${p?`<span>▦ ${esc(p.name)}</span>`:""}${t.done?`<span class="todo-done-at">✓ ${esc(doneLabel(t.doneAt))}</span>`:""}${(()=>{const m=t.assignee?crewById(t.assignee):null;return `<span class="todo-who" data-assign="${t.id}">${m?"👷 "+esc(m.name):"+ montör"}</span>`})()}</div></div><button class="row-btn">×</button></div>`}).join("");
+    list.querySelectorAll("[data-todo]").forEach(row=>{const id=row.dataset.todo,t=state.meta.todos.find(x=>x.id===id);row.querySelector("input").onchange=e=>{t.done=e.target.checked;t.doneAt=t.done?new Date().toISOString():null;saveMeta();renderCrew();renderTodos()};const who=row.querySelector("[data-assign]");if(who)who.onclick=async e=>{e.stopPropagation();const a=await pickAssignee(t.assignee);if(a===undefined)return;t.assignee=a;saveMeta();renderCrew();renderTodos()};row.querySelector("button").onclick=async()=>{if(!await confirmDelete("Ta bort uppgift?",`Vill du verkligen ta bort “${t.text}”?`))return;state.meta.todos=state.meta.todos.filter(x=>x.id!==id);saveMeta();renderTodos()}});
   }
 
   function getAnnotations(){ const k=pageKey(); state.meta.annotations=state.meta.annotations||{}; return state.meta.annotations[k]||(state.meta.annotations[k]=[]); }
@@ -3280,7 +3374,7 @@
   }
   function showMeasureMagnifier(e){const mag=$("#measureMagnifier"),base=$("#pdfCanvas"),over=$("#overlayCanvas"),vp=$("#pdfViewport");if(!mag||!base)return;mag.classList.remove("hidden");const vr=vp.getBoundingClientRect();mag.style.left=Math.max(8,Math.min(vp.clientWidth-160,e.clientX-vr.left-75))+"px";mag.style.top=Math.max(8,e.clientY-vr.top-190)+"px";const ctx=mag.getContext("2d"),r=over.getBoundingClientRect(),sx=(e.clientX-r.left)*(over.width/r.width),sy=(e.clientY-r.top)*(over.height/r.height),crop=45;ctx.clearRect(0,0,180,180);ctx.drawImage(base,sx-crop,sy-crop,crop*2,crop*2,0,0,180,180);ctx.strokeStyle=accentColor();ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(90,68);ctx.lineTo(90,112);ctx.moveTo(68,90);ctx.lineTo(112,90);ctx.stroke();}
   function hideMeasureMagnifier(){$("#measureMagnifier")?.classList.add("hidden")}
-  $$(".nav-btn").forEach(b=>b.onclick=()=>{showView(b.dataset.view); if(b.dataset.view==="projectsView")renderProjects(); if(b.dataset.view==="drawingsView")renderAllDrawings(); if(b.dataset.view==="todoView")renderTodos(); if(b.dataset.view==="ataView")renderAtas(); if(b.dataset.view==="counterView")renderCounter()});
+  $$(".nav-btn").forEach(b=>b.onclick=()=>{showView(b.dataset.view); if(b.dataset.view==="projectsView")renderProjects(); if(b.dataset.view==="drawingsView")renderAllDrawings(); if(b.dataset.view==="todoView"){renderCrew();renderTodos()} if(b.dataset.view==="ataView")renderAtas(); if(b.dataset.view==="counterView")renderCounter()});
   // Version history, shown in Inställningar → Om appen. Kept inline so it works
   // offline on site (no network on a building site) and stays in step with the
   // build it actually shipped with.
@@ -3460,13 +3554,14 @@
   // Effects are independent of the theme: each theme merely supplies the
   // defaults, and any effect can then be turned on or off and combined freely.
   const FX_DEFAULTS={
-    dark:{snow:false,scan:false,aurora:false,grid:true,glow:false},
-    light:{snow:false,scan:false,aurora:false,grid:true,glow:false},
-    neon:{snow:false,scan:false,aurora:false,grid:true,glow:false},
-    sky:{snow:false,scan:false,aurora:false,grid:true,glow:false},
-    jul:{snow:true,scan:false,aurora:false,grid:true,glow:false},
-    cyber:{snow:false,scan:true,aurora:false,grid:true,glow:false},
-    aurora:{snow:false,scan:false,aurora:true,grid:true,glow:false}
+    dark:{snow:false,scan:false,aurora:false,grid:true,glow:false,eq:false},
+    light:{snow:false,scan:false,aurora:false,grid:true,glow:false,eq:false},
+    neon:{snow:false,scan:false,aurora:false,grid:true,glow:false,eq:false},
+    sky:{snow:false,scan:false,aurora:false,grid:true,glow:false,eq:false},
+    jul:{snow:true,scan:false,aurora:false,grid:true,glow:false,eq:false},
+    cyber:{snow:false,scan:true,aurora:false,grid:true,glow:false,eq:false},
+    aurora:{snow:false,scan:false,aurora:true,grid:true,glow:false,eq:false},
+    amp:{snow:false,scan:false,aurora:false,grid:false,glow:true,eq:true}
   };
   function effectsFor(theme){
     const base=FX_DEFAULTS[theme]||FX_DEFAULTS.dark;
@@ -3481,6 +3576,7 @@
     b.toggle("fx-aurora",!!fx.aurora);
     b.toggle("fx-grid",!!fx.grid);
     b.toggle("fx-glow",!!fx.glow);
+    b.toggle("fx-eq",!!fx.eq);
     document.querySelectorAll("[data-fx]").forEach(cb=>{cb.checked=!!fx[cb.dataset.fx]});
     try{snow.sync()}catch{}
   }
@@ -3492,7 +3588,7 @@
     saveMeta(); applyEffects();
   });
 
-  const THEME_NAMES={dark:'Svart',light:'Vit',neon:'Neon',sky:'Himmelsblå',jul:'Julafton',cyber:'Cyberpunk',aurora:'Norrsken'};
+  const THEME_NAMES={dark:'Svart',light:'Vit',neon:'Neon',sky:'Himmelsblå',jul:'Julafton',cyber:'Cyberpunk',aurora:'Norrsken',amp:'Retroamp'};
   $$('[data-theme-choice]').forEach(b=>b.onclick=()=>{const t=b.dataset.themeChoice;applyTheme(t,true);toast(`${THEME_NAMES[t]||'Tema'} aktiverat`)});
   const accentSlider=$("#accentSlider");
   if(accentSlider){
@@ -3541,7 +3637,7 @@
   $('#riserBtn').onclick=()=>setRiserMode(!state.riserMode);
   $('#riserUpBtn').onclick=()=>openAdjacentFloor(1);
   $('#riserDownBtn').onclick=()=>openAdjacentFloor(-1);
-  $("#newTodoBtn").onclick=async()=>{const t=await promptModal("Ny uppgift","Vad ska göras?","");if(!t)return;const pr=await promptModal("Prioritet","Skriv Normal, Viktig eller Akut.","Normal");const due=await promptModal("Deadline","Datum YYYY-MM-DD, eller lämna tomt.","");state.meta.todos.unshift({id:uid(),text:t,done:false,priority:["Normal","Viktig","Akut"].find(x=>x.toLowerCase()===String(pr||"").toLowerCase())||"Normal",due:/^\d{4}-\d{2}-\d{2}$/.test(due||"")?due:"",projectId:state.currentProjectId||null});saveMeta();renderTodos()};
+  $("#newTodoBtn").onclick=async()=>{const t=await promptModal("Ny uppgift","Vad ska göras?","");if(!t)return;const pr=await promptModal("Prioritet","Skriv Normal, Viktig eller Akut.","Normal");const due=await promptModal("Deadline","Datum YYYY-MM-DD, eller lämna tomt.","");state.meta.todos.unshift({id:uid(),text:t,done:false,priority:["Normal","Viktig","Akut"].find(x=>x.toLowerCase()===String(pr||"").toLowerCase())||"Normal",due:/^\d{4}-\d{2}-\d{2}$/.test(due||"")?due:"",projectId:state.currentProjectId||null,assignee:state.crewFilter||null});saveMeta();renderCrew();renderTodos()};
   $$("[data-todo-filter]").forEach(b=>b.onclick=()=>{state.todoFilter=b.dataset.todoFilter;$$('[data-todo-filter]').forEach(x=>x.classList.toggle('active',x===b));renderTodos()});
   $("#backFilesBtn").onclick=async()=>{if(await returnFromDrawingReference())return;const f=fileMeta(state.currentFileId); state.armatureReturn=null; state.armatureHighlight=null; if(f){state.currentProjectId=f.projectId;renderProject();showView("projectView",false)}else showView("projectsView")};
   $("#backToDrawingBtn").onclick=returnToArmatureSource;
@@ -3608,5 +3704,5 @@
   applyAccent(state.meta.accent??null,false);
   try{applyEffects()}catch{}
   installViewerGestures();
-  renderProjects(); renderAllDrawings(); renderTodos();
+  renderProjects(); renderAllDrawings(); renderCrew(); renderTodos();
 })();
