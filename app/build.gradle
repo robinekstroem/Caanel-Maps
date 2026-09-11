@@ -2,6 +2,14 @@ plugins {
     id 'com.android.application' version '8.7.3'
 }
 
+// Signeringsnyckeln kommer från miljövariabler som CI sätter från ett
+// repository secret. Saknas de byggs appen osignerad/debug som förut, så
+// lokala bygg fungerar utan nyckel.
+def ekisStore   = System.getenv("EKIS_KEYSTORE_FILE")
+def ekisStorePw = System.getenv("EKIS_KEYSTORE_PASSWORD")
+def ekisAlias   = System.getenv("EKIS_KEY_ALIAS")
+def ekisKeyPw   = System.getenv("EKIS_KEY_PASSWORD")
+
 android {
     namespace 'se.caanel.field'
     compileSdk 35
@@ -10,14 +18,28 @@ android {
         applicationId "se.caanel.field"
         minSdk 26
         targetSdk 35
-        versionCode 77
-        versionName "9.3.0-build77"
+        // Bygg-numret från CI blir versionCode, så varje bygge räknas upp och
+        // Android ser nästa APK som en uppdatering i stället för en sidograd.
+        versionCode (System.getenv("EKIS_VERSION_CODE") ?: "77").toInteger()
+        versionName System.getenv("EKIS_VERSION_NAME") ?: "9.3.0-build77"
+    }
+
+    signingConfigs {
+        release {
+            if (ekisStore) {
+                storeFile file(ekisStore)
+                storePassword ekisStorePw
+                keyAlias ekisAlias
+                keyPassword ekisKeyPw
+            }
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (ekisStore) signingConfig signingConfigs.release
         }
     }
 }

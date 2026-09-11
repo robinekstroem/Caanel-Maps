@@ -46,6 +46,7 @@
     analysisBusy: false,
     todoFilter: "open",
     crewFilter: null,
+    scannerReturnView: null,
     editMeasure: null,
     distanceDraft: null, distanceFirstDraft: null, cableRun: null,
     pageTextItems: [],
@@ -2974,8 +2975,11 @@
       segs.push({a,b,len,ang:Math.atan2(b[1]-a[1],b[0]-a[0])*180/Math.PI});
     }
     const angDiff=(u,v)=>{let d=Math.abs(u-v)%180;return d>90?180-d:d};
-    const hasArm=f=>{
-      const d=Math.max(f.w,f.h), r=d/2;
+    // Returns the lengths of every arm that carries the paired return-spring
+    // marker. The legend's own glyph sets the yardstick; field symbols are then
+    // required to match it.
+    const armLengths=f=>{
+      const d=Math.max(f.w,f.h), r=d/2, found=[];
       for(const arm of segs){
         if(arm.len<d*1.15||arm.len>d*3.6)continue;
         // one end of the arm must touch the circle, the other must reach away
@@ -3004,10 +3008,38 @@
           if(closest<d*1.15)ticks.push(t);
         }
         for(let i=0;i<ticks.length;i++)for(let j=i+1;j<ticks.length;j++){
-          if(angDiff(ticks[i].ang,ticks[j].ang)<22)return true;  // the paired marker
+          if(angDiff(ticks[i].ang,ticks[j].ang)<22){found.push({len:arm.len,near:Math.hypot(nearEnd[0]-f.cx,nearEnd[1]-f.cy)});i=ticks.length;break}
         }
       }
-      return false;
+      return found;
+    };
+
+    // The arm+tick pair alone still let junction boxes through. A dot sitting ON
+    // a cable run borrows the arm of a real switch drawn a few points away, and
+    // BL direction arrows produce their own arm-like strokes. What separates
+    // them is size: the switch glyph is stamped at one fixed size, so its arm is
+    // always the same length (11.3pt on these sheets, under 1% spread across 30
+    // verified symbols), while a borrowed or coincidental arm measures anything
+    // from 6 to 20pt. Measured, not guessed — and read off this drawing's own
+    // legend, so it follows the sheet's scale instead of a hardcoded number.
+    const refArms=circRef?armLengths(circRef):[];
+    const refArm=refArms.length?refArms[0].len:0;
+    const refNear=refArms.length?refArms[0].near:0;
+    const ARM_TOL=0.12, NEAR_TOL=0.35;
+    // Length alone still passed two families through. A lamp's feed dot sits
+    // beside a luminaire and picks up the fitting's own leader as an "arm"; a
+    // junction box on a cable run borrows the arm of a switch drawn nearby. In
+    // both cases the arm is the right sort of length but starts in the wrong
+    // place — measured at 0.1-3.9pt from centre, where the real glyph is a
+    // consistent 2.8, i.e. exactly on the circle's edge. Verified against
+    // eight such hits on P12 Del 1: lamp feeds at K-luminaires and dots on
+    // cable runs, no real switches among them.
+    const hasArm=f=>{
+      const found=armLengths(f);
+      if(!found.length)return false;
+      if(!refArm)return true;
+      return found.some(a=>Math.abs(a.len-refArm)<=refArm*ARM_TOL
+                        && (!refNear||Math.abs(a.near-refNear)<=refNear*NEAR_TOL));
     };
 
     // Self-check: the arm+tick rule describes the "circle with operating arm"
@@ -3019,7 +3051,7 @@
     // does not itself pass the test, this glyph is not what we can recognise and
     // no switches are reported for that sheet. Precision before count — a clear
     // zero is honest, an inflated number is not.
-    const switchRuleValid=!!(circRef&&hasArm(circRef));
+    const switchRuleValid=!!(circRef&&refArm);
 
     const inLegend=f=>legend&&f.cx>=legend.x&&f.cx<=legend.x+legend.w&&f.cy>=legend.y&&f.cy<=legend.y+legend.h;
     const inHatch=f=>zones.some(z=>f.cx>=z.x0&&f.cx<=z.x1&&f.cy>=z.y0&&f.cy<=z.y1);
@@ -3045,7 +3077,11 @@
       // right polygon area and the right long side, and only its SHORT side gives
       // it away. The dome's short side is therefore checked as well.
       if(types.outlets&&domeRef&&ar>.62&&ar<1.62&&hi>domeLong*.6&&hi<domeLong*1.5&&near(lo,domeShort)&&ratio>1.15)type='outlet';
-      else if(types.switches&&switchRuleValid&&near(hi,circD)&&near(lo,circD)&&ratio<1.45&&hasArm(f))type='switch';
+      // BL direction arrows measure 3.96-4.20 across where every verified
+      // switch measures 5.52-5.76, so the generic +/-34% window was far too
+      // loose for this glyph. Tightened to 10%, which is still wider than the
+      // real spread.
+      else if(types.switches&&switchRuleValid&&Math.abs(hi-circD)<=circD*.10&&Math.abs(lo-circD)<=circD*.10&&ratio<1.45&&hasArm(f))type='switch';
       if(!type)continue;
       const nearArea=scannerNearestArea(f.cx,f.cy,vpAreas,viewport.width,viewport.height);
       hits.push({type,score:.95,x:f.cx,y:f.cy,nx:f.cx/viewport.width,ny:f.cy/viewport.height,area:nearArea?.area||null});
@@ -3226,6 +3262,11 @@
   async function openScannerReview(areaName,symbol,category=''){
     const hits=scannerReviewMatching(areaName,symbol,category); if(!hits.length){toast('Inga sparade scannerträffar för raden');return}
     state.scannerReview={areaName,symbol,category,hits,index:0};
+    // The viewer is shared by several entry points and its back button assumed
+    // you always arrived from the project's file list. Opened from the counter
+    // that dropped you on the project screen instead of back into the count you
+    // were reading, losing your place. Remember the origin and return to it.
+    state.scannerReturnView=state.currentView==='viewerView'?state.scannerReturnView:state.currentView;
     await scannerReviewShowCurrent(true);
   }
 
@@ -3258,7 +3299,7 @@
     const target=pages[pi];r.index=Math.max(0,r.hits.findIndex(x=>x.fileId===target.fileId&&x.page===target.page));await scannerReviewShowCurrent(true);
   }
 
-  function closeScannerReview(){state.scannerReview=null;document.getElementById('scannerReviewBar')?.classList.add('hidden');drawOverlay()}
+  function closeScannerReview(){state.scannerReview=null;state.scannerReviewPageHits=null;document.getElementById('scannerReviewBar')?.classList.add('hidden');drawOverlay()}
 
   document.getElementById('counterResults')?.addEventListener('click',e=>{
     const row=e.target.closest('[data-review-area][data-review-symbol]');
@@ -3639,7 +3680,15 @@
   $('#riserDownBtn').onclick=()=>openAdjacentFloor(-1);
   $("#newTodoBtn").onclick=async()=>{const t=await promptModal("Ny uppgift","Vad ska göras?","");if(!t)return;const pr=await promptModal("Prioritet","Skriv Normal, Viktig eller Akut.","Normal");const due=await promptModal("Deadline","Datum YYYY-MM-DD, eller lämna tomt.","");state.meta.todos.unshift({id:uid(),text:t,done:false,priority:["Normal","Viktig","Akut"].find(x=>x.toLowerCase()===String(pr||"").toLowerCase())||"Normal",due:/^\d{4}-\d{2}-\d{2}$/.test(due||"")?due:"",projectId:state.currentProjectId||null,assignee:state.crewFilter||null});saveMeta();renderCrew();renderTodos()};
   $$("[data-todo-filter]").forEach(b=>b.onclick=()=>{state.todoFilter=b.dataset.todoFilter;$$('[data-todo-filter]').forEach(x=>x.classList.toggle('active',x===b));renderTodos()});
-  $("#backFilesBtn").onclick=async()=>{if(await returnFromDrawingReference())return;const f=fileMeta(state.currentFileId); state.armatureReturn=null; state.armatureHighlight=null; if(f){state.currentProjectId=f.projectId;renderProject();showView("projectView",false)}else showView("projectsView")};
+  $("#backFilesBtn").onclick=async()=>{
+    if(await returnFromDrawingReference())return;
+    if(state.scannerReturnView==="counterView"){
+      const back=state.scannerReturnView; state.scannerReturnView=null;
+      closeScannerReview(); state.armatureReturn=null; state.armatureHighlight=null;
+      renderCounter(); showView(back); return;
+    }
+    const f=fileMeta(state.currentFileId); state.armatureReturn=null; state.armatureHighlight=null;
+    if(f){state.currentProjectId=f.projectId;renderProject();showView("projectView",false)}else showView("projectsView")};
   $("#backToDrawingBtn").onclick=returnToArmatureSource;
   $("#closeArmatureSheet").onclick=closeArmatureCard;
   $("#armatureSheet").onclick=e=>{if(e.target===$("#armatureSheet"))closeArmatureCard()};
