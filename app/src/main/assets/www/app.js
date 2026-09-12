@@ -327,7 +327,7 @@
     if(!window.pdfjsLib) return null;
     try{
       const buf=await blob.arrayBuffer();
-      const doc=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
+      const doc=await loadPdfDocument(buf,null);
       const pages=[];
       const maxPages=Math.min(doc.numPages,30);
       for(let n=1;n<=maxPages;n++){
@@ -1015,11 +1015,22 @@
     setTool("pan"); showView("viewerView",false);
     try{
       const buf=await blob.arrayBuffer();
-      state.pdfDoc=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
+      state.pdfDoc=await loadPdfDocument(buf,id);
       state.pageCount=state.pdfDoc.numPages;
       state.pageNum=clamp(state.pageNum,1,state.pageCount);
       await renderPdfPage();
       updateDrawingNav(); populateFloorSwitcher(); syncFloorButtonState(); syncSmartNavUI();
+      // Loggar vad appen faktiskt fick ut ur filen. När en ritning beter sig
+      // konstigt är det här som säger om det är sidantal, sidstorlek eller
+      // rotation som skiljer den från de filer som fungerar.
+      try{
+        const p1=await state.pdfDoc.getPage(1), vp=p1.getViewport({scale:1});
+        console.log("[EKIS] PDF-diagnostik",{
+          fil:displayLabel(f), sidor:state.pageCount,
+          bredd:Math.round(vp.width), hojd:Math.round(vp.height),
+          rotation:p1.rotate, fingerprint:state.pdfDoc.fingerprints?.[0]
+        });
+      }catch(_){}
       if(pending){ state.pendingViewState=null; restoreViewState(pending); }
       else fitDrawing();
       if(state.pendingArmatureTarget && ["armatureSchedule","occhioSchedule"].includes(f.documentType)){
@@ -1027,6 +1038,51 @@
         focusArmatureTarget(target);
       }
     }catch(e){console.error(e);toast("Kunde inte öppna PDF-filen")}
+  }
+
+  // Lösenordscache i minnet. Medvetet inte sparad till disk: ett lösenord som
+  // ligger kvar i localStorage är en läcka, och att skriva det en gång per
+  // session är en rimlig kostnad.
+  const pdfPasswords = {};
+
+  function pdfErrorMessage(e){
+    switch(e && e.name){
+      case "PasswordException":   return "PDF:en är lösenordsskyddad";
+      case "InvalidPDFException": return "Filen är skadad eller inte en giltig PDF";
+      case "MissingPDFException": return "PDF-datan saknas eller är ofullständig";
+      case "UnexpectedResponseException": return "Kunde inte läsa PDF-datan";
+      default: return "Kunde inte öppna PDF-filen" + (e && e.name ? ` (${e.name})` : "");
+    }
+  }
+
+  // Öppnar dokumentet och frågar efter lösenord om filen är låst. pdf.js kastar
+  // PasswordException i två lägen: NEED_PASSWORD första gången och
+  // INCORRECT_PASSWORD vid fel gissning, så meddelandet anpassas efter vilket.
+  // Bufferten kopieras per försök eftersom pdf.js tar över den vid inläsning.
+  async function loadPdfDocument(buf, fileId){
+    let password = fileId ? pdfPasswords[fileId] : undefined;
+    for(let attempt=0; attempt<4; attempt++){
+      try{
+        const opts = {data:new Uint8Array(buf.slice(0))};
+        if(password) opts.password = password;
+        const doc = await pdfjsLib.getDocument(opts).promise;
+        if(fileId && password) pdfPasswords[fileId] = password;
+        return doc;
+      }catch(e){
+        if(e && e.name === "PasswordException"){
+          const wrong = /incorrect/i.test(String(e.message||"")) || password;
+          const answer = await promptModal(
+            "Lösenordsskyddad PDF",
+            wrong ? "Fel lösenord. Försök igen:" : "Filen är låst. Ange lösenordet:",
+            "");
+          if(!answer) throw e;
+          password = answer;
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new Error("PasswordRetriesExceeded");
   }
 
   function pageKey(){return `${state.currentFileId}:${state.pageNum}`}
@@ -3219,7 +3275,7 @@
     for(let fi=0;fi<ids.length;fi++){
       const id=ids[fi],f=fileMeta(id),blob=await getBlob(id);if(!f||!blob)continue;
       try{
-        const doc=await pdfjsLib.getDocument({data:new Uint8Array(await blob.arrayBuffer())}).promise;
+        const doc=await loadPdfDocument(await blob.arrayBuffer(),f.id);
         for(let pg=1;pg<=doc.numPages;pg++){
           pages++;status.textContent=`Scannar ${fi+1}/${ids.length} · ${displayLabel(f)} · sida ${pg}/${doc.numPages}`;
           const page=await doc.getPage(pg),tc=await page.getTextContent(),baseVp=page.getViewport({scale:1}),areas=counterLocationBlocks(tc),vpAreas=scannerToViewportAreas(areas,baseVp);
@@ -3532,16 +3588,46 @@
       ctx.setTransform(dpr,0,0,dpr,0,0);
       build();
     }
+    // Snö, damm och regn delar slinga, canvas och livscykel. Tre separata
+    // motorer hade betytt tre canvaselement och tre rAF-slingor som ritar om
+    // varandra — en enda med olika partikelsorter kostar nästan ingenting extra.
+    function kinds(){
+      const b=document.body.classList,out=[];
+      if(b.contains("fx-snow"))out.push("snow");
+      if(b.contains("fx-dust"))out.push("dust");
+      if(b.contains("fx-rain"))out.push("rain");
+      return out;
+    }
     function build(){
       // Density scales with the viewport so a tablet does not get a blizzard
       // and a phone a drizzle.
-      const n=Math.round(Math.min(70,Math.max(26,(w*h)/26000)));
+      const base=Math.round(Math.min(70,Math.max(26,(w*h)/26000)));
       flakes=[];
-      for(let i=0;i<n;i++)flakes.push(seed(true));
+      for(const kind of kinds()){
+        const n=kind==="dust"?Math.round(base*0.75):base;
+        for(let i=0;i<n;i++)flakes.push(seed(true,kind));
+      }
     }
-    function seed(anywhere){
+    function seed(anywhere,kind){
+      kind=kind||"snow";
+      if(kind==="rain"){
+        const len=9+Math.random()*16;
+        return {kind,x:Math.random()*(w+120)-60,y:anywhere?Math.random()*h:-len-Math.random()*60,
+          len,vy:(150+Math.random()*90)/60,drift:-0.9-Math.random()*0.5,
+          alpha:0.10+Math.random()*0.16,phase:0,sway:0,r:1};
+      }
+      if(kind==="dust"){
+        // Damm faller knappt. Det driver, vänder och lyser upp när det passerar
+        // genom ljuset — därför den långsamma pulsen på alfavärdet.
+        const r=0.5+Math.random()*1.5;
+        return {kind,x:Math.random()*w,y:anywhere?Math.random()*h:h+10,r,
+          vy:-(1.2+Math.random()*2.6)/60,drift:(Math.random()*0.7-0.35),
+          phase:Math.random()*Math.PI*2,sway:0.5+Math.random()*0.9,
+          alpha:0.10+(r/2)*0.22};
+      }
       const r=0.7+Math.random()*2.1;
       return {
+        kind:"snow",
         x:Math.random()*w,
         y:anywhere?Math.random()*h:-8-Math.random()*40,
         r,
@@ -3558,25 +3644,49 @@
       raf=null;
       if(!ctx)return;
       ctx.clearRect(0,0,w,h);
+      const accent=accentColor();
       for(const f of flakes){
+        if(f.kind==="rain"){
+          f.y+=f.vy; f.x+=f.drift;
+          if(f.y-f.len>h||f.x<-80)Object.assign(f,seed(false,"rain"));
+          ctx.beginPath();
+          ctx.strokeStyle=`rgba(206,224,240,${f.alpha})`;
+          ctx.lineWidth=1;
+          ctx.moveTo(f.x,f.y);
+          ctx.lineTo(f.x+f.drift*5,f.y-f.len);
+          ctx.stroke();
+          continue;
+        }
+        if(f.kind==="dust"){
+          f.y+=f.vy; f.phase+=0.006;
+          f.x+=f.drift*0.4+Math.sin(f.phase)*f.sway*0.5;
+          if(f.y+f.r<-10||f.x<-20||f.x>w+20)Object.assign(f,seed(false,"dust"));
+          ctx.beginPath();
+          ctx.fillStyle=`rgba(255,238,214,${f.alpha*(0.55+0.45*Math.sin(f.phase*1.7))})`;
+          ctx.arc(f.x,f.y,f.r,0,Math.PI*2);
+          ctx.fill();
+          continue;
+        }
         f.y+=f.vy;
         f.phase+=0.008;
         f.x+=f.drift+Math.sin(f.phase)*f.sway*0.35;
-        if(f.y-f.r>h||f.x<-20||f.x>w+20)Object.assign(f,seed(false));
+        if(f.y-f.r>h||f.x<-20||f.x>w+20)Object.assign(f,seed(false,"snow"));
         ctx.beginPath();
         ctx.fillStyle=`rgba(255,252,244,${f.alpha})`;
         ctx.arc(f.x,f.y,f.r,0,Math.PI*2);
         ctx.fill();
       }
+      void accent;
       schedule();
     }
     function schedule(){ if(!raf&&running())raf=requestAnimationFrame(frame); }
     function running(){
-      return document.body.classList.contains("fx-snow") && !document.hidden && state.currentView!=="viewerView" && !reduced;
+      return kinds().length>0 && !document.hidden && state.currentView!=="viewerView" && !reduced;
     }
     function sync(){
-      if(!document.body.classList.contains("fx-snow")){ stop(); return; }
+      if(!kinds().length){ stop(); return; }
       ensure();
+      build();
       if(reduced){ // static, gentle scatter for users who asked for less motion
         if(ctx){ ctx.clearRect(0,0,w,h);
           for(const f of flakes){ctx.beginPath();ctx.fillStyle=`rgba(255,252,244,${f.alpha*0.8})`;ctx.arc(f.x,f.y,f.r,0,Math.PI*2);ctx.fill()} }
@@ -3592,17 +3702,34 @@
     return {sync,stop};
   })();
 
+  // Tryckvågen är den enda effekten som svarar på användaren i stället för att
+  // bara spela. Det gör den till mer än dekor: med handskar känner man inte
+  // skärmen ordentligt, och ringen bekräftar att trycket gick fram.
+  (function(){
+    let last=0;
+    document.addEventListener("pointerdown",e=>{
+      if(!document.body.classList.contains("fx-ripple"))return;
+      if(state.currentView==="viewerView")return;
+      const now=Date.now(); if(now-last<90)return; last=now;
+      const d=document.createElement("span");
+      d.className="fx-ripple-dot";
+      d.style.left=e.clientX+"px"; d.style.top=e.clientY+"px";
+      document.body.appendChild(d);
+      setTimeout(()=>d.remove(),620);
+    },{passive:true});
+  })();
+
   // Effects are independent of the theme: each theme merely supplies the
   // defaults, and any effect can then be turned on or off and combined freely.
   const FX_DEFAULTS={
-    dark:{snow:false,scan:false,aurora:false,grid:true,glow:false,eq:false},
-    light:{snow:false,scan:false,aurora:false,grid:true,glow:false,eq:false},
-    neon:{snow:false,scan:false,aurora:false,grid:true,glow:false,eq:false},
-    sky:{snow:false,scan:false,aurora:false,grid:true,glow:false,eq:false},
-    jul:{snow:true,scan:false,aurora:false,grid:true,glow:false,eq:false},
-    cyber:{snow:false,scan:true,aurora:false,grid:true,glow:false,eq:false},
-    aurora:{snow:false,scan:false,aurora:true,grid:true,glow:false,eq:false},
-    amp:{snow:false,scan:false,aurora:false,grid:false,glow:true,eq:true}
+    dark:{snow:false,scan:false,aurora:false,grid:true,glow:false,eq:false,trace:false,phase:false,dust:false,rain:false,ripple:false},
+    light:{snow:false,scan:false,aurora:false,grid:true,glow:false,eq:false,trace:false,phase:false,dust:false,rain:false,ripple:false},
+    neon:{snow:false,scan:false,aurora:false,grid:true,glow:false,eq:false,trace:false,phase:false,dust:false,rain:false,ripple:false},
+    sky:{snow:false,scan:false,aurora:false,grid:true,glow:false,eq:false,trace:false,phase:false,dust:false,rain:false,ripple:false},
+    jul:{snow:true,scan:false,aurora:false,grid:true,glow:false,eq:false,trace:false,phase:false,dust:false,rain:false,ripple:false},
+    cyber:{snow:false,scan:true,aurora:false,grid:true,glow:false,eq:false,trace:false,phase:false,dust:false,rain:false,ripple:false},
+    aurora:{snow:false,scan:false,aurora:true,grid:true,glow:false,eq:false,trace:false,phase:false,dust:false,rain:false,ripple:false},
+    amp:{snow:false,scan:false,aurora:false,grid:false,glow:true,eq:true,trace:false,phase:false,dust:false,rain:false,ripple:false}
   };
   function effectsFor(theme){
     const base=FX_DEFAULTS[theme]||FX_DEFAULTS.dark;
@@ -3618,6 +3745,12 @@
     b.toggle("fx-grid",!!fx.grid);
     b.toggle("fx-glow",!!fx.glow);
     b.toggle("fx-eq",!!fx.eq);
+    b.toggle("fx-trace",!!fx.trace);
+    b.toggle("fx-phase",!!fx.phase);
+    b.toggle("fx-dust",!!fx.dust);
+    b.toggle("fx-rain",!!fx.rain);
+    b.toggle("fx-ripple",!!fx.ripple);
+    try{snow.sync()}catch(_){}
     document.querySelectorAll("[data-fx]").forEach(cb=>{cb.checked=!!fx[cb.dataset.fx]});
     try{snow.sync()}catch{}
   }

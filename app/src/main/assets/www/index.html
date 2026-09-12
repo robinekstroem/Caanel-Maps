@@ -29,6 +29,107 @@
     @media(max-width:390px){#ekisSplash .s24-wrap{width:91vw!important}#ekisSplash .s24-tagline{letter-spacing:.09em!important}#ekisSplash.s24-visible .s24-field i{width:36px!important}}
     @media(prefers-reduced-motion:reduce){#ekisSplash .s24-ekis,#ekisSplash .s24-field,#ekisSplash .s24-field i,#ekisSplash .s24-tagline,#ekisSplash .s24-glow{transition:none!important;filter:none!important;transform:none!important}#ekisSplash .s24-ekis,#ekisSplash .s24-field,#ekisSplash .s24-tagline,#ekisSplash .s24-glow{opacity:0}#ekisSplash.s24-visible .s24-ekis,#ekisSplash.s24-visible .s24-field,#ekisSplash.s24-visible .s24-tagline,#ekisSplash.s24-visible .s24-glow{opacity:1}}
   </style>
+  <style id="ekisSplashPolish">
+    /* Splash v26. Sekvensen börjar direkt i ordmärket: inget intåg, ingen
+       ljuslinje. EKIS kommer in vitglödgat och överskalat och svalnar till
+       krom medan reflexen rakar över, så bokstäverna aldrig står matta och
+       gråa i väntan. Allt ryms i de 3,0 s innan splashen tonar ut, och
+       taglinen ligger kvar drygt en sekund på slutet.
+
+       Bakgrunden sätts med background-image, inte kortformen background:
+       kortformen nollställer background-clip, och eftersom texten har
+       genomskinlig fyllning blir resultatet då en grå platta utan bokstäver. */
+    #ekisSplash .s24-ekis{
+      /* Varmt krom i stället för neutralt silver. Mellantonen är mässings-
+         aktig, som om accentfärgen speglades i metallen: det binder ihop
+         ordmärket med det orangea nedanför utan att något faktiskt är orange.
+         Kallt silver mot orange läste sig som två olika bilder. */
+      background-image:
+        linear-gradient(104deg,transparent 32%,rgba(255,247,233,.95) 46%,rgba(255,226,186,.46) 52%,transparent 64%),
+        linear-gradient(180deg,#f8f4ed 0%,#e2d8c9 22%,#8a7a66 54%,#dad0c0 100%)!important;
+      background-size:210% 100%,100% 100%!important;
+      background-repeat:no-repeat!important;
+      -webkit-background-clip:text!important;background-clip:text!important;
+      opacity:0!important;transform:none!important;filter:none!important;
+      transition:none!important;
+    }
+    #ekisSplash.s24-visible .s24-ekis{
+      animation:s26Ekis 1.45s linear .02s forwards!important;
+    }
+    @keyframes s26Ekis{
+      0%{opacity:0;transform:scale(1.09);filter:brightness(2.1) contrast(.58);background-position:150% 0,0 0}
+      6%{opacity:1;filter:brightness(2) contrast(.58)}
+      38%{transform:scale(1)}
+      40%{background-position:150% 0,0 0}
+      62%{filter:brightness(1.12) contrast(.92)}
+      100%{opacity:1;transform:scale(1);filter:none;background-position:-70% 0,0 0}
+    }
+
+    /* Strecken skjuter ut från mitten och slår över innan de lägger sig.
+       Rörelse som stannar exakt på sitt mål läser sig som stillbild. */
+    #ekisSplash .s24-field i{
+      width:46px!important;transform:scaleX(0)!important;transform-origin:center!important;
+      transition:none!important;
+    }
+    #ekisSplash.s24-visible .s24-field i{
+      animation:s26Rule .55s cubic-bezier(.2,.85,.2,1) .85s forwards,
+                s26Surge .42s steps(1,end) 1.55s!important;
+    }
+    @keyframes s26Rule{0%{transform:scaleX(0)}62%{transform:scaleX(1.28)}100%{transform:scaleX(1)}}
+
+    /* FIELD dras samman från utspärrat läge i stället för att tona in. */
+    #ekisSplash .s24-field{opacity:1!important;transition:none!important}
+    #ekisSplash .s24-field span{opacity:0!important}
+    #ekisSplash.s24-visible .s24-field span{
+      animation:s26Field .52s cubic-bezier(.2,.8,.2,1) .95s forwards,
+                s26Surge .42s steps(1,end) 1.55s!important;
+    }
+    @keyframes s26Field{
+      0%{opacity:0;letter-spacing:.58em}
+      100%{opacity:1;letter-spacing:.34em}
+    }
+
+    /* Strömpåslaget: fyra hårda steg, inte en mjuk puls. */
+    @keyframes s26Surge{
+      0%,100%{filter:none}
+      18%{filter:brightness(2.5) drop-shadow(0 0 9px rgba(255,106,0,.85))}
+      42%{filter:brightness(.65)}
+      66%{filter:brightness(2) drop-shadow(0 0 6px rgba(255,106,0,.5))}
+      86%{filter:brightness(.9)}
+    }
+    #ekisSplash.s24-visible .s24-glow{animation:s26GlowSurge .42s ease 1.55s!important}
+    @keyframes s26GlowSurge{0%,100%{opacity:1}20%{opacity:1.55}45%{opacity:.6}70%{opacity:1.3}}
+
+    /* Taglinen kommer in vid 1,95 s och står kvar till utfasningen. */
+    #ekisSplash .s24-tagline{transition:none!important;opacity:0!important}
+    #ekisSplash.s24-visible .s24-tagline{
+      animation:s26Tag .5s cubic-bezier(.2,.8,.2,1) 1.45s forwards!important;
+    }
+    @keyframes s26Tag{0%{opacity:0;transform:translateY(7px)}100%{opacity:1;transform:none}}
+
+    /* Skyddsnät: klarar WebView:en inte att klippa bakgrunden mot texten
+       stängs gradienten och den genomskinliga fyllningen av, så ordmärket blir
+       läsbart i vitt i stället för att försvinna helt. */
+    @supports not ((-webkit-background-clip:text) or (background-clip:text)){
+      #ekisSplash .s24-ekis,#ekisSplash.s24-visible .s24-ekis{
+        background-image:none!important;
+        -webkit-text-fill-color:#efe9df!important;color:#efe9df!important;
+        animation:s26Plain .5s ease .02s forwards!important;
+      }
+      @keyframes s26Plain{0%{opacity:0}100%{opacity:1}}
+    }
+
+    @media(prefers-reduced-motion:reduce){
+      #ekisSplash.s24-visible .s24-ekis,
+      #ekisSplash.s24-visible .s24-field i,
+      #ekisSplash.s24-visible .s24-field span,
+      #ekisSplash.s24-visible .s24-tagline,
+      #ekisSplash.s24-visible .s24-glow{animation:none!important;opacity:1!important}
+      #ekisSplash .s24-ekis{background-position:-70% 0,0 0!important;opacity:1!important}
+      #ekisSplash .s24-field i{transform:scaleX(1)!important}
+      #ekisSplash .s24-field span{letter-spacing:.34em!important}
+    }
+  </style>
   <title>EKIS FIELD</title>
 </head>
 <body>
@@ -41,6 +142,8 @@
     </div>
   </div>
   <div id="auroraLayer" aria-hidden="true"></div>
+  <div id="fxTrace" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <div id="fxPhase" aria-hidden="true"><svg viewBox="0 0 800 88" preserveAspectRatio="none"><path d="M0 62 Q25 20 50 62 T100 62 T150 62 T200 62 T250 62 T300 62 T350 62 T400 62 T450 62 T500 62 T550 62 T600 62 T650 62 T700 62 T750 62 T800 62"/></svg></div>
   <div id="eqLayer" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
   <div id="app">
     <header class="topbar">
@@ -172,16 +275,82 @@
               </div>
             </div>
           </div>
-          <div class="fx-settings">
-            <h4>Effekter</h4>
+          <details class="fx-settings fx-fold">
+            <summary><span>Effekter</span><span class="fx-count" id="fxCount"></span></summary>
             <p class="muted">Fungerar med vilket tema som helst – kombinera fritt. Alla effekter pausas automatiskt när en ritning är öppen.</p>
             <label class="fx-row"><input type="checkbox" data-fx="snow"> <span>Snö<small>Mjuk snö som faller bakom innehållet</small></span></label>
             <label class="fx-row"><input type="checkbox" data-fx="scan"> <span>Scanlines &amp; ljussvep<small>Rörligt band och tunna linjer, som i Cyberpunk</small></span></label>
             <label class="fx-row"><input type="checkbox" data-fx="aurora"> <span>Norrsken<small>Två slöjor som driver långsamt</small></span></label>
             <label class="fx-row"><input type="checkbox" data-fx="grid"> <span>Rutnät<small>Svagt rutnät i bakgrunden</small></span></label>
+            <label class="fx-row"><input type="checkbox" data-fx="trace"> <span>Strömspår<small>Ljuspuls längs ledarbanor i kanterna</small></span></label>
+            <label class="fx-row"><input type="checkbox" data-fx="phase"> <span>Fasgång<small>Växelspänningens sinuskurva längs nederkanten</small></span></label>
+            <label class="fx-row"><input type="checkbox" data-fx="dust"> <span>Dammkorn<small>Damm som driver i arbetsljuset</small></span></label>
+            <label class="fx-row"><input type="checkbox" data-fx="rain"> <span>Regn<small>Det montören faktiskt jobbar i</small></span></label>
+            <label class="fx-row"><input type="checkbox" data-fx="ripple"> <span>Tryckvåg<small>Ring vid varje tryck — syns även med handskar</small></span></label>
             <label class="fx-row"><input type="checkbox" data-fx="eq"> <span>Equalizer<small>Spektrumstaplar som studsar längs nederkanten</small></span></label>
             <label class="fx-row"><input type="checkbox" data-fx="glow"> <span>Glow<small>Accentfärgen lyser runt knappar, rubriker och aktiva val</small></span></label>
-          </div>
+          </details>
+        </div>
+        <div class="settings-card help-card">
+          <h3>Hjälp &amp; tips</h3>
+          <p class="muted">Kort om hur appen fungerar. Tryck på en rubrik för att läsa mer.</p>
+
+          <details class="help-item">
+            <summary>Skala och mätning <span class="help-tag">Läs denna först</span></summary>
+            <p>Appen utgår från <strong>1:100</strong>. Är ritningen i 1:50 blir varje mått <strong>dubbelt så långt</strong> tills du ändrat skalan. Kontrollera rutan "Skala" högst upp i ritningsvyn innan du mäter.</p>
+            <p>Säkrast är <strong>Kalibrera</strong>: mät en sträcka du vet längden på, skriv in det verkliga måttet, och appen räknar fram skalan själv. Den sparas per sida, så den sitter kvar nästa gång.</p>
+            <p>Med rätt skala ligger felet på centimeternivå, och det mesta kommer från hur exakt du träffar hörnet. Zooma in för bättre precision. Kom ihåg att du mäter <em>projekterat</em> mått — kontrollmät alltid på plats före håltagning.</p>
+          </details>
+
+          <details class="help-item">
+            <summary>Mätverktygen</summary>
+            <p><strong>Avstånd</strong> mäter rakt mellan två punkter. <strong>Sträcka</strong> följer flera punkter i följd, bra för kabelvägar runt hörn. <strong>Area</strong> sluter en yta och ger kvadratmeter.</p>
+            <p><strong>Mät med kameran</strong> mäter verkliga avstånd i rummet, till exempel c/c mellan uttag. Den kräver stöd i telefonen och saknas på en del enheter.</p>
+          </details>
+
+          <details class="help-item">
+            <summary>Räknaren</summary>
+            <p>Räknaren letar uttag, strömställare och armaturer i ritningens vektorer och jämför mot symbolerna i ritningens FÖRKLARINGAR. Den läser alltså filen, inte en bild av den.</p>
+            <p>Tryck på en rad för att se träffarna ringade på ritningen. Bakåtknappen tar dig tillbaka till räknaren, och ×-knappen i träffraden stänger markeringarna utan att lämna ritningen.</p>
+            <p>Räkningen är ett underlag, inte ett facit. Symboler som ritats avvikande kan missas, och stämmer siffran inte med vad du ser är det värt att granska träffarna.</p>
+          </details>
+
+          <details class="help-item">
+            <summary>ÄTA och avvikelser</summary>
+            <p>Fotografera på plats och lägg till beskrivning direkt. Ju mer du dokumenterar i stunden, desto lättare blir det att få betalt i efterhand.</p>
+            <p>Ta med något i bilden som visar var i huset du står — ett dörrnummer, en central, en lägenhetsmärkning. En bild på ett uttag utan sammanhang säger ingenting tre veckor senare.</p>
+          </details>
+
+          <details class="help-item">
+            <summary>Att göra och montörer</summary>
+            <p>Lägg till montörer med <strong>+ Montör</strong> och skriv namnet. Tryck på ett namn för att filtrera listan, och siffran visar hur många öppna punkter personen har.</p>
+            <p>Lägger du till en punkt medan en montör är vald hamnar den på honom. Är <strong>Alla</strong> valt blir punkten oplacerad — tryck då på <strong>+ montör</strong> på raden för att välja vem som tar den.</p>
+            <p>Bocka av en punkt för att markera den klar. Under <strong>Klara</strong> ser du vad som är gjort och när, med senast avbockat överst.</p>
+          </details>
+
+          <details class="help-item">
+            <summary>Offline på bygget</summary>
+            <p>Allt ligger lagrat i telefonen. Ritningar, mätningar, ÄTA och listor fungerar utan täckning — i källare, trapphus och hisschakt. Du behöver inget nät för att arbeta.</p>
+          </details>
+
+          <details class="help-item">
+            <summary>Backup <span class="help-tag help-warn">Viktigt</span></summary>
+            <p>Data ligger <strong>bara på den här enheten</strong> och delas inte mellan telefon och dator. Går telefonen sönder är allt borta om du inte har en backup.</p>
+            <p>Exportera full backup under Lokal lagring med jämna mellanrum, och spara filen någon annanstans än i telefonen. Det är också så du flyttar ett projekt till en ny enhet.</p>
+          </details>
+
+          <details class="help-item">
+            <summary>Utseende</summary>
+            <p>Under Tema väljer du hur appen ser ut. <strong>Färg</strong>-reglaget sätter accentfärgen och slår igenom även på mätningar och markeringar i ritningen.</p>
+            <p>Effekterna är rent visuella och kan kombineras med vilket tema som helst. Alla pausas automatiskt när en ritning är öppen, så inget rör sig bakom det du mäter på.</p>
+          </details>
+
+          <details class="help-item">
+            <summary>Om något inte fungerar</summary>
+            <p><strong>Ritningen öppnas inte.</strong> Felmeddelandet säger varför. Står det att filen är lösenordsskyddad behöver du en oskyddad export från den som skickade den. Står det att den är skadad hjälper ingen inställning i appen.</p>
+            <p><strong>Måtten ser fel ut.</strong> Nästan alltid skalan. Se första punkten.</p>
+            <p><strong>Räknaren ger en orimlig siffra.</strong> Granska träffarna på ritningen så ser du vilka symboler som tolkats fel.</p>
+          </details>
         </div>
         <div class="settings-card">
           <h3>Lokal lagring</h3>
@@ -197,7 +366,7 @@
             <div><h3>Om EKIS FIELD</h3><div class="version-badge" id="appVersionLabel">Version 9.3.0 · Build 77</div></div>
           </div>
           <div class="owner-card"><strong>Utvecklad för och ägs av Robin Ekström</strong><span>© 2026 Robin Ekström · Alla rättigheter förbehållna.</span></div>
-          <div class="about-section-title">Versionshistorik</div>
+          <details class="about-fold"><summary>Versionshistorik</summary>
           <div id="changelogAuto"></div>
           <details class="release-note" open><summary><span><b>5.1.3</b> Viewer, markup & ÄTA-PDF</span><em>Senaste</em></summary><p><strong>Viewer</strong> förbättrad pan/zoom och fasta ritningspilar. <strong>Markup</strong> större träffyta för markering/radering och tunnare minimalistisk pil. <strong>ÄTA</strong> ny professionell PDF-layout med ren projekthuvud, stor ritningsmarkering, fotodokumentation och tidsredovisning.</p></details>
           <details class="release-note"><summary><span><b>5.1.1</b> Ritningslänkar & scannerprecision</span></summary><p><strong>Ritningslänkar</strong> dubbeltryck på ett ritningsnummer, t.ex. E-600-1-001, öppnar motsvarande ritning i projektet och bakåtpilen återgår till exakt föregående vy. Nyaste revision väljs automatiskt. <strong>Räknare</strong> har striktare geometrikrav för Uttag och Strömställare och avstår hellre från en tveksam träff än att räkna fel.</p></details>
@@ -217,6 +386,7 @@
           <details class="release-note"><summary><span><b>4.0.13</b> ÄTA & Viewer</span></summary><p>Redigering av ÄTA · PDF med kopplade foton · förstärkt viewer-nederkant.</p></details>
           <details class="release-note"><summary><span><b>4.0.12</b> Camera & Import</span></summary><p>Native kamera · stabilare ZIP/PDF-analys · viewer-fix.</p></details>
           <details class="release-note"><summary><span><b>4.0.10–4.0.7</b> Tidigare buggrättningar</span></summary><p>ZIP/ÄTA-hotfix · planidentifiering · Lås vy/Stigare · projektborttagning · Occhio- och splashförbättringar.</p></details>
+          </details>
         </div>
       </section>
 
@@ -406,7 +576,7 @@
       window.setTimeout(function(){
         splash.classList.add('ekis-splash-out');
         window.setTimeout(function(){ if(splash && splash.parentNode) splash.parentNode.removeChild(splash); }, 320);
-      }, 2450);
+      }, 3000);
     })();
   </script>
 </body>

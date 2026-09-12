@@ -1675,3 +1675,95 @@ body.in-viewer #eqLayer i:after{animation:none!important}
 @media (prefers-reduced-motion:reduce){
   #eqLayer i,#eqLayer i:after{animation:none!important}
 }
+
+/* ---------- Hjälp & tips ----------------------------------------------
+   <details>/<summary> i stället för egen JS: fungerar utan skript, ger
+   tangentbords- och skärmläsarstöd gratis, och behåller öppet/stängt-läget
+   medan man är kvar i vyn. */
+.help-item{
+  border:1px solid var(--line);border-radius:14px;
+  margin-top:10px;background:var(--panel2);overflow:hidden;
+}
+.help-item summary{
+  cursor:pointer;list-style:none;
+  padding:15px 16px;min-height:48px;
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  font-weight:800;font-size:15px;
+}
+.help-item summary::-webkit-details-marker{display:none}
+.help-item summary:after{
+  content:"+";margin-left:auto;font-weight:900;font-size:19px;
+  color:var(--orange);line-height:1;
+}
+.help-item[open] summary:after{content:"−"}
+.help-item[open] summary{border-bottom:1px solid var(--line)}
+.help-item summary:active{background:var(--panel)}
+.help-item p{
+  margin:0;padding:13px 16px 0;
+  font-size:14px;line-height:1.55;color:var(--text);
+}
+.help-item p:last-child{padding-bottom:16px}
+.help-item strong{color:var(--orange2)}
+.help-tag{
+  font-size:10px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;
+  padding:3px 8px;border-radius:999px;
+  background:rgba(255,106,0,.16);color:var(--orange);
+  background:color-mix(in srgb,var(--orange) 18%,transparent);
+}
+.help-tag.help-warn{background:rgba(255,77,79,.18);color:var(--danger)}
+
+/* ---------- Hopfällbara tillval och historik --------------------------
+   Listorna växte sig långa. Samma <details>-mönster som hjälpavsnittet, så
+   inget nytt beteende att lära sig och inget skript som kan gå sönder. */
+.fx-fold,.about-fold{display:block}
+.fx-fold>summary,.about-fold>summary{
+  cursor:pointer;list-style:none;min-height:48px;
+  display:flex;align-items:center;gap:10px;
+  font-size:16px;font-weight:800;margin:0;
+}
+.fx-fold>summary::-webkit-details-marker,
+.about-fold>summary::-webkit-details-marker{display:none}
+.fx-fold>summary:after,.about-fold>summary:after{
+  content:"+";margin-left:auto;font-weight:900;font-size:19px;color:var(--orange);line-height:1;
+}
+.fx-fold[open]>summary:after,.about-fold[open]>summary:after{content:"−"}
+.fx-count{font-size:11px;font-weight:900;letter-spacing:.05em;color:var(--orange)}
+.about-fold{margin-top:18px;border-top:1px solid var(--line);padding-top:6px}
+
+/* ---------- Strömspår -------------------------------------------------- */
+#fxTrace{display:none;position:fixed;inset:0;z-index:0;pointer-events:none}
+body.fx-trace #fxTrace{display:block}
+#fxTrace i{position:absolute;background:var(--orange);opacity:.5}
+#fxTrace i:nth-child(1),#fxTrace i:nth-child(2){left:0;right:0;height:1px}
+#fxTrace i:nth-child(1){top:0}#fxTrace i:nth-child(2){bottom:0}
+#fxTrace i:nth-child(3),#fxTrace i:nth-child(4){top:0;bottom:0;width:1px}
+#fxTrace i:nth-child(3){left:0}#fxTrace i:nth-child(4){right:0}
+#fxTrace i{background-image:linear-gradient(90deg,transparent 0 42%,#fff 48% 52%,transparent 58% 100%);
+  background-size:220% 100%;background-repeat:no-repeat;animation:fxTraceRun 4.2s linear infinite}
+#fxTrace i:nth-child(2){animation-direction:reverse;animation-delay:-1.1s}
+#fxTrace i:nth-child(3){background-image:linear-gradient(180deg,transparent 0 42%,#fff 48% 52%,transparent 58% 100%);
+  background-size:100% 220%;animation-delay:-2.1s;animation-name:fxTraceRunV}
+#fxTrace i:nth-child(4){background-image:linear-gradient(180deg,transparent 0 42%,#fff 48% 52%,transparent 58% 100%);
+  background-size:100% 220%;animation-delay:-3.2s;animation-name:fxTraceRunV;animation-direction:reverse}
+@keyframes fxTraceRun{from{background-position:-120% 0}to{background-position:220% 0}}
+@keyframes fxTraceRunV{from{background-position:0 -120%}to{background-position:0 220%}}
+
+/* ---------- Fasgång ---------------------------------------------------- */
+#fxPhase{display:none;position:fixed;left:0;right:0;bottom:0;height:88px;z-index:0;pointer-events:none;
+  opacity:.32;mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent)}
+body.fx-phase #fxPhase{display:block}
+#fxPhase svg{position:absolute;left:0;bottom:0;width:200%;height:100%;animation:fxPhaseRun 6.5s linear infinite}
+#fxPhase path{fill:none;stroke:var(--orange);stroke-width:1.5}
+@keyframes fxPhaseRun{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* ---------- Tryckvåg --------------------------------------------------- */
+.fx-ripple-dot{position:fixed;z-index:9998;pointer-events:none;width:12px;height:12px;margin:-6px 0 0 -6px;
+  border-radius:50%;border:1.5px solid var(--orange);opacity:.8;animation:fxRipple .6s cubic-bezier(.2,.7,.3,1) forwards}
+@keyframes fxRipple{to{transform:scale(7);opacity:0}}
+
+body.in-viewer #fxTrace,body.in-viewer #fxPhase{display:none}
+@media (prefers-reduced-motion:reduce){
+  #fxTrace i,#fxPhase svg{animation:none!important}
+  .fx-ripple-dot{display:none}
+}
