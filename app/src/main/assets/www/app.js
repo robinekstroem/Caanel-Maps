@@ -17,7 +17,6 @@
     pageNum: 1,
     pageCount: 1,
     renderScale: 1.45,
-    renderScaleBase: 1.45,
     tool: "pan",
     tempPoints: [],
     deferredInstall: null,
@@ -1075,7 +1074,7 @@
         console.log("[EKIS] PDF-diagnostik",{
           fil:displayLabel(f), sidor:state.pageCount,
           bredd:Math.round(vp.width), hojd:Math.round(vp.height),
-          rotation:p1.rotate, papper:detectPaperFormat(vp.width,vp.height), ritskala:+(state.renderScale||0).toFixed(2), fingerprint:state.pdfDoc.fingerprints?.[0]
+          rotation:p1.rotate, papper:detectPaperFormat(vp.width,vp.height), fingerprint:state.pdfDoc.fingerprints?.[0]
         });
       }catch(_){}
       if(pending){ state.pendingViewState=null; restoreViewState(pending); }
@@ -1147,27 +1146,10 @@
     preset.value=known.includes(String(s))?String(s):"custom";
   }
 
-  // Canvasen har ett tak. Chromium på Android slutar rita helt när ytan blir
-  // för stor och lämnar en blank canvas utan att kasta något fel — ritningen
-  // blir bara vit. En A0-ritning i skala 1,45 med dubbel pixeltäthet landar på
-  // knappt 68 megapixel, alltså långt över taket, medan A1 på 34 klarar sig.
-  // Därför sänks skalan för just den sidan tills ytan ryms.
-  const MAX_CANVAS_PX=24e6, MAX_CANVAS_SIDE=8192;
-  function fitRenderScale(page,dpr){
-    const base=page.getViewport({scale:1});
-    let scale=state.renderScaleBase||1.45;
-    const area=(scale*base.width*dpr)*(scale*base.height*dpr);
-    if(area>MAX_CANVAS_PX) scale*=Math.sqrt(MAX_CANVAS_PX/area);
-    const side=Math.max(scale*base.width*dpr,scale*base.height*dpr);
-    if(side>MAX_CANVAS_SIDE) scale*=MAX_CANVAS_SIDE/side;
-    return Math.max(.25,scale);
-  }
-
   async function renderPdfPage(){
     const page=await state.pdfDoc.getPage(state.pageNum);
-    const dpr=Math.min(window.devicePixelRatio||1,2);
-    state.renderScale=fitRenderScale(page,dpr);
     const viewport=page.getViewport({scale:state.renderScale});
+    const dpr=Math.min(window.devicePixelRatio||1,2);
     const canvas=$("#pdfCanvas"), overlay=$("#overlayCanvas"), wrap=$("#canvasWrap");
     canvas.width=Math.floor(viewport.width*dpr); canvas.height=Math.floor(viewport.height*dpr);
     state.baseCanvasWidth=viewport.width; state.baseCanvasHeight=viewport.height;
