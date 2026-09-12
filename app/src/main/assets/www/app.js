@@ -17,6 +17,7 @@
     pageNum: 1,
     pageCount: 1,
     renderScale: 1.45,
+    renderScaleBase: 1.45,
     tool: "pan",
     tempPoints: [],
     deferredInstall: null,
@@ -226,9 +227,36 @@
     if(m && plan && String(Number(m[1]))===String(Number(plan))) return String(Number(m[2]));
     return "";
   }
-  function extractDrawingScale(text){
+  // Pappersformat ur sidans mått. Ritningsstämplar anger ofta skalan per format
+  // ("A1 1:50 / A3 1:100"), och då avgör sidans verkliga storlek vilken som
+  // gäller. Toleransen är rundlig: exportverktyg lägger gärna på några
+  // millimeter skärsmån.
+  function detectPaperFormat(wPt,hPt){
+    const mm=v=>v*25.4/72;
+    const w=Math.min(mm(wPt),mm(hPt)), h=Math.max(mm(wPt),mm(hPt));
+    const sizes=[["A4",210,297],["A3",297,420],["A2",420,594],["A1",594,841],["A0",841,1189]];
+    let best=null,bestErr=Infinity;
+    for(const [name,sw,sh] of sizes){
+      const err=Math.max(Math.abs(w-sw)/sw,Math.abs(h-sh)/sh);
+      if(err<bestErr){bestErr=err;best=name;}
+    }
+    return bestErr<=0.06?best:null;
+  }
+
+  // Skalan läses i tre steg, från mest till minst tillförlitlig: först den rad
+  // som gäller sidans eget pappersformat, sedan en uttrycklig SKALA-uppgift,
+  // och först därefter vilken 1:NN som helst i texten. Utan formatsteget kunde
+  // en A1-ritning tolkas som 1:100 bara för att A3-raden stod först i stämpeln,
+  // och då blir varje mått dubbelt så långt.
+  function extractDrawingScale(text,paper){
     const t=String(text||"").replace(/\s+/g," ");
-    const patterns=[/SKALA[^\d]{0,18}1\s*[:/]\s*(20|25|50|75|100|150|200|250|500)\b/i,/\b1\s*[:/]\s*(20|25|50|75|100|150|200|250|500)\b/];
+    const allowed="(20|25|50|75|100|150|200|250|500)";
+    if(paper){
+      const byPaper=new RegExp(paper+"\\s*[-: ]?\\s*1\\s*[:/]\\s*"+allowed+"\\b","i");
+      const m=t.match(byPaper); if(m)return Number(m[1]);
+    }
+    const patterns=[new RegExp("SKALA[^\\d]{0,18}1\\s*[:/]\\s*"+allowed+"\\b","i"),
+                    new RegExp("\\b1\\s*[:/]\\s*"+allowed+"\\b")];
     for(const re of patterns){const m=t.match(re);if(m)return Number(m[1]);}
     return null;
   }
@@ -342,7 +370,7 @@
           const w=Math.max(5,(item.width||str.length*4));
           return {str,x:tx[4],y:tx[5]-h,w,h};
         }).filter(Boolean);
-        pages.push({page:n,items,viewport});
+        pages.push({page:n,items,viewport,paper:detectPaperFormat(viewport.width,viewport.height)});
       }
       const first=pages[0]?.items.map(x=>x.str)||[];
       const all=pages.flatMap(p=>p.items.map(x=>x.str));
@@ -411,7 +439,7 @@
       else if(category!=="Övrigt") displayName=category+(plan?` – P${plan}`:"")+(part?` – Del ${part}`:"");
       else displayName=stripPdf(originalName);
       const detectedScales={};
-      for(const pg of pages){const ds=extractDrawingScale(pg.items.map(x=>x.str).join(" "));if(ds)detectedScales[pg.page]=ds;}
+      for(const pg of pages){const ds=extractDrawingScale(pg.items.map(x=>x.str).join(" "),pg.paper);if(ds)detectedScales[pg.page]=ds;}
       const drawingNumber=titleBlockDrawingNumber(pages,originalName);
       const sourceDate=(allText.match(/\b20\d{2}[-./]\d{2}[-./]\d{2}\b/)||[])[0]||"";
       const result={analysisVersion:ANALYSIS_VERSION,documentType:isOcchio?"occhioSchedule":(isSchedule?"armatureSchedule":"drawing"),category,categorySource,categoryVerified,plan,part,displayName,armatureIndex,pages:doc.numPages,detectedScales,drawingNumber,sourceDate};
@@ -1023,12 +1051,31 @@
       // Loggar vad appen faktiskt fick ut ur filen. När en ritning beter sig
       // konstigt är det här som säger om det är sidantal, sidstorlek eller
       // rotation som skiljer den från de filer som fungerar.
+      // Automatisk kalibrering. Analysen vid import sätter skalan, men ritningar
+      // som lagts in tidigare, eller där stämpeln lästes fel, blev kvar på
+      // förvalet 1:100. Därför läses stämpeln om här när sidan fortfarande står
+      // på förvalet — ett manuellt satt värde rörs aldrig.
+      try{
+        const fm=fileMeta(id);
+        const cur=fm&&fm.scales&&fm.scales[state.pageNum];
+        if(!cur||cur===100){
+          const pg=await state.pdfDoc.getPage(state.pageNum);
+          const vp0=pg.getViewport({scale:1});
+          const tc=await pg.getTextContent();
+          const paper=detectPaperFormat(vp0.width,vp0.height);
+          const found=extractDrawingScale(tc.items.map(i=>i.str).join(" "),paper);
+          if(found&&found!==cur){
+            setScale(found);
+            toast(`Skala ${paper?paper+" ":""}1:${found} inläst från ritningen`);
+          }
+        }
+      }catch(_){}
       try{
         const p1=await state.pdfDoc.getPage(1), vp=p1.getViewport({scale:1});
         console.log("[EKIS] PDF-diagnostik",{
           fil:displayLabel(f), sidor:state.pageCount,
           bredd:Math.round(vp.width), hojd:Math.round(vp.height),
-          rotation:p1.rotate, fingerprint:state.pdfDoc.fingerprints?.[0]
+          rotation:p1.rotate, papper:detectPaperFormat(vp.width,vp.height), ritskala:+(state.renderScale||0).toFixed(2), fingerprint:state.pdfDoc.fingerprints?.[0]
         });
       }catch(_){}
       if(pending){ state.pendingViewState=null; restoreViewState(pending); }
@@ -1100,10 +1147,27 @@
     preset.value=known.includes(String(s))?String(s):"custom";
   }
 
+  // Canvasen har ett tak. Chromium på Android slutar rita helt när ytan blir
+  // för stor och lämnar en blank canvas utan att kasta något fel — ritningen
+  // blir bara vit. En A0-ritning i skala 1,45 med dubbel pixeltäthet landar på
+  // knappt 68 megapixel, alltså långt över taket, medan A1 på 34 klarar sig.
+  // Därför sänks skalan för just den sidan tills ytan ryms.
+  const MAX_CANVAS_PX=24e6, MAX_CANVAS_SIDE=8192;
+  function fitRenderScale(page,dpr){
+    const base=page.getViewport({scale:1});
+    let scale=state.renderScaleBase||1.45;
+    const area=(scale*base.width*dpr)*(scale*base.height*dpr);
+    if(area>MAX_CANVAS_PX) scale*=Math.sqrt(MAX_CANVAS_PX/area);
+    const side=Math.max(scale*base.width*dpr,scale*base.height*dpr);
+    if(side>MAX_CANVAS_SIDE) scale*=MAX_CANVAS_SIDE/side;
+    return Math.max(.25,scale);
+  }
+
   async function renderPdfPage(){
     const page=await state.pdfDoc.getPage(state.pageNum);
-    const viewport=page.getViewport({scale:state.renderScale});
     const dpr=Math.min(window.devicePixelRatio||1,2);
+    state.renderScale=fitRenderScale(page,dpr);
+    const viewport=page.getViewport({scale:state.renderScale});
     const canvas=$("#pdfCanvas"), overlay=$("#overlayCanvas"), wrap=$("#canvasWrap");
     canvas.width=Math.floor(viewport.width*dpr); canvas.height=Math.floor(viewport.height*dpr);
     state.baseCanvasWidth=viewport.width; state.baseCanvasHeight=viewport.height;
@@ -2518,7 +2582,19 @@
     const list=$("#counterDrawingList"); if(!list)return;
     const cat=state.counterCategory||'Belysning';
     $$('[data-counter-category]').forEach(b=>b.classList.toggle('active',b.dataset.counterCategory===cat));
-    const files=(state.meta.projects||[]).flatMap(p=>(p.files||[]).map(id=>fileMeta(id))).filter(f=>f&&f.documentType!=="armatureSchedule"&&f.documentType!=="occhioSchedule"&&f.category===cat).sort(smartSortFiles);
+    // Räknaren listade varje ritning i hela lagret, oavsett vilket projekt man
+    // stod i. Är ett projekt valt begränsas listan till det: att råka scanna
+    // ett annat projekts ritningar ger en siffra som ser rimlig ut men är fel,
+    // och det är svårt att upptäcka i efterhand.
+    const proj=state.currentProjectId?projectById(state.currentProjectId):null;
+    const pool=proj?[proj]:(state.meta.projects||[]);
+    const files=pool.flatMap(p=>(p.files||[]).map(id=>fileMeta(id))).filter(f=>f&&f.documentType!=="armatureSchedule"&&f.documentType!=="occhioSchedule"&&f.category===cat).sort(smartSortFiles);
+    // Rensa bort markeringar som inte längre syns, annars skannas ritningar man
+    // inte kan se i listan.
+    if(proj){
+      const visible=new Set((proj.files||[]));
+      for(const id of [...state.counterSelected]) if(!visible.has(id)) state.counterSelected.delete(id);
+    }
     list.innerHTML=files.length?files.map(f=>`<label class="counter-drawing"><input type="checkbox" data-counter-file="${f.id}" ${state.counterSelected.has(f.id)?'checked':''}><span><strong>${esc(displayLabel(f))}</strong><small class="muted">${esc(projectById(f.projectId)?.name||'')} · ${f.pageCount||1} sida${(f.pageCount||1)===1?'':'or'}</small></span></label>`).join(''):`<div class="empty">Inga ${esc(cat.toLowerCase())}-ritningar.</div>`;
     list.querySelectorAll('[data-counter-file]').forEach(cb=>cb.onchange=e=>{e.target.checked?state.counterSelected.add(e.target.dataset.counterFile):state.counterSelected.delete(e.target.dataset.counterFile);renderCounterSelectionBadge()});
     renderCounterSelectionBadge();
