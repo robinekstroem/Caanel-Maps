@@ -18,7 +18,6 @@
     pageCount: 1,
     renderScale: 1.45,
     renderScaleBase: 1.45,
-    renderQuality: 1,
     tool: "pan",
     tempPoints: [],
     deferredInstall: null,
@@ -1154,35 +1153,31 @@
   // knappt 68 megapixel, alltså långt över taket, medan A1 på 34 klarar sig.
   // Därför sänks skalan för just den sidan tills ytan ryms.
   const MAX_CANVAS_PX=24e6, MAX_CANVAS_SIDE=8192;
-  // Hur tät canvasen får vara för en önskad zoomnivå, hållet inom det tak där
-  // Chromium slutar rita och lämnar sidan blank.
-  function qualityFactor(want,dpr){
-    const bw=state.baseCanvasWidth||1, bh=state.baseCanvasHeight||1;
-    const byArea=Math.sqrt(MAX_CANVAS_PX/Math.max(1,bw*dpr*bh*dpr));
-    const bySide=MAX_CANVAS_SIDE/Math.max(1,Math.max(bw,bh)*dpr);
-    return Math.max(.08,Math.min(want,byArea,bySide,4));
+  function fitRenderScale(page,dpr){
+    const base=page.getViewport({scale:1});
+    let scale=state.renderScaleBase||1.45;
+    const area=(scale*base.width*dpr)*(scale*base.height*dpr);
+    if(area>MAX_CANVAS_PX) scale*=Math.sqrt(MAX_CANVAS_PX/area);
+    const side=Math.max(scale*base.width*dpr,scale*base.height*dpr);
+    if(side>MAX_CANVAS_SIDE) scale*=MAX_CANVAS_SIDE/side;
+    return Math.max(.25,scale);
   }
 
   async function renderPdfPage(){
     const page=await state.pdfDoc.getPage(state.pageNum);
     const dpr=Math.min(window.devicePixelRatio||1,2);
-    state.renderScale=state.renderScaleBase||1.45;
+    state.renderScale=fitRenderScale(page,dpr);
     const viewport=page.getViewport({scale:state.renderScale});
     const canvas=$("#pdfCanvas"), overlay=$("#overlayCanvas"), wrap=$("#canvasWrap");
+    canvas.width=Math.floor(viewport.width*dpr); canvas.height=Math.floor(viewport.height*dpr);
     state.baseCanvasWidth=viewport.width; state.baseCanvasHeight=viewport.height;
-    state.fitZoom=computeFitZoom();
-    // Första renderingen behöver bara täcka det som faktiskt syns. Att rita hela
-    // A0-arket i full täthet direkt åt både slöseri och blank canvas: ytan tog
-    // slut innan man hunnit zooma. Nu ritas den nätt och tätnar vid inzoom.
-    const q0=qualityFactor(state.fitZoom*1.3,dpr);
-    state.renderQuality=q0;
-    canvas.width=Math.floor(viewport.width*dpr*q0); canvas.height=Math.floor(viewport.height*dpr*q0);
     canvas.style.width=viewport.width+"px"; canvas.style.height=viewport.height+"px";
-    overlay.width=Math.floor(viewport.width*dpr*q0); overlay.height=Math.floor(viewport.height*dpr*q0);
+    overlay.width=Math.floor(viewport.width*dpr); overlay.height=Math.floor(viewport.height*dpr);
     overlay.style.width=viewport.width+"px"; overlay.style.height=viewport.height+"px";
+    state.fitZoom=computeFitZoom();
     if(!state.pendingViewState) state.viewZoom=state.fitZoom;
     applyZoom(false);
-    const ctx=canvas.getContext("2d"); ctx.setTransform(dpr*q0,0,0,dpr*q0,0,0);
+    const ctx=canvas.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0);
     await page.render({canvasContext:ctx,viewport}).promise;
     await loadSmartHotspots(page,viewport);
     $("#pageLabel").textContent=`${state.pageNum} / ${state.pageCount}`;
@@ -1484,11 +1479,7 @@
   }
 
   function drawOverlay(){
-    // Överlagrets canvas skalas med samma kvalitetsfaktor som PDF-canvasen.
-    // Ritas det med enbart dpr hamnar mätningar och träffmarkeringar i fel
-    // storlek och glider iväg från ritningen under.
-    const c=$("#overlayCanvas"), ctx=c.getContext("2d");
-    const dpr=Math.min(window.devicePixelRatio||1,2)*(state.renderQuality||1);
+    const c=$("#overlayCanvas"), dpr=Math.min(window.devicePixelRatio||1,2), ctx=c.getContext("2d");
     ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,c.width/dpr,c.height/dpr);
     ctx.lineWidth=2.5;ctx.strokeStyle=accentColor();ctx.fillStyle=accentColor();ctx.font="700 13px system-ui";
     const toPx=p=>({x:p.x*state.renderScale,y:p.y*state.renderScale});
@@ -1950,42 +1941,6 @@
     return state.viewZoom <= state.fitZoom * 1.035;
   }
 
-  // Skärpa vid inzoom. Sidan ritas en gång och förstoras sedan med CSS, så
-  // zoomar man in förstoras bildpunkterna i stället för ritningen och allt blir
-  // grötigt. Här ritas sidan om mot en tätare canvas när zoomen lagt sig —
-  // layouten rörs inte, bara mängden bildpunkter bakom den. Omritningen väntar
-  // tills fingret släppt: att rendera om mitt i en nyp gör panoreringen hackig.
-  let qualityTimer=null;
-  function scheduleQualityPass(){
-    if(qualityTimer)clearTimeout(qualityTimer);
-    qualityTimer=setTimeout(()=>{qualityTimer=null;runQualityPass()},190);
-  }
-  async function runQualityPass(){
-    if(!state.pdfDoc||state.currentView!=="viewerView")return;
-    const canvas=$("#pdfCanvas"),overlay=$("#overlayCanvas");
-    if(!canvas||!state.baseCanvasWidth)return;
-    const dpr=Math.min(window.devicePixelRatio||1,2);
-    const bw=state.baseCanvasWidth,bh=state.baseCanvasHeight;
-    // Taket är detsamma som vid första renderingen: överskrids det slutar
-    // Chromium rita och lämnar en blank canvas.
-    const q=qualityFactor((state.viewZoom||1)*1.15,dpr);
-    const cur=state.renderQuality||0;
-    if(q<=cur*1.15 && q>=cur*0.5)return;
-    try{
-      const page=await state.pdfDoc.getPage(state.pageNum);
-      const viewport=page.getViewport({scale:state.renderScale});
-      canvas.width=Math.floor(bw*dpr*q); canvas.height=Math.floor(bh*dpr*q);
-      canvas.style.width=bw+"px"; canvas.style.height=bh+"px";
-      const ctx=canvas.getContext("2d");
-      ctx.setTransform(dpr*q,0,0,dpr*q,0,0);
-      await page.render({canvasContext:ctx,viewport}).promise;
-      overlay.width=Math.floor(bw*dpr*q); overlay.height=Math.floor(bh*dpr*q);
-      overlay.style.width=bw+"px"; overlay.style.height=bh+"px";
-      state.renderQuality=q;
-      drawOverlay();
-    }catch(e){console.warn("Kvalitetsomritning misslyckades",e)}
-  }
-
   function applyZoom(keepCenter=true){
     const viewport=$("#pdfViewport"), wrap=$("#canvasWrap"), canvas=$("#pdfCanvas"), overlay=$("#overlayCanvas");
     if(!state.baseCanvasWidth || !state.baseCanvasHeight)return;
@@ -2014,7 +1969,6 @@
         viewport.scrollTop=Math.max(0,fy*h+offY-viewport.clientHeight/2);
       });
     }else requestAnimationFrame(centerFullscreenDrawing);
-    scheduleQualityPass();
   }
 
   function fitDrawing(){
